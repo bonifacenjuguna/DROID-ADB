@@ -1,495 +1,598 @@
-const API='http://127.0.0.1:47821/api';
-const $=s=>document.querySelector(s);
-const $$=s=>[...document.querySelectorAll(s)];
-let toastTimer, settingsSaveTimer, settingsSaveSequence=0, lastDevices=[], recordingFiles=[];
-function toast(message) {
-    const el=$('#toast');
-    el.textContent=message;
-    el.classList.add('show');
-    clearTimeout(toastTimer);
-    toastTimer=setTimeout(()=>el.classList.remove('show'), 3200)
+/* Scrcpy Toolkit 2.0 dashboard. Talks only to the local backend on 127.0.0.1. */
+(() => {
+'use strict';
+const API = location.protocol === 'http:' ? '/api' : 'http://127.0.0.1:47821/api';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+const state = {
+  view: 'console', online: false, version: '', status: null,
+  devices: [], selected: '', info: {}, sessions: [], recs: [], shots: [], disk: null,
+  activity: [], settings: null, tab: 'recordings', filter: '', sort: 'new',
+  previewMode: 'mirror', busy: false, fileTarget: null
+};
+
+/* ---------- helpers ---------- */
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const icon = (name, cls = '') => `<svg class="ic ${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+const bytes = n => {
+  n = Number(n) || 0;
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(0) + ' KB';
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+  return (n / 1073741824).toFixed(2) + ' GB';
+};
+const when = v => { const d = new Date(v); return isNaN(d) ? 'Unknown date' : d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); };
+const ago = v => {
+  const s = Math.max(0, Math.floor((Date.now() - new Date(v).getTime()) / 1000));
+  if (!isFinite(s)) return '';
+  if (s < 10) return 'just now';
+  if (s < 60) return s + ' s ago';
+  if (s < 3600) return Math.floor(s / 60) + ' min ago';
+  if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+  return Math.floor(s / 86400) + ' d ago';
+};
+const clock = v => {
+  const s = Math.max(0, Math.floor((Date.now() - new Date(v).getTime()) / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  const p = n => String(n).padStart(2, '0');
+  return (h ? p(h) + ':' : '') + p(m) + ':' + p(x);
+};
+const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+
+async function api(path, opts = {}) {
+  let res;
+  try {
+    res = await fetch(API + path, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) } });
+  } catch (e) { throw new Error('The local backend is not reachable. Run Launch.bat and reload.'); }
+  const data = await res.json().catch(() => ({ error: 'The backend sent an unreadable answer.' }));
+  if (!res.ok) throw new Error(data.error || 'The request failed.');
+  return data;
 }
-async function api(path, opts= {
+const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body || {}) });
+
+function toast(message, kind = 'ok') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind;
+  el.innerHTML = icon(kind === 'bad' ? 'alert' : 'check') + `<p>${esc(message)}</p>`;
+  $('#toasts').append(el);
+  setTimeout(() => el.remove(), kind === 'bad' ? 7000 : 3600);
 }
-) {
-    const response=await fetch(API+path, {
-        ...opts, headers: {
-            'Content-Type':'application/json', ...(opts.headers|| {
-            }
-            )
-        }
-    }
-    );
-    const data=await response.json().catch(()=>( {
-        error:'Invalid backend response'
-    }
-    ));
-    if(!response.ok)throw Error(data.error||'Request failed');
-    return data
+
+function confirmDialog(title, bodyHtml, okLabel = 'Delete') {
+  return new Promise(resolve => {
+    const dlg = $('#dlg-confirm');
+    $('#confirm-title').textContent = title;
+    $('#confirm-body').innerHTML = bodyHtml;
+    $('#confirm-ok').textContent = okLabel;
+    const done = () => { dlg.removeEventListener('close', done); resolve(dlg.returnValue === 'ok'); };
+    dlg.returnValue = 'cancel';
+    dlg.addEventListener('close', done);
+    dlg.showModal();
+  });
 }
-function esc(value) {
-    return String(value??'').replace(/[&<>"']/g, c=>( {
-        '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
-    }
-    [c]))
+
+/* ---------- navigation ---------- */
+const TITLES = { console: 'Console', library: 'Library', device: 'Devices', settings: 'Settings' };
+function go(name) {
+  if (!TITLES[name]) name = 'console';
+  state.view = name;
+  $$('.view').forEach(v => v.hidden = v.id !== 'view-' + name);
+  $$('.rail-btn').forEach(b => { const on = b.dataset.view === name; b.classList.toggle('is-active', on); on ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'); });
+  $('#page-title').textContent = TITLES[name];
+  try { history.replaceState(null, '', '#' + name); } catch (e) {}
+  if (name === 'library') loadLibrary();
+  if (name === 'device') { loadDevices(); renderSys(); }
+  if (name === 'settings') loadSettings();
+  window.scrollTo(0, 0);
 }
-function size(n) {
-    n=Number(n)||0;
-    if(n<1024)return n+' B';
-    if(n<1048576)return(n/1024).toFixed(1)+' KB';
-    if(n<1073741824)return(n/1048576).toFixed(1)+' MB';
-    return(n/1073741824).toFixed(2)+' GB'
-}
-function date(value) {
-    const d=new Date(value);
-    return Number.isNaN(d.getTime())?'Unknown date':d.toLocaleString()
-}
-function duration(value) {
-    const seconds=Math.max(0,Math.floor((Date.now()-new Date(value).getTime())/1000));
-    if(!Number.isFinite(seconds))return 'Time unavailable';
-    const h=Math.floor(seconds/3600),m=Math.floor((seconds%3600)/60),s=seconds%60;
-    return h?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
-}
-function ago(value) {
-    const seconds=Math.max(0, Math.floor((Date.now()-new Date(value).getTime())/1000));
-    if(!Number.isFinite(seconds))return 'Date unavailable';
-    if(seconds<60)return 'Just now';
-    if(seconds<3600)return Math.floor(seconds/60)+' min ago';
-    if(seconds<86400)return Math.floor(seconds/3600)+' hr ago';
-    return Math.floor(seconds/86400)+' days ago'
-}
-function view(name) {
-    $$('.view').forEach(el=>el.classList.toggle('hidden', el.id!=='view-'+name));
-    $$('.nav[data-view]').forEach(el=>el.classList.toggle('active', el.dataset.view===name));
-    const labels= {
-        home:['Overview', 'OVERVIEW'], recordings:['Recording library', 'RECORDINGS'], settings:['Settings & preferences', 'SETTINGS'], device:['Device diagnostics', 'DEVICE DIAGNOSTICS']
-    }
-    ;
-    $('#page-title').textContent=(labels[name]||labels.home)[0];
-    $('#breadcrumb-current').textContent=(labels[name]||labels.home)[1];
-    if(name==='recordings')loadFiles();
-    if(name==='settings')loadSettings();
-    if(name==='device')loadDevices()
-}
-$$('[data-view]').forEach(el=>el.addEventListener('click', ()=>view(el.dataset.view)));
+
+/* ---------- device state ---------- */
+const readyDevices = () => state.devices.filter(d => d.state === 'device');
+const current = () => readyDevices().find(d => d.id === state.selected) || readyDevices()[0] || null;
+const currentInfo = () => { const d = current(); return d ? state.info[d.id] : null; };
+const sel = () => { const d = current(); return d ? d.id : ''; };
+const activeSessions = () => state.sessions.length;
+const recording = () => state.sessions.find(s => s.recording);
+
 async function loadStatus() {
-    try {
-        await api('/status');
-        $('#status-chip').className='status-chip online';
-        $('#status-chip').innerHTML='<span class="status-dot"></span>Backend online';
-        $('#backend-label').textContent='Backend connected';
-        $('#sidebar-dot').className='online-dot online';
-        await Promise.allSettled([loadDevices(true), loadFiles(true), loadSession()]);
-        $('#last-check').textContent='Last checked '+new Date().toLocaleTimeString([], {
-            hour:'2-digit', minute:'2-digit'
-        }
-        )
-    }
-    catch(e) {
-        $('#status-chip').className='status-chip offline';
-        $('#status-chip').innerHTML='<span class="status-dot"></span>Backend offline';
-        $('#backend-label').textContent='Backend offline';
-        $('#sidebar-dot').className='online-dot offline';
-        $('#device-summary').textContent='Could not connect to the local backend. Run Launch.bat and refresh.';
-        $('#metric-devices').textContent='—';
-        $('#metric-sessions').textContent='—'
-    }
+  try {
+    const s = await api('/status');
+    state.online = true; state.status = s; state.version = s.version;
+    $('#conn-chip').className = 'chip ok';
+    $('#conn-chip').innerHTML = '<i class="dot"></i><b>Backend online</b>';
+    $('#rail-dot').className = 'dot ok';
+    $('#rail-version').textContent = 'v' + String(s.version).split('.').slice(0, 2).join('.');
+    state.disk = s.disk;
+  } catch (e) {
+    state.online = false;
+    $('#conn-chip').className = 'chip bad';
+    $('#conn-chip').innerHTML = '<i class="dot"></i><b>Backend offline</b>';
+    $('#rail-dot').className = 'dot bad';
+    renderAll();
+  }
+  return state.online;
 }
-async function loadSession() {
-    try {
-        const d=await api('/session');
-        const processes=d.sessions||[];
-        $('#metric-sessions').textContent=String(processes.length);
-        $('#metric-session-note').textContent=processes.length?processes.filter(p=>p.recording).length+' recording · '+processes.filter(p=>!p.recording).length+' mirror':'No active windows';
-        $('#session-badge').className='mini-badge '+(processes.length?'good':'');
-        $('#session-badge').textContent=processes.length?processes.length+' active':'No active sessions';
-        $('#session-list').innerHTML=processes.length?processes.map(p=>'<div class="session-row"><span class="session-kind '+(p.recording?'recording':'')+'">'+(p.recording?'●':'▣')+'</span><div class="session-info"><b>'+esc(p.recording?'Screen recording':'Phone mirroring')+'</b><small>Process '+esc(p.pid)+(p.started?' · Running '+esc(duration(p.started))+' · Started '+esc(date(p.started)):'')+'</small></div><span class="session-state '+(p.recording?'recording':'')+'">'+(p.recording?'RECORDING':'MIRRORING')+'</span></div>').join(''):'<div class="session-empty"><span class="session-empty-mark">◌</span><span>No active toolkit windows. Use Mirror phone or Start recording to begin a session.</span></div>'
-    }
-    catch {
-        $('#metric-sessions').textContent='—';
-        $('#metric-session-note').textContent='Session status unavailable';
-        $('#session-badge').className='mini-badge bad';
-        $('#session-badge').textContent='Unavailable';
-        $('#session-list').textContent='Could not read session status.'
-    }
+
+async function loadDevices(force) {
+  if (!state.online) return;
+  try {
+    const d = await api('/devices');
+    state.devices = d.devices || [];
+    state.deviceMessage = d.message || '';
+    const ready = readyDevices();
+    if (!ready.find(x => x.id === state.selected)) state.selected = ready[0] ? ready[0].id : '';
+    const dev = current();
+    if (dev && (force || !state.info[dev.id] || Date.now() - (state.info[dev.id]._at || 0) > 30000)) await loadInfo(dev.id);
+  } catch (e) { state.devices = []; state.deviceMessage = e.message; }
+  renderDevices(); renderStage(); renderPicker();
 }
-async function action(name) {
-    const buttons=$$('[data-action]');
-    buttons.forEach(b=>b.disabled=true);
-    try {
-        const d=await api('/action', {
-            method:'POST', body:JSON.stringify( {
-                action:name
-            }
-            )
-        }
-        );
-        toast(d.message||'Action complete.');
-        if(name==='check') {
-            view('device');
-            await loadDevices()
-        }
-        setTimeout(()=> {
-            loadStatus();recent()
-        }
-        , 900)
-    }
-    catch(e) {
-        toast(e.message)
-    }
-    finally {
-        buttons.forEach(b=>b.disabled=false)
-    }
+async function loadInfo(id) {
+  try { const r = await api('/device-info?id=' + encodeURIComponent(id)); r.info._at = Date.now(); state.info[id] = r.info; }
+  catch (e) { state.info[id] = { id, _at: Date.now(), error: e.message }; }
 }
-$$('[data-action]').forEach(b=>b.addEventListener('click', ()=>action(b.dataset.action)));
-$('#refresh').addEventListener('click', ()=> {
-    loadStatus();recent();toast('Dashboard refreshed.')
+async function loadSessions() {
+  if (!state.online) return;
+  try { state.sessions = (await api('/session')).sessions || []; } catch (e) { state.sessions = []; }
+  renderSessions(); renderStageActions();
 }
-);
-function deviceRows(devices) {
-    return devices.map(d=>'<div class="device-summary-row"><span class="device-avatar">⌁</span><div class="device-summary-copy"><b>'+esc(d.id)+'</b><small>'+esc(d.details||'Android device')+'</small></div><span class="state-pill '+(d.state==='device'?'':'bad')+'">'+esc(d.state)+'</span></div>').join('')
+async function loadActivity() {
+  if (!state.online) return;
+  try { state.activity = (await api('/activity')).items || []; } catch (e) {}
+  renderFeed();
 }
-async function loadDevices(quiet=false) {
-    try {
-        const d=await api('/devices');
-        lastDevices=d.devices||[];
-        const ready=lastDevices.filter(x=>x.state==='device').length;
-        $('#metric-devices').textContent=String(ready);
-        $('#metric-device-note').textContent=ready?'Authorized and ready':'No authorized device';
-        $('#connection-badge').className='mini-badge '+(ready?'good':'bad');
-        $('#connection-badge').textContent=ready?'Connected':'Not connected';
-        $('#adb-chip').className='mini-badge '+(ready?'good':'bad');
-        $('#adb-chip').textContent=ready?'Device ready':'Needs attention';
-        $('#device-summary').innerHTML=lastDevices.length?deviceRows(lastDevices):'<div class="empty-state">'+esc(d.message||'No device detected. Connect your phone and run a device check.')+'</div>';
-        $('#device-list').innerHTML=lastDevices.length?lastDevices.map(x=>'<div class="device-row"><span class="device-avatar">⌁</span><div class="device-id"><b>'+esc(x.id)+'</b><small>'+esc(x.details||'Android device')+'</small></div><span class="device-status '+(x.state==='device'?'':esc(x.state))+'">'+esc(x.state)+'</span></div>').join(''):'<div class="no-recordings"><div class="empty-illustration">⌁</div><b>No Android device detected</b><p>'+esc(d.message||'Connect your phone with USB debugging enabled, then check again.')+'</p></div>'
-    }
-    catch(e) {
-        if(!quiet) {
-            $('#device-list').textContent=e.message;
-            $('#device-summary').textContent='Device status unavailable.';
-            $('#adb-chip').textContent='Error'
-        }
-        throw e
-    }
+async function loadLibrary() {
+  if (!state.online) return;
+  try {
+    const [r, s] = await Promise.all([api('/recordings'), api('/screenshots')]);
+    state.recs = r.files || []; state.shots = s.files || []; state.disk = r.disk || state.disk;
+    state.totals = { recs: r.totalSize || 0, shots: s.totalSize || 0 };
+  } catch (e) { toast(e.message, 'bad'); }
+  renderLibrary(); renderStrip(); renderMeter();
 }
-$('#run-check').addEventListener('click', async()=> {
-    const b=$('#run-check');b.disabled=true;b.innerHTML='Checking…';try {
-        await loadDevices();toast('Device check complete.')
-    }
-    catch(e) {
-        toast(e.message)
-    }
-    finally {
-        b.disabled=false;b.innerHTML='⌁ <span>Run device check</span>'
-    }
+
+/* ---------- phone illustration ---------- */
+function phoneSvg() {
+  const info = currentInfo(), dev = current(), rec = recording();
+  const W = 200, H = 400, sx = 16, sy = 16, sw = 168, sh = 368;
+  let inner = '';
+  if (!dev) {
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="No phone connected"><rect class="ph-dash" x="6" y="6" width="188" height="388" rx="30"/>
+      <g transform="translate(76 150) scale(2.2)" class="ph-ic"><path d="M9 3v5M15 3v5M6 8h12v3.5a6 6 0 01-12 0zM12 17.5V21"/></g>
+      <text class="ph-sub" x="100" y="260" text-anchor="middle">No phone connected</text></svg>`;
+  }
+  const level = info && info.battery >= 0 ? info.battery : null;
+  const fillH = level === null ? 0 : Math.round(sh * level / 100);
+  const low = level !== null && level <= 15 && !info.charging;
+  inner += `<defs><clipPath id="scr"><rect x="${sx}" y="${sy}" width="${sw}" height="${sh}" rx="22"/></clipPath></defs>`;
+  inner += `<rect class="ph-body" x="6" y="6" width="188" height="388" rx="30"/><rect class="ph-screen" x="${sx}" y="${sy}" width="${sw}" height="${sh}" rx="22"/>`;
+  if (level !== null) {
+    inner += `<g clip-path="url(#scr)"><rect class="${low ? 'ph-low' : 'ph-fill'}" x="${sx}" y="${sy + sh - fillH}" width="${sw}" height="${fillH}"/><line class="ph-edge" x1="${sx}" x2="${sx + sw}" y1="${sy + sh - fillH}" y2="${sy + sh - fillH}" ${low ? 'style="stroke:var(--bad)"' : ''}/></g>`;
+    inner += `<text class="ph-num" x="100" y="206" text-anchor="middle">${level}<tspan font-size="24" dx="2">%</tspan></text>`;
+    inner += `<text class="ph-sub" x="100" y="232" text-anchor="middle">${info.charging ? 'Charging' : (low ? 'Battery low' : 'Battery')}</text>`;
+  } else {
+    inner += `<text class="ph-sub" x="100" y="206" text-anchor="middle">${info && info.error ? 'Reading phone' : 'Reading phone…'}</text>`;
+  }
+  inner += `<rect x="78" y="26" width="44" height="12" rx="6" fill="var(--panel-2)"/>`;
+  if (rec) inner += `<circle class="ph-rec" cx="36" cy="34" r="6"/><text class="ph-sub" x="48" y="38">REC</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${level === null ? 'Phone' : 'Phone battery ' + level + ' percent'}">${inner}</svg>`;
 }
-);
-$('#retry-device').addEventListener('click', ()=>$('#run-check').click());
-function recordingRow(f) {
-    return '<div class="recording-row"><span class="video-icon">▶</span><div class="recording-main"><b>'+esc(f.name)+'</b><small>'+size(f.size)+' · '+esc(date(f.modified))+' · '+esc(ago(f.modified))+'</small></div><div class="recording-actions"><button class="file-action" data-file-action="open" data-filename="'+esc(f.name)+'" title="Open video">▶ Open</button><button class="file-action" data-file-action="reveal" data-filename="'+esc(f.name)+'" title="Show in folder">⌕ Folder</button></div></div>'
+
+/* ---------- renderers: console ---------- */
+function renderStage() {
+  $('#phone').innerHTML = phoneSvg();
+  const dev = current(), info = currentInfo(), idEl = $('#stage-id'), specs = $('#stage-specs');
+  const needs = state.devices.find(d => d.state !== 'device');
+  if (!state.online) {
+    idEl.innerHTML = `<h2>Backend offline</h2><p>The dashboard cannot reach the local backend. Run <b>Launch.bat</b>, then reload this page.</p>`;
+    specs.innerHTML = '';
+  } else if (!dev) {
+    const why = needs ? (needs.state === 'unauthorized' ? 'The phone is waiting for you to accept the USB debugging prompt.' : 'The phone shows as offline. Reconnect the cable or restart ADB.') : (state.deviceMessage || 'Connect a phone with USB debugging turned on.');
+    idEl.innerHTML = `<h2>No phone connected</h2><p>${esc(why)}</p><div class="chips"><button class="btn sm" data-view="device">${icon('phone', 'sm')}Open device help</button></div>`;
+    specs.innerHTML = '';
+  } else {
+    const name = info && info.model ? [info.manufacturer, info.model].filter(Boolean).join(' ') : dev.id;
+    const wifi = dev.transport === 'wifi';
+    idEl.innerHTML = `<h2>${esc(name)}</h2><p>${info && info.android ? 'Android ' + esc(info.android) + (info.sdk ? ' (API ' + esc(info.sdk) + ')' : '') : 'Reading device details'}</p>
+      <div class="chips"><span class="chip sm ok"><i class="dot"></i><b>Ready</b></span><span class="chip sm">${icon(wifi ? 'wifi' : 'usb', 'sm')}<b>${wifi ? 'Wi-Fi' : 'USB'}</b></span>${info && info.charging ? `<span class="chip sm">${icon('bolt', 'sm')}<b>Charging</b></span>` : ''}</div>`;
+    const rows = [];
+    if (info && info.width) rows.push(['Screen', `${info.width} × ${info.height}`]);
+    if (info && info.density) rows.push(['Density', info.density + ' dpi']);
+    if (info && info.storageTotal) rows.push(['Free storage', `${bytes(info.storageFree)} of ${bytes(info.storageTotal)}`]);
+    if (info && info.tempC != null) rows.push(['Battery temperature', info.tempC + ' °C']);
+    rows.push(['Device ID', dev.id]);
+    specs.innerHTML = rows.map(r => `<div><dt>${esc(r[0])}</dt><dd>${esc(r[1])}</dd></div>`).join('');
+  }
+  renderStageActions();
 }
-function recentRow(f) {
-    return '<div class="recent-item"><span class="video-icon">▶</span><div class="recent-file"><b>'+esc(f.name)+'</b><small>'+size(f.size)+' · '+esc(ago(f.modified))+'</small></div><button class="file-action" data-file-action="open" data-filename="'+esc(f.name)+'">Open</button></div>'
+function renderStageActions() {
+  const online = state.online, dev = current(), rec = recording(), n = activeSessions();
+  const box = $('#stage-actions');
+  box.classList.toggle('has-sessions', n > 0);
+  $$('[data-act="mirror"],[data-act="screenshot"]', box).forEach(b => b.disabled = !online || !dev);
+  const rb = $('#rec-btn');
+  rb.disabled = !online || (!dev && !rec);
+  rb.classList.toggle('live', !!rec);
+  rb.dataset.act = rec ? 'stop' : 'record';
+  rb.innerHTML = rec ? `${icon('stop')}<span>Stop recording <time id="rec-clock">${clock(rec.started)}</time></span>` : `${icon('record')}<span>Record</span>`;
+  $$('#keys .key, #text-send, #text-input').forEach(b => b.disabled = !online || !dev);
 }
-async function loadFiles(quiet=false) {
-    try {
-        const d=await api('/recordings');
-        recordingFiles=d.files||[];
-        const total=Number(d.totalSize)||0;
-        $('#nav-recording-count').textContent=String(recordingFiles.length);
-        $('#metric-recordings').textContent=String(recordingFiles.length);
-        $('#metric-storage').textContent=size(total)+' stored locally';
-        $('#recording-count').textContent=String(recordingFiles.length);
-        $('#recording-total').textContent=size(total);
-        $('#recent-summary').textContent=recordingFiles.length+' video file(s) · '+size(total);
-        renderRecordingLibrary();
-        await recent()
-    }
-    catch(e) {
-        if(!quiet)$('#recording-list').textContent='Could not load recordings: '+e.message;
-        throw e
-    }
+function renderSessions() {
+  const box = $('#sessions'), list = state.sessions;
+  const chip = $('#session-chip');
+  chip.className = 'chip sm' + (list.some(s => s.recording) ? ' rec' : list.length ? ' ok' : '');
+  chip.innerHTML = `<i class="dot"></i><b>${list.length ? list.length + ' open' : 'None'}</b>`;
+  if (!list.length) {
+    box.innerHTML = `<div class="empty">${icon('mirror')}<b>No windows open</b><p>Mirror or record to see a live timer here.</p></div>`;
+    return;
+  }
+  box.innerHTML = list.map(s => `<div class="sess ${s.recording ? 'rec' : ''}"><span class="badge">${icon(s.recording ? 'record' : 'mirror')}</span>
+    <div><b>${s.recording ? 'Recording' : 'Mirroring'}</b><div class="timer" data-since="${esc(s.started)}">${s.started ? clock(s.started) : '--:--'}</div>
+    <small>${s.recording && s.file ? esc(s.file) + ' · ' + bytes(s.fileSize) : 'Process ' + esc(s.pid)}</small></div></div>`).join('');
 }
-async function recent() {
-    try {
-        const d=await api('/recordings');
-        const files=d.files||[];
-        $('#recent-list').innerHTML=files.length?files.slice(0, 4).map(recentRow).join(''):'<div class="empty-state">No recordings yet. Start a recording and your saved MP4 will appear here.</div>'
-    }
-    catch {
-        $('#recent-list').textContent='Could not load recordings.'
-    }
+const FEED_ICON = { record: 'record', mirror: 'mirror', stop: 'stop', screenshot: 'camera', wifi: 'wifi', delete: 'trash', system: 'pulse' };
+function renderFeed() {
+  const list = $('#feed');
+  if (!state.activity.length) { list.innerHTML = '<li class="none hint">Actions you run will appear here.</li>'; return; }
+  list.innerHTML = state.activity.slice(0, 14).map(a => `<li>${icon(FEED_ICON[a.kind] || 'pulse')}<div><p>${esc(a.text)}</p><time>${esc(ago(a.t))}</time></div></li>`).join('');
 }
-async function openFolder() {
-    try {
-        await api('/open-recordings', {
-            method:'POST', body:'{}'
-        }
-        );
-        toast('Opened the Recordings folder.')
-    }
-    catch(e) {
-        toast(e.message)
-    }
+function renderStrip() {
+  const items = [...state.shots.map(f => ({ ...f, kind: 'shot' })), ...state.recs.map(f => ({ ...f, kind: 'rec' }))]
+    .sort((a, b) => new Date(b.modified) - new Date(a.modified)).slice(0, 8);
+  const strip = $('#strip');
+  if (!items.length) { strip.innerHTML = `<div class="empty">${icon('image')}<b>Nothing captured yet</b><p>Screenshots and recordings you take show up here.</p></div>`; return; }
+  strip.innerHTML = items.map(f => f.kind === 'shot'
+    ? `<button class="tile" data-shot="${esc(f.name)}" title="${esc(f.name)}"><img loading="lazy" src="${API}/file?name=${encodeURIComponent(f.name)}" alt="Screenshot ${esc(f.name)}"><span class="cap">${esc(ago(f.modified))}</span></button>`
+    : `<button class="tile vid" data-rec="${esc(f.name)}" title="Open ${esc(f.name)}">${icon('play')}<span class="cap"><b>${esc(f.name.replace(/\.\w+$/, ''))}</b>${bytes(f.size)} · ${esc(ago(f.modified))}</span></button>`).join('');
 }
-$('#open-recordings').addEventListener('click', openFolder);
-$('#open-recordings-page').addEventListener('click', openFolder);
-$('#reload-recordings').addEventListener('click', async()=> {
-    const b=$('#reload-recordings');b.disabled=true;try {
-        await loadFiles();toast('Library refreshed.')
-    }
-    catch(e) {
-        toast(e.message)
-    }
-    finally {
-        b.disabled=false
-    }
+function renderMeter() {
+  const d = state.disk, t = state.totals || { recs: 0, shots: 0 };
+  const media = t.recs + t.shots;
+  if (!d || !d.total) { $('#meter-text').textContent = `${bytes(media)} in your library.`; return; }
+  const used = d.total - d.free;
+  const meter = $('#meter');
+  meter.innerHTML = `<i class="m-media" style="width:${Math.max(0.6, media / d.total * 100).toFixed(2)}%"></i><i class="m-other" style="width:${Math.max(0, (used - media) / d.total * 100).toFixed(2)}%"></i>`;
+  $('#meter-text').textContent = `${bytes(media)} of captures · ${bytes(d.free)} free on this PC`;
 }
-);
-document.addEventListener('click', async e=> {
-    const b=e.target.closest('[data-file-action]');if(!b)return;const filename=b.dataset.filename;try {
-        const path=b.dataset.fileAction==='reveal'?'/reveal-recording':'/open-recording';await api(path, {
-            method:'POST', body:JSON.stringify( {
-                name:filename
-            }
-            )
-        }
-        );if(b.dataset.fileAction==='open')toast('Opening '+filename);else toast('Showing file in its folder.')
-    }
-    catch(err) {
-        toast(err.message)
-    }
+function renderPicker() {
+  const ready = readyDevices(), wrap = $('#device-pick'), s = $('#device-select');
+  wrap.hidden = ready.length < 2;
+  s.innerHTML = ready.map(d => { const i = state.info[d.id]; return `<option value="${esc(d.id)}">${esc(i && i.model ? i.model : d.id)}</option>`; }).join('');
+  s.value = sel();
 }
-);
+
+/* ---------- renderers: devices ---------- */
+function renderDevices() {
+  const box = $('#device-list');
+  if (!state.devices.length) {
+    box.innerHTML = `<div class="empty">${icon('plug')}<b>No device detected</b><p>${esc(state.deviceMessage || 'Connect your phone with USB debugging turned on.')}</p></div>`;
+    return;
+  }
+  box.innerHTML = state.devices.map(d => {
+    const i = state.info[d.id], ok = d.state === 'device';
+    const dot = ok ? 'ok' : d.state === 'unauthorized' ? 'warn' : 'bad';
+    return `<div class="dev ${d.id === sel() ? 'active' : ''}"><span class="badge">${icon(d.transport === 'wifi' ? 'wifi' : 'phone')}</span>
+      <div><b>${esc(i && i.model ? i.model : d.id)}</b><small>${esc(d.id)}${d.details ? ' · ' + esc(d.details) : ''}</small></div>
+      <span class="chip sm"><i class="dot ${dot}"></i><b>${esc(d.state)}</b></span></div>`;
+  }).join('');
+}
+function renderSys() {
+  const s = state.status;
+  if (!s) { $('#sys-specs').innerHTML = ''; return; }
+  const h = Math.floor(s.uptime / 3600), m = Math.floor(s.uptime % 3600 / 60);
+  const rows = [['Toolkit version', s.version], ['Backend', 'Listening on 127.0.0.1:' + s.port], ['Backend uptime', (h ? h + ' h ' : '') + m + ' min'], ['scrcpy', s.scrcpy ? 'Found' : 'Missing'], ['ADB', s.adb ? 'Found' : 'Missing'], ['Folder', s.root]];
+  $('#sys-specs').innerHTML = rows.map(r => `<div><dt>${esc(r[0])}</dt><dd>${esc(r[1])}</dd></div>`).join('');
+}
+
+/* ---------- renderers: library ---------- */
+function renderLibrary() {
+  $('#tab-rec-count').textContent = state.recs.length;
+  $('#tab-shot-count').textContent = state.shots.length;
+  const badge = $('#rail-count'), total = state.recs.length + state.shots.length;
+  badge.hidden = !total; badge.textContent = total > 99 ? '99+' : total;
+  const isRec = state.tab === 'recordings';
+  let files = (isRec ? state.recs : state.shots).filter(f => f.name.toLowerCase().includes(state.filter.toLowerCase()));
+  const sorters = { new: (a, b) => new Date(b.modified) - new Date(a.modified), old: (a, b) => new Date(a.modified) - new Date(b.modified), big: (a, b) => b.size - a.size, name: (a, b) => a.name.localeCompare(b.name) };
+  files = files.sort(sorters[state.sort]);
+  const t = state.totals || { recs: 0, shots: 0 }, d = state.disk;
+  const mine = isRec ? t.recs : t.shots, count = (isRec ? state.recs : state.shots).length;
+  const media = t.recs + t.shots;
+  $('#lib-summary').innerHTML = `<div><div class="v">${count}</div><div class="l">${isRec ? 'Recordings' : 'Screenshots'}</div></div><div><div class="v">${bytes(mine)}</div><div class="l">Used by ${isRec ? 'recordings' : 'screenshots'}</div></div><div><div class="v">${d && d.total ? bytes(d.free) : '—'}</div><div class="l">Free on this PC</div></div>
+    ${d && d.total ? `<div class="meter"><i class="m-media" style="width:${Math.max(0.6, media / d.total * 100).toFixed(2)}%"></i><i class="m-other" style="width:${Math.max(0, (d.total - d.free - media) / d.total * 100).toFixed(2)}%"></i></div>` : ''}`;
+  const list = $('#lib-list');
+  if (!files.length) {
+    list.innerHTML = `<div class="empty">${icon(isRec ? 'library' : 'image')}<b>${state.filter ? 'No match' : (isRec ? 'No recordings yet' : 'No screenshots yet')}</b><p>${state.filter ? 'Try a different name.' : (isRec ? 'Press Record on the Console to save your first session.' : 'Press Screenshot on the Console to grab the phone screen.')}</p></div>`;
+    return;
+  }
+  if (!isRec) {
+    list.innerHTML = `<div class="shots">${files.map(f => `<button class="tile" data-shot="${esc(f.name)}" title="${esc(f.name)}"><img loading="lazy" src="${API}/file?name=${encodeURIComponent(f.name)}" alt="Screenshot ${esc(f.name)}"><span class="cap">${esc(when(f.modified))} · ${bytes(f.size)}</span></button>`).join('')}</div>`;
+    return;
+  }
+  list.innerHTML = files.map(f => `<div class="row-file"><span class="badge">${icon('library')}</span>
+    <div><b>${esc(f.name)}</b><small>${esc(when(f.modified))} · ${esc(ago(f.modified))}</small></div>
+    <span class="size">${bytes(f.size)}</span>
+    <div class="row-actions"><button class="icon-btn" data-rec="${esc(f.name)}" title="Play" aria-label="Play ${esc(f.name)}">${icon('play')}</button><button class="icon-btn" data-reveal="${esc(f.name)}" title="Show in folder" aria-label="Show ${esc(f.name)} in folder">${icon('folder')}</button><button class="icon-btn del" data-del="${esc(f.name)}" title="Delete" aria-label="Delete ${esc(f.name)}">${icon('trash')}</button></div></div>`).join('');
+}
+
+function renderAll() { renderStage(); renderSessions(); renderFeed(); renderStrip(); renderMeter(); renderDevices(); renderPicker(); renderLibrary(); }
+
+/* ---------- actions ---------- */
+async function run(act) {
+  if (state.busy) return;
+  const dev = sel();
+  state.busy = true;
+  try {
+    if (act === 'mirror' || act === 'record') {
+      const r = await post('/action', { action: act, serial: dev });
+      toast(r.message);
+      setTimeout(async () => { await loadSessions(); if (!state.sessions.length) explainFailure(); loadActivity(); }, 3200);
+    } else if (act === 'screenshot') {
+      const r = await post('/action', { action: 'screenshot', serial: dev });
+      toast(r.message + ' ' + r.name);
+      loadLibrary();
+    } else if (act === 'stop') {
+      const r = await post('/action', { action: 'stop' });
+      toast(r.message, r.forced ? 'bad' : 'ok');
+      setTimeout(() => { loadSessions(); loadLibrary(); }, 600);
+    }
+  } catch (e) { toast(e.message, 'bad'); }
+  state.busy = false;
+  loadActivity();
+  setTimeout(loadSessions, 900);
+}
+async function explainFailure() {
+  try {
+    const { log } = await api('/log');
+    const lines = String(log || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const err = [...lines].reverse().find(l => /error|fail|unauthorized|no devices|not found|could not/i.test(l)) || lines[lines.length - 1];
+    toast(err ? 'scrcpy closed right away: ' + err.replace(/^\w+:\s*/, '') : 'scrcpy closed right away. Check the cable and unlock the phone.', 'bad');
+  } catch (e) {}
+}
+async function sendKey(key) {
+  try { await post('/key', { serial: sel(), key }); } catch (e) { toast(e.message, 'bad'); }
+}
+async function sendText() {
+  const input = $('#text-input'), text = input.value.trim();
+  if (!text) return;
+  try { const r = await post('/text', { serial: sel(), text }); input.value = ''; toast(r.message); } catch (e) { toast(e.message, 'bad'); }
+}
+async function wifi(action, extra = {}) {
+  try { const r = await post('/wifi', { action, serial: sel(), ...extra }); toast(r.message); await loadDevices(true); loadActivity(); return r; }
+  catch (e) { toast(e.message, 'bad'); }
+}
+async function copyText(text, label) {
+  try { await navigator.clipboard.writeText(text); toast(label + ' copied.'); }
+  catch (e) { toast('Copy was blocked by the browser. Select the text and copy it manually.', 'bad'); }
+}
+async function copyReport() {
+  const lines = [`Scrcpy Toolkit ${state.version}`, `Backend: ${state.online ? 'online' : 'offline'}`];
+  state.devices.forEach(d => { const i = state.info[d.id] || {}; lines.push(`Device ${d.id}: ${d.state} (${d.transport})${i.model ? ' ' + [i.manufacturer, i.model].join(' ') : ''}${i.android ? ', Android ' + i.android : ''}`); });
+  if (!state.devices.length) lines.push('No devices detected');
+  copyText(lines.join('\n'), 'Report');
+}
+
+/* library actions */
+async function openFile(kind, name, reveal) {
+  try { await post(reveal ? '/reveal-file' : '/open-file', { kind, name }); } catch (e) { toast(e.message, 'bad'); }
+}
+async function deleteFile(kind, name) {
+  const ok = await confirmDialog('Delete this file?', `<p><b>${esc(name)}</b> will be removed permanently. This cannot be undone.</p>`);
+  if (!ok) return false;
+  try { await post('/delete-file', { kind, name }); toast('Deleted ' + name + '.'); await loadLibrary(); loadActivity(); return true; }
+  catch (e) { toast(e.message, 'bad'); return false; }
+}
+function showShot(name) {
+  state.fileTarget = name;
+  $('#shot-title').textContent = name;
+  $('#shot-img').src = `${API}/file?name=${encodeURIComponent(name)}`;
+  $('#dlg-shot').showModal();
+}
+async function cleanup() {
+  const days = Number($('#cleanup-days').value), kind = state.tab;
+  try {
+    const p = await api(`/cleanup-preview?days=${days}&kind=${kind}`);
+    if (!p.files.length) { toast(`No ${kind} are older than ${days} days.`); return; }
+    const total = p.files.reduce((n, f) => n + f.size, 0);
+    const list = `<p>${p.files.length} file${p.files.length > 1 ? 's' : ''} older than ${days} days, ${bytes(total)} in total.</p><ul>${p.files.slice(0, 40).map(f => `<li><span>${esc(f.name)}</span><span>${bytes(f.size)}</span></li>`).join('')}</ul>${p.files.length > 40 ? `<p class="hint">and ${p.files.length - 40} more</p>` : ''}`;
+    if (!await confirmDialog('Delete old ' + kind + '?', list, `Delete ${p.files.length}`)) return;
+    const r = await post('/cleanup', { days, confirm: true, kind });
+    toast(`Removed ${r.deleted} file${r.deleted === 1 ? '' : 's'} and freed ${bytes(r.freed)}.`);
+    loadLibrary(); loadActivity();
+  } catch (e) { toast(e.message, 'bad'); }
+}
+
+/* ---------- settings ---------- */
+const PRESETS = [
+  { id: 'battery', name: 'Battery saver', note: 'Light on phone and PC', v: { maxSize: 1024, maxFps: 24, bitrate: '4M' } },
+  { id: 'balanced', name: 'Balanced', note: 'Good for most phones', v: { maxSize: 1280, maxFps: 30, bitrate: '8M' } },
+  { id: 'quality', name: 'Quality', note: 'Sharper and smoother', v: { maxSize: 1600, maxFps: 45, bitrate: '12M' } },
+  { id: 'max', name: 'Maximum', note: 'Native size, needs a strong PC', v: { maxSize: 0, maxFps: 60, bitrate: '16M' } }
+];
+const SEG = {
+  maxSize: [[720, '720'], [1024, '1024'], [1280, '1280'], [1600, '1600'], [1920, '1920'], [0, 'Native']],
+  maxFps: [[15, '15'], [24, '24'], [30, '30'], [45, '45'], [60, '60']],
+  bitrate: [['2M', '2'], ['4M', '4'], ['8M', '8'], ['12M', '12'], ['16M', '16']],
+  codec: [['h264', 'H.264'], ['h265', 'H.265']],
+  audioSource: [['output', 'Phone sound'], ['mic', 'Microphone']]
+};
+const FIELDS = {
+  video: [
+    { k: 'maxSize', t: 'seg', n: 'Longest side', d: 'Pixels. Native uses the phone screen as is.' },
+    { k: 'maxFps', t: 'seg', n: 'Frame rate', d: 'Frames per second. Higher uses more CPU.' },
+    { k: 'bitrate', t: 'seg', n: 'Bitrate', d: 'Megabits per second. Higher makes larger files.' },
+    { k: 'codec', t: 'seg', n: 'Video codec', d: 'H.265 makes smaller files but needs phone support.' }
+  ],
+  audio: [
+    { k: 'audio', t: 'sw', n: 'Capture phone audio', d: 'Depends on Android version and app restrictions.' },
+    { k: 'audioSource', t: 'seg', n: 'Audio source', d: 'Use the microphone to record your voice.', needs: 'audio' }
+  ],
+  window: [
+    { k: 'stayAwake', t: 'sw', n: 'Keep the phone awake', d: 'Stops the screen from sleeping while connected.' },
+    { k: 'turnScreenOff', t: 'sw', n: 'Turn the phone screen off', d: 'Mirror from the PC with the phone display dark.' },
+    { k: 'showTouches', t: 'sw', n: 'Show touches', d: 'Draws a dot where fingers touch. Good for demos.' },
+    { k: 'viewOnly', t: 'sw', n: 'View only', d: 'Block mouse and keyboard control of the phone.' },
+    { k: 'alwaysOnTop', t: 'sw', n: 'Keep window on top', d: 'The mirror window stays above other apps.' },
+    { k: 'fullscreen', t: 'sw', n: 'Start in full screen', d: 'Open the mirror window full screen.' },
+    { k: 'borderless', t: 'sw', n: 'Borderless window', d: 'Hide the window title bar.' },
+    { k: 'powerOffOnClose', t: 'sw', n: 'Lock phone on close', d: 'Turns the phone screen off when you close the window.' }
+  ]
+};
+function matchPreset(s) { const p = PRESETS.find(x => Object.entries(x.v).every(([k, v]) => s[k] === v)); return p ? p.id : 'custom'; }
+
+function renderSettings() {
+  const s = state.settings;
+  if (!s) return;
+  const active = matchPreset(s);
+  $('#presets').innerHTML = PRESETS.map(p => `<button class="preset ${p.id === active ? 'is-active' : ''}" data-preset="${p.id}" aria-pressed="${p.id === active}"><b>${p.name}</b><span>${p.note}</span><em>${p.v.maxSize || 'Native'}${p.v.maxSize ? ' px' : ''} · ${p.v.maxFps} fps · ${p.v.bitrate.replace('M', '')} Mbps</em></button>`).join('');
+  for (const [group, list] of Object.entries(FIELDS)) {
+    $('#fields-' + group).innerHTML = list.map(f => {
+      const ctl = f.t === 'sw'
+        ? `<label class="switch"><input type="checkbox" data-set="${f.k}" ${s[f.k] ? 'checked' : ''} aria-label="${esc(f.n)}"><i></i></label>`
+        : `<div class="seg" role="group" aria-label="${esc(f.n)}">${SEG[f.k].map(o => `<button type="button" data-seg="${f.k}" data-val="${esc(o[0])}" class="${String(s[f.k]) === String(o[0]) ? 'is-active' : ''}">${esc(o[1])}</button>`).join('')}</div>`;
+      return `<div class="field ${f.needs && !s[f.needs] ? 'off' : ''}"><div><span class="name">${esc(f.n)}</span><small>${esc(f.d)}</small></div>${ctl}</div>`;
+    }).join('');
+  }
+  refreshPreview();
+}
 async function loadSettings() {
-    try {
-        const d=await api('/settings');
-        const f=$('#settings-form');
-        f.elements.maxSize.value=String(d.settings.maxSize);
-        f.elements.maxFps.value=String(d.settings.maxFps);
-        f.elements.bitrate.value=d.settings.bitrate;
-        f.elements.audio.checked=!!d.settings.audio;
-        f.elements.stayAwake.checked=d.settings.stayAwake !== false;
-        f.elements.turnScreenOff.checked=!!d.settings.turnScreenOff;
-        f.elements.showTouches.checked=!!d.settings.showTouches;
-        f.elements.alwaysOnTop.checked=!!d.settings.alwaysOnTop;
-        $('#settings-message').textContent='Your saved preferences are loaded.'
-    }
-    catch(e) {
-        $('#settings-message').textContent='Could not load settings: '+e.message
-    }
+  if (!state.online) return;
+  try { state.settings = (await api('/settings')).settings; renderSettings(); } catch (e) { toast(e.message, 'bad'); }
 }
-async function saveSettings() {
-    const f=$('#settings-form');
-    const seq=++settingsSaveSequence;
-    const s= {
-        maxSize:Number(f.elements.maxSize.value), maxFps:Number(f.elements.maxFps.value), bitrate:f.elements.bitrate.value, audio:f.elements.audio.checked, stayAwake:f.elements.stayAwake.checked, turnScreenOff:f.elements.turnScreenOff.checked, showTouches:f.elements.showTouches.checked, alwaysOnTop:f.elements.alwaysOnTop.checked
-    }
-    ;
-    $('#settings-message').textContent='Saving changes…';
-    try {
-        await api('/settings', {
-            method:'POST', body:JSON.stringify(s)
-        }
-        );
-        if(seq===settingsSaveSequence) {
-            $('#settings-message').textContent='✓ All changes saved automatically.';
-            toast('Preferences saved.')
-        }
-    }
-    catch(e) {
-        if(seq===settingsSaveSequence) {
-            $('#settings-message').textContent='Save failed: '+e.message;
-            toast('Could not save preferences. '+e.message)
-        }
-    }
+const saveSettings = debounce(async () => {
+  const el = $('#save-state');
+  el.textContent = 'Saving…';
+  try { state.settings = (await post('/settings', state.settings)).settings; el.textContent = 'Saved. New sessions use these settings.'; }
+  catch (e) { el.textContent = 'Not saved.'; toast(e.message, 'bad'); await loadSettings(); }
+}, 450);
+function change(key, val) {
+  if (!state.settings) return;
+  state.settings[key] = val;
+  state.settings.preset = matchPreset(state.settings);
+  renderSettings(); saveSettings();
 }
-$('#settings-form').addEventListener('change', ()=> {
-    clearTimeout(settingsSaveTimer);settingsSaveTimer=setTimeout(saveSettings, 200)
-}
-);
-$('#settings-form').addEventListener('submit', e=> {
-    e.preventDefault();clearTimeout(settingsSaveTimer);saveSettings()
-}
-);
-$('#cleanup').addEventListener('click', async()=> {
-    const days=Number($('#cleanup-days').value);const button=$('#cleanup');button.disabled=true;try {
-        const preview=await api('/cleanup-preview?days='+days);if(!preview.files.length) {
-            $('#cleanup-result').textContent='No recordings older than '+days+' days were found.';return
-        }
-        const total=preview.files.reduce((sum, f)=>sum+Number(f.size||0), 0);const names=preview.files.slice(0, 8).map(f=>f.name).join('\n');const more=preview.files.length>8?'\n…and '+(preview.files.length-8)+' more':'';if(!confirm('Delete '+preview.files.length+' recording(s) older than '+days+' days ('+size(total)+')?\n\n'+names+more+'\n\nThis cannot be undone.'))return;const result=await api('/cleanup', {
-            method:'POST', body:JSON.stringify( {
-                days, confirm:true
-            }
-            )
-        }
-        );$('#cleanup-result').textContent='Removed '+result.deleted+' file(s), freed '+size(result.freed)+'.';toast('Cleanup complete.');await loadFiles()
-    }
-    catch(e) {
-        $('#cleanup-result').textContent=e.message;toast(e.message)
-    }
-    finally {
-        button.disabled=false
-    }
-}
-);
-async function refreshQuietly() {
-    try {
-        await loadStatus()
-    }
-    catch {
-    }
-}
-loadStatus().catch(()=> {
-}
-);
-setInterval(()=> {
-    if(document.visibilityState==='visible')refreshQuietly()
-}
-, 5000);
-document.addEventListener('visibilitychange', ()=> {
-    if(document.visibilityState==='visible')refreshQuietly()
-}
-);
+const refreshPreview = debounce(async () => {
+  if (!state.settings || !state.online) return;
+  try { const r = await post('/preview', { settings: state.settings, mode: state.previewMode, serial: sel() }); $('#cmd-preview').textContent = r.command; }
+  catch (e) { $('#cmd-preview').textContent = e.message; }
+}, 120);
 
+/* ---------- command palette ---------- */
+const COMMANDS = () => [
+  { n: 'Mirror phone', i: 'mirror', k: 'M', f: () => run('mirror') },
+  { n: recording() ? 'Stop recording' : 'Start recording', i: recording() ? 'stop' : 'record', k: 'R', f: () => run(recording() ? 'stop' : 'record') },
+  { n: 'Take screenshot', i: 'camera', k: 'S', f: () => run('screenshot') },
+  { n: 'Close scrcpy windows', i: 'stop', f: () => run('stop') },
+  { n: 'Go to Console', i: 'console', k: '1', f: () => go('console') },
+  { n: 'Go to Library', i: 'library', k: '2', f: () => go('library') },
+  { n: 'Go to Devices', i: 'phone', k: '3', f: () => go('device') },
+  { n: 'Go to Settings', i: 'sliders', k: '4', f: () => go('settings') },
+  { n: 'Press Home on phone', i: 'home', f: () => sendKey('home') },
+  { n: 'Press Back on phone', i: 'back', f: () => sendKey('back') },
+  { n: 'Open phone notifications', i: 'bell', f: () => sendKey('notifications') },
+  { n: 'Wake phone screen', i: 'sun-moon', f: () => sendKey('wake') },
+  { n: 'Switch phone to Wi-Fi', i: 'wifi', f: () => { go('device'); wifi('enable'); } },
+  { n: 'Restart ADB', i: 'refresh', f: () => wifi('restart') },
+  { n: 'Open recordings folder', i: 'folder', f: () => post('/open-folder', { kind: 'recordings' }) },
+  { n: 'Open screenshots folder', i: 'folder', f: () => post('/open-folder', { kind: 'screenshots' }) },
+  { n: 'Switch light and dark theme', i: 'sun-moon', f: () => toggleTheme() },
+  { n: 'Refresh everything', i: 'refresh', f: () => refreshAll(true) }
+];
+let palIndex = 0, palItems = [];
+function renderPalette() {
+  const q = $('#pal-input').value.trim().toLowerCase();
+  palItems = COMMANDS().filter(c => c.n.toLowerCase().includes(q));
+  palIndex = Math.min(palIndex, Math.max(0, palItems.length - 1));
+  $('#pal-list').innerHTML = palItems.length
+    ? palItems.map((c, i) => `<li role="option" data-i="${i}" class="${i === palIndex ? 'sel' : ''}" aria-selected="${i === palIndex}">${icon(c.i)}<span>${esc(c.n)}</span>${c.k ? `<kbd>${c.k}</kbd>` : ''}</li>`).join('')
+    : '<li class="none">No command matches.</li>';
+  const cur = $('#pal-list .sel'); if (cur) cur.scrollIntoView({ block: 'nearest' });
+}
+function openPalette() { const d = $('#dlg-palette'); if (d.open) return; $('#pal-input').value = ''; palIndex = 0; renderPalette(); d.showModal(); $('#pal-input').focus(); }
+function runPalette(i) { const c = palItems[i]; if (!c) return; $('#dlg-palette').close(); setTimeout(c.f, 30); }
 
-/* ── Library controls and command palette ── */
-let libraryQuery = '';
-let librarySort = 'newest';
-function ensureLibraryControls() {
-    const list = $('#recording-list');
-    if (!list || $('#library-tools')) return;
-    const tools = document.createElement('div');
-    tools.id = 'library-tools';
-    tools.className = 'library-tools';
-    tools.innerHTML = '<label class="library-search"><span aria-hidden="true">⌕</span><input id="library-search-input" type="search" placeholder="Search recordings by filename…" autocomplete="off" aria-label="Search recordings"></label><label class="library-sort-label">Sort by <select id="library-sort" aria-label="Sort recordings"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="largest">Largest file</option><option value="smallest">Smallest file</option><option value="name">Filename A–Z</option></select></label><span id="library-result-count" class="library-result-count"></span>';
-    list.parentNode.insertBefore(tools, list);
-    $('#library-search-input').addEventListener('input', e => { libraryQuery = e.target.value.trim().toLowerCase(); renderRecordingLibrary(); });
-    $('#library-sort').addEventListener('change', e => { librarySort = e.target.value; renderRecordingLibrary(); });
+/* ---------- theme ---------- */
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('stk-theme', next); } catch (e) {}
 }
-function renderRecordingLibrary() {
-    const list = $('#recording-list');
-    if (!list) return;
-    ensureLibraryControls();
-    let files = recordingFiles.filter(f => String(f.name || '').toLowerCase().includes(libraryQuery));
-    files = [...files].sort((a,b) => {
-        if (librarySort === 'oldest') return new Date(a.modified) - new Date(b.modified);
-        if (librarySort === 'largest') return Number(b.size || 0) - Number(a.size || 0);
-        if (librarySort === 'smallest') return Number(a.size || 0) - Number(b.size || 0);
-        if (librarySort === 'name') return String(a.name || '').localeCompare(String(b.name || ''), undefined, {numeric:true, sensitivity:'base'});
-        return new Date(b.modified) - new Date(a.modified);
-    });
-    const count = $('#library-result-count');
-    if (count) count.textContent = files.length + ' of ' + recordingFiles.length + ' files';
-    if (files.length) list.innerHTML = files.map(recordingRow).join('');
-    else if (recordingFiles.length) list.innerHTML = '<div class="no-recordings"><div class="empty-illustration">⌕</div><b>No matching recordings</b><p>Try another filename or clear the search field.</p><button class="secondary-button" id="clear-library-search">Clear search</button></div>';
-    else list.innerHTML = '<div class="no-recordings"><div class="empty-illustration">▤</div><b>No recordings yet</b><p>Start a recording from Overview. Finished MKV and MP4 files appear here automatically.</p></div>';
-    const clear = $('#clear-library-search');
-    if (clear) clear.addEventListener('click', () => { libraryQuery=''; const input=$('#library-search-input'); if(input) input.value=''; renderRecordingLibrary(); });
-}
-function setupCommandPalette() {
-    if ($('#command-palette')) return;
-    const launcher = document.createElement('button');
-    launcher.type = 'button';
-    launcher.id = 'command-launcher';
-    launcher.className = 'command-launcher';
-    launcher.innerHTML = '<span aria-hidden="true">⌕</span><span>Quick jump or run a command</span><kbd>Ctrl K</kbd>';
-    launcher.setAttribute('aria-label', 'Open command palette');
-    const actions = $('.topbar-actions');
-    if (actions) actions.insertBefore(launcher, $('#refresh'));
-    const overlay = document.createElement('div');
-    overlay.id = 'command-palette';
-    overlay.className = 'command-overlay';
-    overlay.hidden = true;
-    overlay.innerHTML = '<section class="command-dialog" role="dialog" aria-modal="true" aria-labelledby="command-title"><div class="command-search-row"><span aria-hidden="true">⌕</span><input id="command-search" type="search" placeholder="Search pages and actions…" autocomplete="off" aria-label="Search commands"><kbd>ESC</kbd></div><div class="command-heading" id="command-title">QUICK ACTIONS</div><div id="command-results" class="command-results"></div><div class="command-footer"><span>Navigate with ↑ ↓</span><span>Enter to run · Esc to close</span></div></section>';
-    document.body.appendChild(overlay);
-    const commands = [
-      {label:'Go to Overview', detail:'Dashboard and live sessions', keys:'Alt 1', run:()=>view('home')},
-      {label:'Open recording library', detail:'Search, sort, and open saved videos', keys:'Alt 2', run:()=>view('recordings')},
-      {label:'Open Settings', detail:'Capture quality and audio preferences', keys:'Alt 3', run:()=>view('settings')},
-      {label:'Device diagnostics', detail:'Check ADB connection and authorization', keys:'Alt 4', run:()=>view('device')},
-      {label:'Start phone mirroring', detail:'Launch a scrcpy mirror window', keys:'', run:()=>action('mirror')},
-      {label:'Start screen recording', detail:'Mirror and record in one session', keys:'', run:()=>action('record')},
-      {label:'Stop toolkit sessions', detail:'Gracefully close toolkit scrcpy windows', keys:'', run:()=>action('stop')},
-      {label:'Run device check', detail:'Refresh Android device connection status', keys:'', run:()=>{view('device');$('#run-check').click()}},
-      {label:'Open recordings folder', detail:'Show saved videos in File Explorer', keys:'', run:()=>openFolder()},
-      {label:'Refresh dashboard', detail:'Update devices, recordings, and sessions', keys:'', run:()=>{loadStatus();recent();toast('Dashboard refreshed.')}} 
-    ];
-    let selected = 0;
-    let filtered = commands;
-    const input = $('#command-search');
-    const results = $('#command-results');
-    function paint() {
-      const q=input.value.trim().toLowerCase();
-      filtered=commands.filter(c=>(c.label+' '+c.detail).toLowerCase().includes(q));
-      selected=Math.min(selected,Math.max(0,filtered.length-1));
-      results.innerHTML=filtered.length?filtered.map((c,i)=>'<button type="button" class="command-item '+(i===selected?'selected':'')+'" data-command-index="'+i+'"><span class="command-item-icon">'+(i<4?'↗':'⌘')+'</span><span class="command-item-copy"><b>'+esc(c.label)+'</b><small>'+esc(c.detail)+'</small></span><kbd>'+esc(c.keys||'Run')+'</kbd></button>').join(''):'<div class="command-no-results">No matching commands. Try “recording” or “device”.</div>';
-      results.querySelectorAll('[data-command-index]').forEach(b=>b.addEventListener('click',()=>execute(Number(b.dataset.commandIndex))));
-    }
-    function open() { overlay.hidden=false; input.value=''; selected=0; paint(); setTimeout(()=>input.focus(),0); }
-    function close() { overlay.hidden=true; if(launcher) launcher.blur(); }
-    function execute(i) { const command=filtered[i]; if(!command)return; close(); command.run(); }
-    launcher.addEventListener('click',open);
-    overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
-    input.addEventListener('input',()=>{selected=0;paint();});
-    input.addEventListener('keydown',e=>{
-      if(e.key==='ArrowDown'){e.preventDefault();selected=Math.min(selected+1,filtered.length-1);paint();}
-      else if(e.key==='ArrowUp'){e.preventDefault();selected=Math.max(0,selected-1);paint();}
-      else if(e.key==='Enter'){e.preventDefault();execute(selected);}
-      else if(e.key==='Escape')close();
-    });
-    document.addEventListener('keydown',e=>{
-      if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();open();return;}
-      if(e.key==='Escape'&&!overlay.hidden){close();return;}
-      if(e.altKey&&!e.ctrlKey&&!e.metaKey){
-        const pages={'1':'home','2':'recordings','3':'settings','4':'device'};
-        if(pages[e.key]&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){e.preventDefault();view(pages[e.key]);}
-      }
-    });
-    paint();
-}
-setupCommandPalette();
-ensureLibraryControls();
 
+/* ---------- refresh loop ---------- */
+async function refreshAll(loud) {
+  const ok = await loadStatus();
+  if (!ok) { if (loud) toast('The local backend is offline. Run Launch.bat.', 'bad'); return; }
+  await Promise.all([loadDevices(true), loadSessions(), loadActivity(), loadLibrary()]);
+  if (loud) toast('Refreshed.');
+}
+function tickClocks() {
+  $$('.timer[data-since]').forEach(el => { el.textContent = clock(el.dataset.since); });
+  const rc = $('#rec-clock'), r = recording(); if (rc && r) rc.textContent = clock(r.started);
+}
 
-/* Session profiles and advanced scrcpy controls */
-function ensureAdvancedSettings() {
-    const form = $('#settings-form');
-    if (!form || $('#session-profile-panel')) return;
-    const heading = form.querySelector('.card-heading');
-    const panel = document.createElement('section');
-    panel.id = 'session-profile-panel';
-    panel.className = 'profile-panel';
-    panel.innerHTML = '<div class="profile-panel-heading"><div><b>Session profiles</b><small>Apply a ready-made setup, then fine-tune any setting.</small></div><span class="profile-local-tag">LOCAL PRESETS</span></div><div class="profile-buttons"><button type="button" data-profile="balanced"><b>Balanced</b><small>Everyday use</small></button><button type="button" data-profile="low"><b>Low resource</b><small>Lightweight capture</small></button><button type="button" data-profile="tutorial"><b>Tutorial</b><small>Show touch points</small></button><button type="button" data-profile="detail"><b>High detail</b><small>Sharper capture</small></button></div>';
-    if (heading) heading.insertAdjacentElement('afterend', panel);
-    const toggles = document.createElement('section');
-    toggles.id = 'advanced-session-options';
-    toggles.className = 'advanced-session-options';
-    toggles.innerHTML = '<div class="advanced-options-heading"><b>Mirror & recording behavior</b><small>These options are applied when the next session starts.</small></div>' +
-      advancedToggle('stayAwake','Keep phone awake','Prevent the device from sleeping during a session.') +
-      advancedToggle('turnScreenOff','Turn off phone screen','Save phone display power while the desktop mirror stays available.') +
-      advancedToggle('showTouches','Show touch indicators','Useful for tutorials and demonstrations.') +
-      advancedToggle('alwaysOnTop','Keep mirror on top','Keep the scrcpy window above other desktop windows.');
-    const audio = form.querySelector('#setting-audio')?.closest('.setting-toggle');
-    if (audio) audio.insertAdjacentElement('afterend', toggles);
-    panel.querySelectorAll('[data-profile]').forEach(button => button.addEventListener('click', () => {
-      const presets = {
-        balanced:{maxSize:1280,maxFps:30,bitrate:'8M',audio:true,stayAwake:true,turnScreenOff:false,showTouches:false,alwaysOnTop:false},
-        low:{maxSize:720,maxFps:24,bitrate:'2M',audio:false,stayAwake:true,turnScreenOff:false,showTouches:false,alwaysOnTop:false},
-        tutorial:{maxSize:1280,maxFps:30,bitrate:'8M',audio:true,stayAwake:true,turnScreenOff:false,showTouches:true,alwaysOnTop:true},
-        detail:{maxSize:1920,maxFps:60,bitrate:'16M',audio:true,stayAwake:true,turnScreenOff:false,showTouches:false,alwaysOnTop:true}
-      };
-      const p=presets[button.dataset.profile]; if(!p)return;
-      Object.entries(p).forEach(([key,value])=>{if(key==='audio'||key==='stayAwake'||key==='turnScreenOff'||key==='showTouches'||key==='alwaysOnTop')form.elements[key].checked=value;else form.elements[key].value=String(value);});
-      panel.querySelectorAll('[data-profile]').forEach(b=>b.classList.toggle('selected',b===button));
-      clearTimeout(settingsSaveTimer);saveSettings();
-      toast('Applied '+button.querySelector('b').textContent+' profile.');
-    }));
-    toggles.querySelectorAll('input').forEach(input=>input.addEventListener('change',()=> {
-      toggles.querySelectorAll('.setting-toggle').forEach(row=>row.classList.toggle('option-enabled',row.querySelector('input')?.checked));
-    }));
-}
-function advancedToggle(name,label,description) {
-    return '<div class="setting-toggle advanced-toggle"><div class="toggle-copy"><label for="setting-'+name+'">'+label+'</label><small>'+description+'</small></div><label class="switch"><input id="setting-'+name+'" type="checkbox" name="'+name+'"><span class="switch-track"></span></label></div>';
-}
-ensureAdvancedSettings();
+/* ---------- events ---------- */
+document.addEventListener('click', e => {
+  const t = e.target.closest('button, li[data-i]');
+  if (!t) return;
+  if (t.dataset.view) return go(t.dataset.view);
+  if (t.dataset.act) return run(t.dataset.act);
+  if (t.dataset.key) return sendKey(t.dataset.key);
+  if (t.dataset.shot) return showShot(t.dataset.shot);
+  if (t.dataset.rec) return openFile('recordings', t.dataset.rec, false);
+  if (t.dataset.reveal) return openFile('recordings', t.dataset.reveal, true);
+  if (t.dataset.del) return deleteFile('recordings', t.dataset.del);
+  if (t.dataset.preset) { const p = PRESETS.find(x => x.id === t.dataset.preset); Object.assign(state.settings, p.v, { preset: p.id }); renderSettings(); return saveSettings(); }
+  if (t.dataset.seg) { const raw = t.dataset.val, num = SEG[t.dataset.seg].find(o => String(o[0]) === raw)[0]; return change(t.dataset.seg, num); }
+  if (t.dataset.mode) { state.previewMode = t.dataset.mode; $$('#preview-mode button').forEach(b => b.classList.toggle('is-active', b === t)); return refreshPreview(); }
+  if (t.dataset.tab) { state.tab = t.dataset.tab; $$('.tab').forEach(b => { const on = b === t; b.classList.toggle('is-active', on); b.setAttribute('aria-selected', on); }); return renderLibrary(); }
+  if (t.dataset.i !== undefined) return runPalette(Number(t.dataset.i));
+});
+document.addEventListener('change', e => {
+  if (e.target.dataset && e.target.dataset.set) change(e.target.dataset.set, e.target.checked);
+});
+$('#device-select').addEventListener('change', async e => { state.selected = e.target.value; if (!state.info[state.selected]) await loadInfo(state.selected); renderStage(); renderDevices(); refreshPreview(); });
+$('#palette-btn').addEventListener('click', openPalette);
+$('#theme-btn').addEventListener('click', toggleTheme);
+$('#text-send').addEventListener('click', sendText);
+$('#text-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendText(); });
+$('#lib-search').addEventListener('input', e => { state.filter = e.target.value; renderLibrary(); });
+$('#lib-sort').addEventListener('change', e => { state.sort = e.target.value; renderLibrary(); });
+$('#lib-refresh').addEventListener('click', () => loadLibrary());
+$('#lib-folder').addEventListener('click', () => post('/open-folder', { kind: state.tab }).catch(e => toast(e.message, 'bad')));
+$('#cleanup-btn').addEventListener('click', cleanup);
+$('#run-check').addEventListener('click', async () => { await loadDevices(true); toast(readyDevices().length ? 'Device check complete.' : 'No ready device found.', readyDevices().length ? 'ok' : 'bad'); });
+$('#wifi-enable').addEventListener('click', () => wifi('enable'));
+$('#wifi-connect').addEventListener('click', () => { const a = $('#wifi-address').value.trim(); if (!a) return toast('Enter the phone address first.', 'bad'); wifi('connect', { address: a }); });
+$('#wifi-disconnect').addEventListener('click', () => wifi('disconnect'));
+$('#adb-restart').addEventListener('click', () => wifi('restart'));
+$('#copy-report').addEventListener('click', copyReport);
+$('#cmd-copy').addEventListener('click', () => copyText($('#cmd-preview').textContent, 'Command'));
+$('#shot-close').addEventListener('click', () => $('#dlg-shot').close());
+$('#shot-open').addEventListener('click', () => openFile('screenshots', state.fileTarget, false));
+$('#shot-reveal').addEventListener('click', () => openFile('screenshots', state.fileTarget, true));
+$('#shot-delete').addEventListener('click', async () => { if (await deleteFile('screenshots', state.fileTarget)) $('#dlg-shot').close(); });
+$('#pal-input').addEventListener('input', () => { palIndex = 0; renderPalette(); });
+$('#pal-input').addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); palIndex = Math.min(palItems.length - 1, palIndex + 1); renderPalette(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); palIndex = Math.max(0, palIndex - 1); renderPalette(); }
+  else if (e.key === 'Enter') { e.preventDefault(); runPalette(palIndex); }
+});
+$('#dlg-palette').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+$$('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d && d.id !== 'dlg-palette') d.close(); }));
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); return openPalette(); }
+  const typing = /^(input|select|textarea)$/i.test(document.activeElement.tagName) || document.querySelector('dialog[open]');
+  if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+  const map = { '1': () => go('console'), '2': () => go('library'), '3': () => go('device'), '4': () => go('settings'), m: () => run('mirror'), r: () => run(recording() ? 'stop' : 'record'), s: () => run('screenshot') };
+  const f = map[e.key.toLowerCase()]; if (f) { e.preventDefault(); f(); }
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshAll(false); });
+
+/* ---------- boot ---------- */
+(async function boot() {
+  renderAll();
+  go((location.hash || '#console').slice(1));
+  await refreshAll(false);
+  setInterval(tickClocks, 1000);
+  setInterval(() => { if (!document.hidden) { loadStatus().then(ok => { if (ok) { loadSessions(); loadDevices(false); loadActivity(); if (state.view === 'library') loadLibrary(); } }); } }, 4000);
+})();
+})();

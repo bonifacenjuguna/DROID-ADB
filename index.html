@@ -1,17 +1,288 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0e18"><meta name="description" content="A local-first Windows control center for scrcpy mirroring, recording, and Android device diagnostics."><title>Scrcpy Toolkit</title><link rel="stylesheet" href="assets/style.css"></head>
-<body><div class="app-shell">
-<aside class="sidebar"><a class="brand" href="#" aria-label="Scrcpy Toolkit home"><span class="brand-mark"><span> S </span></span><span class="brand-copy">scrcpy<span>TOOLKIT</span></span></a><div class="side-caption">WORKSPACE</div><nav class="navigation"><button class="nav active" data-view="home"><span class="nav-icon">◫</span>Overview</button><button class="nav" data-view="recordings"><span class="nav-icon">▤</span>Recordings <span id="nav-recording-count" class="nav-count">0</span></button><button class="nav" data-view="settings"><span class="nav-icon">⚙</span>Settings</button><button class="nav" data-view="device"><span class="nav-icon">⌁</span>Device diagnostics</button></nav><div class="sidebar-bottom"><span class="online-dot" id="sidebar-dot"></span><div><b id="backend-label">Connecting…</b><small>LOCAL BACKEND</small></div><span class="version-pill">v1.1</span></div></aside>
-<main class="main-area"><header class="topbar"><div><div class="breadcrumb">SCRCPY TOOLKIT <span>/</span> <span id="breadcrumb-current">OVERVIEW</span></div><h1 id="page-title">Overview</h1></div><div class="topbar-actions"><div id="status-chip" class="status-chip"><span class="status-dot"></span>Checking backend</div><button id="refresh" class="icon-button" title="Refresh dashboard" aria-label="Refresh dashboard">↻</button></div></header>
-<section class="view" id="view-home">
-<div class="welcome-row"><div><div class="eyebrow">YOUR PHONE. YOUR DESKTOP.</div><h2 class="welcome-title">Your control center<span>.</span></h2><p class="welcome-copy">Mirror your Android screen, capture sessions, and manage recordings — all from one clean workspace.</p></div><div class="welcome-art" aria-hidden="true"><div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div><div class="phone-art"><div class="phone-speaker"></div><div class="phone-screen"><span>scrcpy</span><i>●</i><div class="screen-lines"></div></div></div><div class="art-spark spark-a">✦</div><div class="art-spark spark-b">✧</div></div></div>
-<div class="metrics-grid"><article class="metric-card"><div class="metric-top"><span>CONNECTED DEVICES</span><span class="metric-icon blue-icon">⌁</span></div><div class="metric-value" id="metric-devices">—</div><div class="metric-foot" id="metric-device-note">Checking ADB connection</div></article><article class="metric-card"><div class="metric-top"><span>RECORDINGS SAVED</span><span class="metric-icon violet-icon">▤</span></div><div class="metric-value" id="metric-recordings">—</div><div class="metric-foot" id="metric-storage">Your local video library</div></article><article class="metric-card"><div class="metric-top"><span>ACTIVE SESSIONS</span><span class="metric-icon green-icon">◉</span></div><div class="metric-value" id="metric-sessions">—</div><div class="metric-foot" id="metric-session-note">Mirror and recording windows</div></article></div>
-<div class="section-heading"><div><div class="eyebrow">GET STARTED</div><h2>Quick actions</h2><p>Start a task in one click.</p></div><span class="subtle-label">ACTIONS RUN LOCALLY</span></div>
-<div class="action-grid"><button class="action-card" data-action="mirror"><span class="action-symbol mirror-symbol">▣</span><span class="action-title">Mirror phone <span class="arrow">↗</span></span><span class="action-desc">Open an interactive window for your Android device.</span><span class="action-meta">LIVE DISPLAY</span></button><button class="action-card record-action" data-action="record"><span class="action-symbol record-symbol"><span class="record-circle"></span></span><span class="action-title">Start recording <span class="arrow">↗</span></span><span class="action-desc">Opens one window that mirrors and records together. Close any mirror window first.</span><span class="action-meta">AUTO-SAVED TO RECORDINGS</span></button><button class="action-card" data-action="stop"><span class="action-symbol stop-symbol">■</span><span class="action-title">Stop session <span class="arrow">↗</span></span><span class="action-desc">Request a graceful close of toolkit scrcpy windows.</span><span class="action-meta">CLOSE ACTIVE WINDOWS</span></button><button class="action-card" data-action="check"><span class="action-symbol device-symbol">⌁</span><span class="action-title">Check device <span class="arrow">↗</span></span><span class="action-desc">Diagnose USB debugging and ADB authorization.</span><span class="action-meta">CONNECTION HEALTH</span></button></div>
-<div class="dashboard-columns"><article class="surface-card"><div class="card-heading"><div><div class="eyebrow">LIVE STATUS</div><h3>Device connection</h3></div><span id="connection-badge" class="mini-badge">Checking</span></div><div id="device-summary" class="empty-state"><span class="loading-ring"></span> Checking for connected devices…</div><div class="card-footer"><span id="last-check">Updates automatically</span><button class="text-button" data-view="device">View diagnostics <span>→</span></button></div></article><article class="surface-card"><div class="card-heading"><div><div class="eyebrow">YOUR FILES</div><h3>Recent recordings</h3></div><button class="text-button" data-view="recordings">View library →</button></div><div id="recent-list" class="recent-list empty-state">Loading your library…</div><div class="card-footer"><span id="recent-summary">MP4 and MKV files stored on this PC</span><button class="text-button" id="open-recordings">Open folder ↗</button></div></article></div>
-<div class="surface-card live-session-card"><div class="card-heading"><div><div class="eyebrow">LIVE SESSION MONITOR</div><h3>Active scrcpy windows</h3><p>Updates automatically while the dashboard is open.</p></div><span id="session-badge" class="mini-badge">Checking</span></div><div id="session-list" class="session-list empty-state"><span class="loading-ring"></span> Looking for active sessions…</div><div class="card-footer"><span id="session-footnote">Only scrcpy launched from this toolkit is listed.</span><button class="text-button" data-action="stop">Close active sessions →</button></div></div><div class="privacy-strip"><span class="privacy-icon">◈</span><div><b>Private by design</b><span>Your phone controls and recordings stay on this computer. The backend listens on localhost only.</span></div><span class="privacy-status">LOCAL-FIRST</span></div>
-</section>
-<section class="view hidden" id="view-recordings"><div class="page-intro"><div><div class="eyebrow">YOUR LOCAL MEDIA</div><h2>Recording library</h2><p>Every recording you start is saved into this toolkit's <code>Recordings</code> folder. New recordings use MKV; existing MP4 files remain supported.</p></div><button class="primary-button" id="open-recordings-page">↗ <span>Open folder</span></button></div><div class="library-summary"><div><span class="summary-label">TOTAL FILES</span><b id="recording-count">—</b></div><div><span class="summary-label">TOTAL STORAGE</span><b id="recording-total">—</b></div><div><span class="summary-label">FILE TYPE</span><b>MKV / MP4 video</b></div><div class="library-refresh"><button class="secondary-button" id="reload-recordings">↻ Refresh library</button></div></div><div class="surface-card library-card"><div class="card-heading"><div><h3>Saved sessions</h3><p>Newest recordings appear first.</p></div><span class="folder-label">▰ RECORDINGS /</span></div><div id="recording-list" class="recording-list empty-state">Loading files…</div></div><div class="surface-card cleanup-card"><div class="cleanup-copy"><span class="metric-icon amber-icon">⌫</span><div><h3>Storage cleanup</h3><p>Review older recordings before removing them permanently.</p></div></div><div class="cleanup-controls"><label for="cleanup-days">Find files older than<select id="cleanup-days"><option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option><option value="180">180 days</option></select></label><button class="secondary-button danger-button" id="cleanup">Review old files</button></div><p id="cleanup-result" class="inline-result" role="status"></p></div></section>
-<section class="view hidden" id="view-settings"><div class="page-intro"><div><div class="eyebrow">MAKE IT YOURS</div><h2>Settings & preferences</h2><p>Changes save automatically and apply to future mirror and recording sessions.</p></div><span class="autosave-badge"><span>✓</span> AUTO-SAVE ON</span></div><div class="settings-layout"><form id="settings-form" class="surface-card settings-card"><div class="card-heading"><div><h3>Capture quality</h3><p>Choose the balance between clarity and performance.</p></div><span class="metric-icon blue-icon">⚙</span></div><div class="setting-field"><div><label for="setting-size">Maximum resolution</label><small>The longest dimension of the mirrored video.</small></div><select id="setting-size" name="maxSize"><option value="720">720 px · Performance</option><option value="1024">1024 px · Balanced</option><option value="1280">1280 px · Recommended</option><option value="1600">1600 px · High detail</option><option value="1920">1920 px · Full HD</option><option value="0">Original device resolution</option></select></div><div class="setting-field"><div><label for="setting-fps">Frame rate</label><small>Higher frame rates need more system resources.</small></div><select id="setting-fps" name="maxFps"><option value="15">15 FPS · Low load</option><option value="24">24 FPS · Smooth</option><option value="30">30 FPS · Recommended</option><option value="45">45 FPS · High</option><option value="60">60 FPS · Maximum smoothness</option></select></div><div class="setting-field"><div><label for="setting-bitrate">Video bitrate</label><small>Higher bitrate usually means larger files.</small></div><select id="setting-bitrate" name="bitrate"><option value="2M">2 Mbps · Smaller files</option><option value="4M">4 Mbps · Light</option><option value="8M">8 Mbps · Recommended</option><option value="12M">12 Mbps · High quality</option><option value="16M">16 Mbps · Maximum quality</option></select></div><div class="setting-toggle"><div class="toggle-copy"><label for="setting-audio">Capture device audio</label><small>Audio support depends on your Android version and app restrictions.</small></div><label class="switch"><input id="setting-audio" type="checkbox" name="audio"><span class="switch-track"></span></label></div><div class="settings-foot"><span id="settings-message" role="status">Loading saved preferences…</span><span class="saved-check">✓ Changes auto-save</span></div></form><aside class="settings-aside"><div class="surface-card tip-card"><span class="tip-icon">✦</span><h3>Recommended setup</h3><p>For a balanced experience on a modest PC, start with 1280 px, 30 FPS, and 8 Mbps.</p><div class="preset-tags"><span>1280 PX</span><span>30 FPS</span><span>8 MBPS</span></div></div><div class="surface-card tip-card muted-tip"><span class="tip-icon">◈</span><h3>Saved on this PC</h3><p>Your preferences are stored in <code>Config/settings.json</code>. They remain available when you reopen the toolkit from the same folder.</p></div></aside></div></section>
-<section class="view hidden" id="view-device"><div class="page-intro"><div><div class="eyebrow">CONNECTION HEALTH</div><h2>Device diagnostics</h2><p>Find out why your Android phone may not be appearing.</p></div><button class="primary-button" id="run-check">⌁ <span>Run device check</span></button></div><div class="diagnostic-grid"><article class="surface-card diagnostic-main"><div class="card-heading"><div><h3>ADB device status</h3><p>Devices currently visible to Android Debug Bridge.</p></div><span id="adb-chip" class="mini-badge">Not checked</span></div><div id="device-list" class="device-list empty-state">Run a check to inspect your connection.</div><div class="diagnostic-note"><b>What the status means</b><div><span class="state-dot good"></span><span><strong>device</strong> — connected and authorized</span></div><div><span class="state-dot warning"></span><span><strong>unauthorized</strong> — unlock your phone and accept the USB debugging prompt</span></div><div><span class="state-dot warning"></span><span><strong>offline</strong> — reconnect the cable or restart ADB</span></div></div></article><aside class="surface-card help-card"><div class="eyebrow">QUICK TROUBLESHOOTING</div><h3>Phone not showing up?</h3><ol><li><span>1</span><div><b>Check the cable</b><small>Use a USB cable that supports data, not charging only.</small></div></li><li><span>2</span><div><b>Enable USB debugging</b><small>Developer options → USB debugging.</small></div></li><li><span>3</span><div><b>Authorize this PC</b><small>Unlock the phone and accept the RSA prompt.</small></div></li><li><span>4</span><div><b>Reconnect and retry</b><small>Try another USB port, then run the check again.</small></div></li></ol><button class="secondary-button full-button" id="retry-device">↻ Check again</button></aside></div></section>
-<footer><span>SCRCPY TOOLKIT <span class="footer-separator">·</span> PORTABLE WINDOWS APP</span><span>Local-first <span class="footer-separator">·</span> No cloud account <span class="footer-separator">·</span> No paid API</span></footer></main></div><div id="toast" role="status" aria-live="polite"></div><script src="assets/app.js"></script></body></html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Scrcpy Toolkit</title>
+<meta name="description" content="Local control center for scrcpy: mirror, record, capture and manage your Android phone.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23f2b544'/%3E%3Crect x='11' y='6' width='10' height='20' rx='3' fill='none' stroke='%23181204' stroke-width='2'/%3E%3C/svg%3E">
+<script>try{var t=localStorage.getItem('stk-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+<defs>
+<symbol id="i-console" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.8"/><rect x="14" y="3" width="7" height="5" rx="1.8"/><rect x="14" y="12" width="7" height="9" rx="1.8"/><rect x="3" y="16" width="7" height="5" rx="1.8"/></symbol>
+<symbol id="i-library" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7.5 4v16M16.5 4v16M3 9h4.5M3 15h4.5M16.5 9H21M16.5 15H21"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.8"/><path d="M10.5 18.5h3"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M19 7h1M4 17h1M11 17h9"/><circle cx="16" cy="7" r="2.4"/><circle cx="8" cy="17" r="2.4"/></symbol>
+<symbol id="i-mirror" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2.4"/><path d="M8 20h8M12 16v4"/></symbol>
+<symbol id="i-record" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.6" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l1.6-2.2h6.8L17 8h3a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z"/><circle cx="12" cy="13" r="3.6"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="M16.5 5.5v13L6.5 12z"/></symbol>
+<symbol id="i-home" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></symbol>
+<symbol id="i-recents" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.8"/></symbol>
+<symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v8.5"/><path d="M7.2 6.6a8 8 0 109.6 0"/></symbol>
+<symbol id="i-volup" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9.2a4 4 0 010 5.6M18.4 6.5a8 8 0 010 11"/></symbol>
+<symbol id="i-voldown" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9.2a4 4 0 010 5.6"/></symbol>
+<symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 17v-6a6 6 0 1112 0v6l1.6 2H4.4z"/><path d="M10 21.5h4"/></symbol>
+<symbol id="i-sun-moon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3L7 7M17 17l1.7 1.7M5.3 18.7L7 17M17 7l1.7-1.7"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.6A8.5 8.5 0 019.4 4 8.5 8.5 0 1020 14.6z"/></symbol>
+<symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2.5 9a14 14 0 0119 0M5.6 12.4a9.6 9.6 0 0112.8 0M8.8 15.8a5 5 0 016.4 0"/><circle cx="12" cy="19.2" r="1.1" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-usb" viewBox="0 0 24 24"><path d="M8.5 3v5M15.5 3v5M6 8h12v3.5a6 6 0 01-12 0zM12 17.5V21"/></symbol>
+<symbol id="i-battery" viewBox="0 0 24 24"><rect x="2.5" y="7" width="16" height="10" rx="2.6"/><path d="M21.5 10.5v3"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5.5 13.5h6L10.5 21 18.5 10.5h-6z"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 012-2h4l2 2.4h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l.9 13h9.2l.9-13M10 11v5.5M14 11v5.5"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></symbol>
+<symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 00-14.4-4M4.5 3.5V8H9M4 13a8 8 0 0014.4 4M19.5 20.5V16H15"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5M12 17.4v.2"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2.2"/><path d="M15.5 8.5V6.4a1.9 1.9 0 00-1.9-1.9H6.4a1.9 1.9 0 00-1.9 1.9v7.2a1.9 1.9 0 001.9 1.9h2.1"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+<symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.4"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M7.5 14h9"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3L10.5 13.5M21 3l-6.5 18-4-7.5L3 9.5z"/></symbol>
+<symbol id="i-disk" viewBox="0 0 24 24"><rect x="3" y="13" width="18" height="7" rx="2.2"/><path d="M5 13l2.4-8h9.2L19 13M7.5 16.5h.01M11 16.5h.01"/></symbol>
+<symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.2M12 7.8v.2"/></symbol>
+<symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+<symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.4"/><circle cx="9" cy="10" r="1.7"/><path d="M4 17l5-5 4 4 2.5-2.5L20 17"/></symbol>
+<symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.8"/><path d="M7 10l3 2.5L7 15M12.5 15H17"/></symbol>
+<symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3.5a6 6 0 01-12 0zM12 17.5V21"/></symbol>
+<symbol id="i-logo" viewBox="0 0 24 24"><rect x="7.5" y="3" width="9" height="18" rx="2.6"/><path d="M3.8 9a5.5 5.5 0 000 6M20.2 9a5.5 5.5 0 010 6"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></symbol>
+<symbol id="i-sort" viewBox="0 0 24 24"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></symbol>
+</defs>
+</svg>
+
+<div class="app">
+  <nav class="rail" aria-label="Main">
+    <div class="logo" aria-hidden="true"><svg class="ic"><use href="#i-logo"/></svg></div>
+    <button class="rail-btn is-active" data-view="console" aria-current="page"><svg class="ic"><use href="#i-console"/></svg><span>Console</span></button>
+    <button class="rail-btn" data-view="library"><svg class="ic"><use href="#i-library"/></svg><span>Library</span><i class="rail-badge" id="rail-count" hidden>0</i></button>
+    <button class="rail-btn" data-view="device"><svg class="ic"><use href="#i-phone"/></svg><span>Devices</span></button>
+    <button class="rail-btn" data-view="settings"><svg class="ic"><use href="#i-sliders"/></svg><span>Settings</span></button>
+    <div class="rail-foot" title="Local backend">
+      <span class="dot" id="rail-dot"></span>
+      <span id="rail-version">v2.0</span>
+    </div>
+  </nav>
+
+  <div class="shell">
+    <header class="top">
+      <h1 id="page-title">Console</h1>
+      <div class="top-tools">
+        <div class="select-wrap" id="device-pick" hidden>
+          <svg class="ic sm"><use href="#i-phone"/></svg>
+          <select id="device-select" aria-label="Active device"></select>
+          <svg class="ic sm chev"><use href="#i-chevron"/></svg>
+        </div>
+        <button class="palette-btn" id="palette-btn" aria-label="Open command palette">
+          <svg class="ic sm"><use href="#i-search"/></svg>
+          <span>Search or run a command</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+        <button class="icon-btn" id="theme-btn" aria-label="Switch theme" title="Switch theme"><svg class="ic"><use href="#i-sun-moon"/></svg></button>
+        <span class="chip" id="conn-chip"><i class="dot"></i><b>Connecting</b></span>
+      </div>
+    </header>
+
+    <main class="content">
+      <!-- CONSOLE -->
+      <section class="view" id="view-console">
+        <div class="console-grid">
+          <div class="col">
+            <section class="panel stage" id="stage" aria-label="Active device">
+              <div class="stage-phone" id="phone"></div>
+              <div class="stage-body">
+                <div class="stage-id" id="stage-id"></div>
+                <dl class="specs" id="stage-specs"></dl>
+                <div class="stage-actions" id="stage-actions">
+                  <button class="btn primary lg" data-act="mirror"><svg class="ic"><use href="#i-mirror"/></svg>Mirror</button>
+                  <button class="btn rec lg" data-act="record" id="rec-btn"><svg class="ic"><use href="#i-record"/></svg><span>Record</span></button>
+                  <button class="btn lg" data-act="screenshot"><svg class="ic"><use href="#i-camera"/></svg>Screenshot</button>
+                  <button class="btn ghost lg" data-act="stop" id="stop-btn"><svg class="ic"><use href="#i-stop"/></svg>Close windows</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel remote" aria-label="Remote controls">
+              <header class="panel-head"><h2>Remote controls</h2><span class="hint">Works while the phone is connected, with or without a mirror window.</span></header>
+              <div class="keys" id="keys">
+                <button class="key" data-key="back" title="Back"><svg class="ic"><use href="#i-back"/></svg><span>Back</span></button>
+                <button class="key" data-key="home" title="Home"><svg class="ic"><use href="#i-home"/></svg><span>Home</span></button>
+                <button class="key" data-key="recents" title="Recent apps"><svg class="ic"><use href="#i-recents"/></svg><span>Recents</span></button>
+                <button class="key" data-key="notifications" title="Notification shade"><svg class="ic"><use href="#i-bell"/></svg><span>Shade</span></button>
+                <button class="key" data-key="voldown" title="Volume down"><svg class="ic"><use href="#i-voldown"/></svg><span>Vol −</span></button>
+                <button class="key" data-key="volup" title="Volume up"><svg class="ic"><use href="#i-volup"/></svg><span>Vol +</span></button>
+                <button class="key" data-key="wake" title="Wake screen"><svg class="ic"><use href="#i-sun-moon"/></svg><span>Wake</span></button>
+                <button class="key" data-key="power" title="Power button"><svg class="ic"><use href="#i-power"/></svg><span>Power</span></button>
+              </div>
+              <div class="typebar">
+                <svg class="ic sm"><use href="#i-keyboard"/></svg>
+                <input id="text-input" type="text" maxlength="120" placeholder="Type text to send to the focused field on the phone" autocomplete="off" spellcheck="false" aria-label="Text to send to the phone">
+                <button class="btn sm" id="text-send"><svg class="ic sm"><use href="#i-send"/></svg>Send</button>
+              </div>
+            </section>
+
+            <section class="panel captures" aria-label="Recent captures">
+              <header class="panel-head">
+                <h2>Recent captures</h2>
+                <button class="link" data-view="library">Open library</button>
+              </header>
+              <div class="strip" id="strip"></div>
+              <div class="meter-row">
+                <div class="meter" id="meter" role="img" aria-label="Storage use"><i id="meter-media"></i><i id="meter-other"></i></div>
+                <p id="meter-text" class="hint"></p>
+              </div>
+            </section>
+          </div>
+
+          <aside class="col">
+            <section class="panel" aria-label="Sessions">
+              <header class="panel-head"><h2>Live sessions</h2><span class="chip sm" id="session-chip"><i class="dot"></i><b>None</b></span></header>
+              <div id="sessions"></div>
+            </section>
+            <section class="panel" aria-label="Activity">
+              <header class="panel-head"><h2>Activity</h2><span class="hint">This run</span></header>
+              <ol class="feed" id="feed"></ol>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <!-- LIBRARY -->
+      <section class="view" id="view-library" hidden>
+        <div class="toolbar">
+          <div class="tabs" role="tablist" aria-label="Library">
+            <button role="tab" class="tab is-active" data-tab="recordings" aria-selected="true"><svg class="ic sm"><use href="#i-library"/></svg>Recordings <b id="tab-rec-count">0</b></button>
+            <button role="tab" class="tab" data-tab="screenshots" aria-selected="false"><svg class="ic sm"><use href="#i-image"/></svg>Screenshots <b id="tab-shot-count">0</b></button>
+          </div>
+          <div class="search"><svg class="ic sm"><use href="#i-search"/></svg><input id="lib-search" type="search" placeholder="Filter by name" aria-label="Filter files" autocomplete="off"></div>
+          <div class="select-wrap plain"><svg class="ic sm"><use href="#i-sort"/></svg><select id="lib-sort" aria-label="Sort files"><option value="new">Newest first</option><option value="old">Oldest first</option><option value="big">Largest first</option><option value="name">Name</option></select><svg class="ic sm chev"><use href="#i-chevron"/></svg></div>
+          <button class="btn" id="lib-refresh"><svg class="ic sm"><use href="#i-refresh"/></svg>Refresh</button>
+          <button class="btn" id="lib-folder"><svg class="ic sm"><use href="#i-folder"/></svg>Open folder</button>
+        </div>
+        <div class="library-summary panel" id="lib-summary"></div>
+        <section class="panel flush"><div id="lib-list"></div></section>
+        <section class="panel cleanup">
+          <div>
+            <h2>Free up space</h2>
+            <p class="hint">Preview which files are older than a set age before anything is removed. Deleted files cannot be restored.</p>
+          </div>
+          <div class="cleanup-controls">
+            <div class="select-wrap plain"><select id="cleanup-days" aria-label="Age"><option value="30">Older than 30 days</option><option value="60">Older than 60 days</option><option value="90">Older than 90 days</option><option value="180">Older than 180 days</option></select><svg class="ic sm chev"><use href="#i-chevron"/></svg></div>
+            <button class="btn danger" id="cleanup-btn"><svg class="ic sm"><use href="#i-trash"/></svg>Review files</button>
+          </div>
+        </section>
+      </section>
+
+      <!-- DEVICES -->
+      <section class="view" id="view-device" hidden>
+        <div class="two">
+          <div class="col">
+            <section class="panel">
+              <header class="panel-head"><h2>Connected devices</h2><button class="btn sm" id="run-check"><svg class="ic sm"><use href="#i-refresh"/></svg>Check now</button></header>
+              <div id="device-list"></div>
+              <div class="legend">
+                <p><i class="dot ok"></i><b>device</b> connected and authorized</p>
+                <p><i class="dot warn"></i><b>unauthorized</b> unlock the phone and accept the USB debugging prompt</p>
+                <p><i class="dot bad"></i><b>offline</b> reconnect the cable or restart ADB</p>
+              </div>
+            </section>
+            <section class="panel">
+              <header class="panel-head"><h2>Wireless connection</h2><span class="chip sm"><svg class="ic sm"><use href="#i-wifi"/></svg><b>Wi-Fi</b></span></header>
+              <p class="hint lead">Plug the phone in once, switch it to Wi-Fi, then unplug. Both devices must be on the same network.</p>
+              <div class="row">
+                <button class="btn primary" id="wifi-enable"><svg class="ic sm"><use href="#i-wifi"/></svg>Switch this phone to Wi-Fi</button>
+              </div>
+              <div class="field-row">
+                <input id="wifi-address" type="text" inputmode="decimal" placeholder="192.168.1.20:5555" autocomplete="off" spellcheck="false" aria-label="Phone address">
+                <button class="btn" id="wifi-connect"><svg class="ic sm"><use href="#i-link"/></svg>Connect</button>
+                <button class="btn ghost" id="wifi-disconnect">Disconnect all</button>
+              </div>
+            </section>
+          </div>
+          <div class="col">
+            <section class="panel">
+              <header class="panel-head"><h2>Phone not showing up?</h2></header>
+              <ol class="steps">
+                <li><b>Use a data cable.</b><span>Charge-only cables never show the phone.</span></li>
+                <li><b>Turn on USB debugging.</b><span>Settings, Developer options, USB debugging.</span></li>
+                <li><b>Authorize this PC.</b><span>Unlock the phone and accept the prompt.</span></li>
+                <li><b>Restart ADB.</b><span>Fixes most stuck or offline states.</span></li>
+              </ol>
+              <div class="row">
+                <button class="btn" id="adb-restart"><svg class="ic sm"><use href="#i-refresh"/></svg>Restart ADB</button>
+                <button class="btn" id="copy-report"><svg class="ic sm"><use href="#i-copy"/></svg>Copy report</button>
+              </div>
+            </section>
+            <section class="panel">
+              <header class="panel-head"><h2>This toolkit</h2></header>
+              <dl class="specs tight" id="sys-specs"></dl>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="view" id="view-settings" hidden>
+        <section class="panel">
+          <header class="panel-head"><h2>Presets</h2><span class="hint" id="save-state">Changes save automatically.</span></header>
+          <div class="presets" id="presets"></div>
+        </section>
+        <div class="two">
+          <div class="col">
+            <section class="panel"><header class="panel-head"><h2>Video</h2></header><div class="fields" id="fields-video"></div></section>
+            <section class="panel"><header class="panel-head"><h2>Audio</h2></header><div class="fields" id="fields-audio"></div></section>
+            <section class="panel">
+              <header class="panel-head"><h2>Command preview</h2>
+                <div class="seg mini" id="preview-mode"><button class="is-active" data-mode="mirror">Mirror</button><button data-mode="record">Record</button></div>
+              </header>
+              <pre class="code" id="cmd-preview" tabindex="0"></pre>
+              <div class="row"><button class="btn sm" id="cmd-copy"><svg class="ic sm"><use href="#i-copy"/></svg>Copy command</button></div>
+            </section>
+          </div>
+          <div class="col">
+            <section class="panel"><header class="panel-head"><h2>Window and phone</h2></header><div class="fields" id="fields-window"></div></section>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+<dialog id="dlg-confirm" class="dlg">
+  <form method="dialog" class="dlg-body">
+    <h2 id="confirm-title"></h2>
+    <div id="confirm-body" class="dlg-text"></div>
+    <div class="dlg-actions"><button class="btn" value="cancel" id="confirm-cancel">Cancel</button><button class="btn danger" value="ok" id="confirm-ok">Confirm</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-shot" class="dlg wide">
+  <div class="dlg-body">
+    <header class="panel-head"><h2 id="shot-title"></h2><button class="icon-btn" id="shot-close" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></header>
+    <div class="shot-frame"><img id="shot-img" alt="Screenshot"></div>
+    <div class="dlg-actions"><button class="btn" id="shot-reveal"><svg class="ic sm"><use href="#i-folder"/></svg>Show in folder</button><button class="btn" id="shot-open"><svg class="ic sm"><use href="#i-external"/></svg>Open</button><button class="btn danger" id="shot-delete"><svg class="ic sm"><use href="#i-trash"/></svg>Delete</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlg-palette" class="dlg palette">
+  <div class="dlg-body">
+    <div class="pal-input"><svg class="ic"><use href="#i-search"/></svg><input id="pal-input" type="text" placeholder="Type a command" autocomplete="off" spellcheck="false" aria-label="Command"></div>
+    <ul id="pal-list" role="listbox"></ul>
+    <p class="hint pal-foot">Up and down to move, Enter to run, Esc to close</p>
+  </div>
+</dialog>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

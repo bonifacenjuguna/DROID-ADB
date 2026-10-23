@@ -1,185 +1,334 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'lib.ps1')
 $Port = 47821
-$Root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$Runtime = Join-Path $Root 'core\scrcpy'
-$RecordDir = Join-Path $Root 'Recordings'
-$ConfigDir = Join-Path $Root 'Config'
-$ConfigFile = Join-Path $ConfigDir 'settings.json'
-$Scrcpy = Join-Path $Runtime 'scrcpy.exe'
-$Adb = Join-Path $Runtime 'adb.exe'
+$HostHeader = "127.0.0.1:$Port"
+$OwnOrigin = "http://$HostHeader"
+$Started = Get-Date
 $Listener = New-Object Net.HttpListener
 $Listener.Prefixes.Add("http://127.0.0.1:$Port/")
-New-Item -ItemType Directory -Force -Path $RecordDir, $ConfigDir | Out-Null
-$Default = @{ maxSize = 1280; maxFps = 30; bitrate = '8M'; audio = $true; stayAwake = $true; turnScreenOff = $false; showTouches = $false; alwaysOnTop = $false }
-if (-not (Test-Path $ConfigFile)) { $Default | ConvertTo-Json | Set-Content -Encoding UTF8 $ConfigFile }
+$script:Activity = New-Object System.Collections.ArrayList
 
-function Get-Settings {
-    try {
-        $s = Get-Content -Raw $ConfigFile | ConvertFrom-Json
-        if ([int]$s.maxSize -notin @(720,1024,1280,1600,1920,0)) { throw 'Invalid size' }
-        if ([int]$s.maxFps -notin @(15,24,30,45,60)) { throw 'Invalid FPS' }
-        if ([string]$s.bitrate -notin @('2M','4M','8M','12M','16M')) { throw 'Invalid bitrate' }
-        return @{ maxSize=[int]$s.maxSize; maxFps=[int]$s.maxFps; bitrate=[string]$s.bitrate; audio=[bool]$s.audio; stayAwake=($s.stayAwake -ne $false); turnScreenOff=($s.turnScreenOff -eq $true); showTouches=($s.showTouches -eq $true); alwaysOnTop=($s.alwaysOnTop -eq $true) }
-    } catch { return $Default }
+function Add-Activity {
+    param([string]$Kind, [string]$Text)
+    $entry = @{ t = (Get-Date).ToString('o'); kind = $Kind; text = $Text }
+    [void]$script:Activity.Insert(0, $entry)
+    while ($script:Activity.Count -gt 60) { $script:Activity.RemoveAt($script:Activity.Count - 1) }
+    try { Add-Content -LiteralPath (Join-Path $LogDir 'activity.log') -Value ((Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '  ' + $Kind + '  ' + $Text) } catch {}
 }
+
 function Send-Json {
     param($Context, $Data, [int]$Status = 200)
     $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject $Data -Depth 8 -Compress))
     $Context.Response.StatusCode = $Status
     $Context.Response.ContentType = 'application/json; charset=utf-8'
     $Context.Response.Headers['Cache-Control'] = 'no-store'
-    $origin = $Context.Request.Headers['Origin']
-    if ([string]::IsNullOrEmpty($origin) -or $origin -eq 'null') {
-        $Context.Response.Headers['Access-Control-Allow-Origin'] = 'null'
-    }
+    if ($Context.Request.Headers['Origin'] -eq 'null') { $Context.Response.Headers['Access-Control-Allow-Origin'] = 'null' }
     $Context.Response.ContentLength64 = $bytes.Length
     $Context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
     $Context.Response.Close()
 }
+
+function Send-Bytes {
+    param($Context, [byte[]]$Bytes, [string]$Type, [string]$Cache = 'no-store')
+    $Context.Response.StatusCode = 200
+    $Context.Response.ContentType = $Type
+    $Context.Response.Headers['Cache-Control'] = $Cache
+    $Context.Response.Headers['X-Content-Type-Options'] = 'nosniff'
+    $Context.Response.ContentLength64 = $Bytes.Length
+    $Context.Response.OutputStream.Write($Bytes, 0, $Bytes.Length)
+    $Context.Response.Close()
+}
+
+$MimeTypes = @{ '.html' = 'text/html; charset=utf-8'; '.css' = 'text/css; charset=utf-8'; '.js' = 'text/javascript; charset=utf-8'; '.svg' = 'image/svg+xml'; '.png' = 'image/png'; '.ico' = 'image/x-icon' }
+
+function Send-Static {
+    param($Context, [string]$Relative)
+    $rel = $Relative.TrimStart('/')
+    if ([string]::IsNullOrEmpty($rel)) { $rel = 'index.html' }
+    $full = [IO.Path]::GetFullPath((Join-Path $Root ($rel -replace '/', '\')))
+    $assets = [IO.Path]::GetFullPath((Join-Path $Root 'assets')) + '\'
+    $index = [IO.Path]::GetFullPath((Join-Path $Root 'index.html'))
+    $ext = [IO.Path]::GetExtension($full).ToLower()
+    if (-not (($full -eq $index) -or $full.StartsWith($assets, [StringComparison]::OrdinalIgnoreCase)) -or -not $MimeTypes.ContainsKey($ext) -or -not (Test-Path -LiteralPath $full -PathType Leaf)) {
+        Send-Json $Context @{ error = 'Not found.' } 404
+        return
+    }
+    Send-Bytes $Context ([IO.File]::ReadAllBytes($full)) $MimeTypes[$ext]
+}
+
 function Read-Body {
     param($Request)
-    if ($Request.ContentLength64 -gt 8192) { throw 'Request is too large.' }
-    $reader = New-Object IO.StreamReader($Request.InputStream, $Request.ContentEncoding)
+    if ($Request.ContentLength64 -gt 16384) { throw 'Request is too large.' }
+    $reader = New-Object IO.StreamReader($Request.InputStream, [Text.Encoding]::UTF8)
     try {
         $raw = $reader.ReadToEnd()
         if ([string]::IsNullOrWhiteSpace($raw)) { return @{} }
         return ($raw | ConvertFrom-Json)
     } finally { $reader.Dispose() }
 }
+
 function Get-Devices {
-    if (-not (Test-Path $Adb)) { return @{ devices=@(); message='adb.exe is missing from core/scrcpy.' } }
-    # Capture native stdout/stderr to files. In Windows PowerShell 5.1,
-    # native stderr can become a terminating NativeCommandError when the
-    # script-wide ErrorActionPreference is Stop.
-    $stdoutFile = Join-Path $env:TEMP ('scrcpy-adb-out-' + [guid]::NewGuid().ToString('N') + '.txt')
-    $stderrFile = Join-Path $env:TEMP ('scrcpy-adb-err-' + [guid]::NewGuid().ToString('N') + '.txt')
-    try {
-        $proc = Start-Process -FilePath $Adb -ArgumentList 'devices -l' -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile
-        $lines = @()
-        if (Test-Path $stdoutFile) { $lines += @(Get-Content -LiteralPath $stdoutFile -ErrorAction SilentlyContinue) }
-        if (Test-Path $stderrFile) { $lines += @(Get-Content -LiteralPath $stderrFile -ErrorAction SilentlyContinue) }
-    } finally {
-        Remove-Item -LiteralPath $stdoutFile,$stderrFile -Force -ErrorAction SilentlyContinue
-    }
+    if (-not (Test-Path -LiteralPath $Adb)) { return @{ devices = @(); message = 'adb.exe is missing from core/scrcpy.' } }
+    $r = Invoke-Adb 'devices -l' 15
     $items = @()
-    foreach ($line in $lines) {
+    foreach ($line in (($r.out + "`n" + $r.err) -split "`r?`n")) {
         if ($line -match '^([^\s]+)\s+(device|unauthorized|offline)(?:\s+(.*))?$') {
-            $items += @{ id=$Matches[1]; state=$Matches[2]; details=([string]$Matches[3]).Trim() }
+            $id = $Matches[1]
+            $items += @{ id = $id; state = $Matches[2]; details = ([string]$Matches[3]).Trim(); transport = $(if ($id -match ':\d+$') { 'wifi' } else { 'usb' }) }
         }
     }
-    $message = if ($items.Count -eq 0) { 'No device detected. Connect USB, enable USB debugging, and authorize this computer.' } else { '' }
-    return @{ devices=@($items); message=$message }
+    $message = ''
+    if ($items.Count -eq 0) { $message = 'No device detected. Connect USB, enable USB debugging, and authorize this computer.' }
+    return @{ devices = @($items); message = $message }
 }
+
+function Get-DeviceInfo {
+    param([string]$Serial)
+    Test-Serial $Serial
+    $cmd = 'echo model=$(getprop ro.product.model);echo maker=$(getprop ro.product.manufacturer);echo release=$(getprop ro.build.version.release);echo sdk=$(getprop ro.build.version.sdk);echo size=$(wm size | tail -n 1);echo density=$(wm density | tail -n 1);echo df=$(df -k /data | tail -n 1);dumpsys battery'
+    $sel = ''
+    if ($Serial) { $sel = "-s $Serial " }
+    $r = Invoke-Adb ($sel + 'shell "' + $cmd + '"') 15
+    $t = $r.out
+    function Grab([string]$pattern) { if ($t -match $pattern) { return $Matches[1].Trim() } else { return '' } }
+    $info = @{ id = $Serial }
+    $info.model = Grab '(?m)^model=(.*)$'
+    $info.manufacturer = Grab '(?m)^maker=(.*)$'
+    $info.android = Grab '(?m)^release=(.*)$'
+    $info.sdk = Grab '(?m)^sdk=(.*)$'
+    $info.width = 0; $info.height = 0; $info.density = 0
+    if ($t -match '(?m)^size=.*?(\d{3,5})x(\d{3,5})') { $info.width = [int]$Matches[1]; $info.height = [int]$Matches[2] }
+    if ($t -match '(?m)^density=.*?(\d{2,4})\s*$') { $info.density = [int]$Matches[1] }
+    $info.battery = -1; $info.charging = $false; $info.tempC = $null
+    if ($t -match '(?m)^\s*level:\s*(\d+)') { $info.battery = [int]$Matches[1] }
+    if ($t -match '(?m)^\s*status:\s*(\d+)') { $info.charging = ([int]$Matches[1] -eq 2) }
+    if ($t -match '(?m)^\s*temperature:\s*(\d+)') { $info.tempC = [math]::Round([int]$Matches[1] / 10, 1) }
+    $info.storageTotal = 0; $info.storageFree = 0
+    if ($t -match '(?m)^df=.*?\s(\d+)\s+(\d+)\s+(\d+)\s+\d+%') { $info.storageTotal = [long]$Matches[1] * 1024; $info.storageFree = [long]$Matches[3] * 1024 }
+    return $info
+}
+
 function Get-ToolkitScrcpyProcesses {
-    # Keep process discovery consistent across session reporting, launch guards, and Stop.
     return @(Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue |
-        Where-Object {
-            $_.ExecutablePath -and
-            ([IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($Scrcpy))
-        })
+        Where-Object { $_.ExecutablePath -and ([IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($Scrcpy)) })
 }
+
 function Get-ToolkitSessions {
     $sessions = @()
-    Get-ToolkitScrcpyProcesses | ForEach-Object {
-            $isRecording = ([string]$_.CommandLine -match '(?i)--record(?:\s|=)')
-            $started = $null
-            try { if ($_.CreationDate) { $started = ([datetime]$_.CreationDate).ToString('o') } } catch {}
-            $sessions += @{
-                pid = [int]$_.ProcessId
-                recording = [bool]$isRecording
-                type = $(if ($isRecording) { 'Recording' } else { 'Mirroring' })
-                started = $started
-            }
+    foreach ($proc in (Get-ToolkitScrcpyProcesses)) {
+        $cmdLine = [string]$proc.CommandLine
+        $isRecording = ($cmdLine -match '(?i)--record(?:\s|=)')
+        $started = $null
+        try { if ($proc.CreationDate) { $started = ([datetime]$proc.CreationDate).ToString('o') } } catch {}
+        $file = ''; $fileSize = [long]0
+        if ($isRecording -and $cmdLine -match '(?i)--record\s+"([^"]+)"') {
+            $file = [IO.Path]::GetFileName($Matches[1])
+            $p = Join-Path $RecordDir $file
+            if (Test-Path -LiteralPath $p) { $fileSize = [long](Get-Item -LiteralPath $p).Length }
         }
-    return @{ sessions=@($sessions); count=$sessions.Count; recordingCount=@($sessions | Where-Object { $_.recording }).Count }
-}
-function Get-SafeRecordingPath {
-    param([string]$Name)
-    if ([string]::IsNullOrWhiteSpace($Name) -or [IO.Path]::GetFileName($Name) -ne $Name -or $Name -notmatch '(?i)\.(mp4|mkv)$') {
-        throw 'Choose a valid MP4 or MKV recording from the library.'
+        $serial = ''
+        if ($cmdLine -match '\s-s\s+([A-Za-z0-9._:\-]+)') { $serial = $Matches[1] }
+        $sessions += @{ pid = [int]$proc.ProcessId; recording = [bool]$isRecording; type = $(if ($isRecording) { 'Recording' } else { 'Mirroring' }); started = $started; file = $file; fileSize = $fileSize; serial = $serial }
     }
-    $path = [IO.Path]::GetFullPath((Join-Path $RecordDir $Name))
-    $base = [IO.Path]::GetFullPath($RecordDir).TrimEnd('\') + '\'
-    if (-not $path.StartsWith($base, [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid recording path.' }
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'That recording no longer exists.' }
+    return @{ sessions = @($sessions); count = $sessions.Count; recordingCount = @($sessions | Where-Object { $_.recording }).Count }
+}
+
+function Get-DiskInfo {
+    try {
+        $drive = New-Object IO.DriveInfo ([IO.Path]::GetPathRoot($Root))
+        return @{ free = [long]$drive.AvailableFreeSpace; total = [long]$drive.TotalSize }
+    } catch { return @{ free = 0; total = 0 } }
+}
+
+function Get-SafeFile {
+    param([string]$Dir, [string]$Name, [string]$Pattern)
+    if ([string]::IsNullOrWhiteSpace($Name) -or [IO.Path]::GetFileName($Name) -ne $Name -or $Name -notmatch $Pattern) { throw 'Choose a file from the library.' }
+    $path = [IO.Path]::GetFullPath((Join-Path $Dir $Name))
+    $base = [IO.Path]::GetFullPath($Dir).TrimEnd('\') + '\'
+    if (-not $path.StartsWith($base, [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid file path.' }
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'That file no longer exists.' }
     return $path
 }
-function Get-Recordings {
-    $files = @(Get-ChildItem -LiteralPath $RecordDir -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in @('.mp4','.mkv') } | Sort-Object LastWriteTime -Descending | ForEach-Object {
-        @{ name=$_.Name; size=[long]$_.Length; modified=$_.LastWriteTime.ToString('o') }
+$VideoPattern = '(?i)\.(mp4|mkv)$'
+$ImagePattern = '(?i)\.png$'
+
+function Get-Library {
+    param([string]$Kind)
+    $dir = $RecordDir; $ext = @('.mp4', '.mkv')
+    if ($Kind -eq 'screenshots') { $dir = $ShotDir; $ext = @('.png') }
+    $files = @(Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension.ToLower() -in $ext } | Sort-Object LastWriteTime -Descending | ForEach-Object {
+        @{ name = $_.Name; size = [long]$_.Length; modified = $_.LastWriteTime.ToString('o') }
     })
     $total = [long]0
-    foreach ($file in $files) { $total += [long]$file.size }
-    return @{ files=@($files); totalSize=$total }
+    foreach ($f in $files) { $total += [long]$f.size }
+    return @{ files = @($files); totalSize = $total; disk = (Get-DiskInfo) }
 }
-function Start-Scrcpy {
-    param([ValidateSet('mirror','record')][string]$Mode)
-    if (-not (Test-Path $Scrcpy)) { throw 'scrcpy.exe is missing from core/scrcpy. Re-extract the complete ZIP.' }
-    # A second scrcpy instance can create a second video/audio stream on the phone.
-    # Prevent duplicate toolkit sessions so recording does not silently double the workload.
-    $active = @(Get-ToolkitScrcpyProcesses)
-    if ($active.Count -gt 0) {
-        if ($Mode -eq 'record') {
-            throw 'A toolkit scrcpy window is already open. Close it first, then click Start recording. The recording window also mirrors your phone, so you only need one window.'
+
+function Resolve-Target {
+    param([string]$Serial)
+    Test-Serial $Serial
+    if ($Serial) { return "-s $Serial " }
+    return ''
+}
+
+function Save-Screenshot {
+    param([string]$Serial)
+    $sel = Resolve-Target $Serial
+    $remote = '/data/local/tmp/stk-shot.png'
+    $name = 'Shot-' + (Get-Date -Format 'yyyy-MM-dd_HH-mm-ss') + '.png'
+    $dest = Join-Path $ShotDir $name
+    $a = Invoke-Adb ($sel + 'shell screencap -p ' + $remote) 20
+    if ($a.code -ne 0) { throw ('Screenshot failed: ' + ($a.err + $a.out).Trim()) }
+    $b = Invoke-Adb ($sel + 'pull ' + $remote + ' "' + $dest + '"') 30
+    [void](Invoke-Adb ($sel + 'shell rm ' + $remote) 8)
+    if (-not (Test-Path -LiteralPath $dest)) { throw ('Could not copy the screenshot: ' + ($b.err + $b.out).Trim()) }
+    return $name
+}
+
+$KeyCodes = @{ back = 4; home = 3; recents = 187; power = 26; volup = 24; voldown = 25; mute = 164; wake = 224; sleep = 223; menu = 82 }
+
+function Invoke-Key {
+    param([string]$Serial, [string]$Key)
+    $sel = Resolve-Target $Serial
+    if ($Key -eq 'notifications') { $r = Invoke-Adb ($sel + 'shell cmd statusbar expand-notifications') 8 }
+    elseif ($KeyCodes.ContainsKey($Key)) { $r = Invoke-Adb ($sel + 'shell input keyevent ' + $KeyCodes[$Key]) 8 }
+    else { throw 'Unknown key.' }
+    if ($r.code -ne 0) { throw ('The phone did not accept the key: ' + ($r.err + $r.out).Trim()) }
+}
+
+function Send-PhoneText {
+    param([string]$Serial, [string]$Text)
+    if ($Text -notmatch '^[A-Za-z0-9 .,@_:/+=\-]{1,120}$') { throw 'Use letters, numbers, spaces and . , @ _ : / + = - only (up to 120 characters).' }
+    $sel = Resolve-Target $Serial
+    $r = Invoke-Adb ($sel + 'shell input text ' + ($Text -replace ' ', '%s')) 10
+    if ($r.code -ne 0) { throw ('The phone did not accept the text: ' + ($r.err + $r.out).Trim()) }
+}
+
+function Invoke-Wifi {
+    param([string]$Action, [string]$Serial, [string]$Address)
+    switch ($Action) {
+        'enable' {
+            if (-not $Serial) { throw 'Connect the phone with USB first, then switch to Wi-Fi.' }
+            Test-Serial $Serial
+            $ipOut = Invoke-Adb ('-s ' + $Serial + ' shell ip -f inet addr show wlan0') 10
+            if ($ipOut.out -notmatch 'inet\s+(\d+\.\d+\.\d+\.\d+)') { throw 'Could not read the phone Wi-Fi address. Connect the phone to Wi-Fi and try again.' }
+            $ip = $Matches[1]
+            [void](Invoke-Adb ('-s ' + $Serial + ' tcpip 5555') 10)
+            Start-Sleep -Seconds 2
+            $c = Invoke-Adb ('connect ' + $ip + ':5555') 12
+            if (($c.out + $c.err) -notmatch 'connected to') { throw ('Wi-Fi connection failed: ' + ($c.out + $c.err).Trim()) }
+            return @{ message = 'Connected over Wi-Fi at ' + $ip + ':5555. You can unplug the cable.'; address = ($ip + ':5555') }
         }
-        throw 'A toolkit scrcpy window is already open. Close it before starting another session to avoid extra device workload.'
+        'connect' {
+            if ($Address -notmatch '^\d{1,3}(\.\d{1,3}){3}(:\d{1,5})?$') { throw 'Enter an address like 192.168.1.20 or 192.168.1.20:5555.' }
+            $target = $Address
+            if ($target -notmatch ':') { $target += ':5555' }
+            $c = Invoke-Adb ('connect ' + $target) 12
+            if (($c.out + $c.err) -notmatch 'connected to') { throw ('Could not connect: ' + ($c.out + $c.err).Trim()) }
+            return @{ message = 'Connected to ' + $target + '.'; address = $target }
+        }
+        'disconnect' {
+            if ($Address) {
+                if ($Address -notmatch '^\d{1,3}(\.\d{1,3}){3}(:\d{1,5})?$') { throw 'That address is not valid.' }
+                [void](Invoke-Adb ('disconnect ' + $Address) 8)
+            } else { [void](Invoke-Adb 'disconnect' 8) }
+            return @{ message = 'Wi-Fi device disconnected.' }
+        }
+        'restart' {
+            [void](Invoke-Adb 'kill-server' 8)
+            [void](Invoke-Adb 'start-server' 15)
+            return @{ message = 'ADB was restarted.' }
+        }
+        default { throw 'Unknown Wi-Fi action.' }
     }
-    $scriptName = if ($Mode -eq 'record') { 'Record.bat' } else { 'Mirror.bat' }
-    $scriptPath = Join-Path $Root ('core\scripts\' + $scriptName)
-    if (-not (Test-Path $scriptPath)) { throw ($scriptName + ' is missing from core/scripts.') }
-    Start-Process -FilePath $env:ComSpec -ArgumentList @('/c', ('"' + $scriptPath + '"')) -WorkingDirectory $Root -WindowStyle Hidden | Out-Null
 }
+
+function Get-OldFiles {
+    param([string]$Dir, [string[]]$Ext, [int]$Days, [bool]$Delete)
+    $cutoff = (Get-Date).AddDays(-$Days)
+    return @(Get-ChildItem -LiteralPath $Dir -File | Where-Object { $_.Extension.ToLower() -in $Ext -and $_.LastWriteTime -lt $cutoff })
+}
+
 try {
-    try {
-        $Listener.Start()
-    } catch {
-        $log = Join-Path $Root 'Logs\backend-error.log'
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $log) | Out-Null
-        ('[' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '] Listener startup failed: ' + $_.Exception.ToString()) | Add-Content -LiteralPath $log
+    try { $Listener.Start() } catch {
+        ('[' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '] Listener startup failed: ' + $_.Exception.ToString()) | Add-Content -LiteralPath (Join-Path $LogDir 'backend-error.log')
         throw
     }
+    Add-Activity 'system' 'Backend started.'
     while ($Listener.IsListening) {
         $Context = $Listener.GetContext()
         try {
             $Request = $Context.Request
             $Path = $Request.Url.AbsolutePath.TrimEnd('/')
+            $Method = $Request.HttpMethod
             $Origin = $Request.Headers['Origin']
-            if (-not [string]::IsNullOrEmpty($Origin) -and $Origin -ne 'null') {
-                Send-Json $Context @{ error='This local API only accepts the local dashboard.' } 403
-                continue
+            if ($Request.Headers['Host'] -ne $HostHeader) { Send-Json $Context @{ error = 'Unexpected host.' } 403; continue }
+            if (-not [string]::IsNullOrEmpty($Origin) -and $Origin -ne 'null' -and $Origin -ne $OwnOrigin) {
+                Send-Json $Context @{ error = 'This local API only accepts the local dashboard.' } 403; continue
             }
-            if ($Request.HttpMethod -eq 'OPTIONS') {
+            if ($Method -eq 'OPTIONS') {
                 $Context.Response.StatusCode = 204
                 $Context.Response.Headers['Access-Control-Allow-Origin'] = 'null'
                 $Context.Response.Headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
                 $Context.Response.Headers['Access-Control-Allow-Headers'] = 'Content-Type'
-                $Context.Response.Close()
-                continue
+                $Context.Response.Close(); continue
             }
-            if ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/status') {
-                # Health check must not invoke ADB; it should report whether the API itself is alive.
-                Send-Json $Context @{ ok=$true; version='1.0.0' }
-            } elseif ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/devices') {
+            if ($Method -eq 'GET' -and ($Path -eq '' -or $Path -eq '/index.html' -or $Path.StartsWith('/assets/'))) { Send-Static $Context $Path; continue }
+
+            if ($Method -eq 'GET' -and $Path -eq '/api/status') {
+                $disk = Get-DiskInfo
+                Send-Json $Context @{ ok = $true; version = $ToolkitVersion; uptime = [int]((Get-Date) - $Started).TotalSeconds; scrcpy = (Test-Path -LiteralPath $Scrcpy); adb = (Test-Path -LiteralPath $Adb); port = $Port; root = $Root; disk = $disk }
+            } elseif ($Method -eq 'GET' -and $Path -eq '/api/devices') {
                 Send-Json $Context (Get-Devices)
-            } elseif ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/session') {
+            } elseif ($Method -eq 'GET' -and $Path -eq '/api/device-info') {
+                Send-Json $Context @{ info = (Get-DeviceInfo ([string]$Request.QueryString['id'])) }
+            } elseif ($Method -eq 'GET' -and $Path -eq '/api/session') {
                 Send-Json $Context (Get-ToolkitSessions)
-            } elseif ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/recordings') {
-                Send-Json $Context (Get-Recordings)
-            } elseif ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/settings') {
-                Send-Json $Context @{ settings=(Get-Settings) }
-            } elseif ($Request.HttpMethod -eq 'POST' -and $Path -eq '/api/settings') {
+            } elseif ($Method -eq 'GET' -and $Path -eq '/api/recordings') {
+                Send-Json $Context (Get-Library 'recordings')
+            } elseif ($Method -eq 'GET' -and $Path -eq '/api/screenshots') {
+                Send-Json $Context (Get-Library 'screenshots')
+            } elseif ($Method -eq 'GET' -and $Path -eq '/api/activity') {
+                Send-Json $Context @{ items = @($script:Activity) }
+            } elseif ($Method -eq 'GET' -and $Path -eq '/api/log') {
+                $logPath = Join-Path $LogDir 'scrcpy-last.log'
+                $text = ''
+                if (Test-Path -LiteralPath $logPath) { $text = [string](Get-Content -Raw -LiteralPath $logPath -ErrorAction SilentlyContinue) }
+                if ($text.Length -gt 4000) { $text = $text.Substring($text.Length - 4000) }
+                Send-Json $Context @{ log = $text }
+            } elseif ($Method -eq 'GET' -and $Path -eq '/api/file') {
+                $file = Get-SafeFile $ShotDir ([string]$Request.QueryString['name']) $ImagePattern
+                Send-Bytes $Context ([IO.File]::ReadAllBytes($file)) 'image/png' 'private, max-age=3600'
+            } elseif ($Method -eq 'GET' -and $Path -eq '/api/settings') {
+                Send-Json $Context @{ settings = (Get-Settings) }
+            } elseif ($Method -eq 'POST' -and $Path -eq '/api/settings') {
+                $saved = ConvertTo-Settings (Read-Body $Request)
+                $saved | ConvertTo-Json | Set-Content -Encoding UTF8 -LiteralPath $ConfigFile
+                Send-Json $Context @{ ok = $true; settings = $saved }
+            } elseif ($Method -eq 'POST' -and $Path -eq '/api/preview') {
                 $body = Read-Body $Request
-                if ([int]$body.maxSize -notin @(720,1024,1280,1600,1920,0)) { throw 'Choose a supported maximum size.' }
-                if ([int]$body.maxFps -notin @(15,24,30,45,60)) { throw 'Choose a supported frame rate.' }
-                if ([string]$body.bitrate -notin @('2M','4M','8M','12M','16M')) { throw 'Choose a supported bitrate.' }
-                $saved = @{ maxSize=[int]$body.maxSize; maxFps=[int]$body.maxFps; bitrate=[string]$body.bitrate; audio=[bool]$body.audio; stayAwake=[bool]$body.stayAwake; turnScreenOff=[bool]$body.turnScreenOff; showTouches=[bool]$body.showTouches; alwaysOnTop=[bool]$body.alwaysOnTop }
-                $saved | ConvertTo-Json | Set-Content -Encoding UTF8 $ConfigFile
-                Send-Json $Context @{ ok=$true; settings=$saved }
-            } elseif ($Request.HttpMethod -eq 'POST' -and $Path -eq '/api/action') {
+                $mode = [string](Get-Prop $body 'mode' 'mirror')
+                if ($mode -notin @('mirror', 'record')) { throw 'Unknown mode.' }
+                $s = ConvertTo-Settings (Get-Prop $body 'settings' @{})
+                $cmd = New-ScrcpyArgs -S $s -Mode $mode -Serial ([string](Get-Prop $body 'serial' '')) -OutFile (Join-Path $RecordDir 'Phone-<time>.mkv')
+                Send-Json $Context @{ command = ('scrcpy.exe ' + $cmd) }
+            } elseif ($Method -eq 'POST' -and $Path -eq '/api/action') {
                 $body = Read-Body $Request
+                $serial = [string](Get-Prop $body 'serial' '')
                 switch ([string]$body.action) {
-                    'mirror' { Start-Scrcpy 'mirror'; Send-Json $Context @{ ok=$true; message='Mirror window launched.' } }
-                    'record' { Start-Scrcpy 'record'; Send-Json $Context @{ ok=$true; message='Recording started. Close its scrcpy window normally to finalize the MKV.' } }
+                    { $_ -in @('mirror', 'record') } {
+                        $mode = [string]$body.action
+                        if ((Get-ToolkitScrcpyProcesses).Count -gt 0) { throw 'A toolkit scrcpy window is already open. Close it first; one window mirrors and records at the same time.' }
+                        $started = Start-ToolkitScrcpy -Mode $mode -Serial $serial
+                        if ($mode -eq 'record') { Add-Activity 'record' ('Recording started: ' + $started.file); $msg = 'Recording to ' + $started.file + '. Close the scrcpy window to finish the file.' }
+                        else { Add-Activity 'mirror' 'Mirror window opened.'; $msg = 'Mirror window opening.' }
+                        Send-Json $Context @{ ok = $true; message = $msg; file = $started.file }
+                    }
+                    'screenshot' {
+                        $name = Save-Screenshot $serial
+                        Add-Activity 'screenshot' ('Screenshot saved: ' + $name)
+                        Send-Json $Context @{ ok = $true; message = 'Screenshot saved.'; name = $name }
+                    }
                     'stop' {
                         $targets = @(Get-ToolkitScrcpyProcesses)
                         $requested = 0
@@ -187,7 +336,6 @@ try {
                             $p = Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue
                             if ($p -and $p.MainWindowHandle -ne 0 -and $p.CloseMainWindow()) { $requested++ }
                         }
-                        # Give scrcpy time to finalize its recording after a normal window close.
                         $deadline = (Get-Date).AddSeconds(3)
                         do {
                             Start-Sleep -Milliseconds 250
@@ -195,59 +343,76 @@ try {
                         } while ($remaining.Count -gt 0 -and (Get-Date) -lt $deadline)
                         $forced = 0
                         foreach ($item in $remaining) {
-                            # The user explicitly requested Stop; only force-close processes that ignored the graceful close.
-                            $p = Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue
-                            if ($p) { Stop-Process -Id $item.ProcessId -Force -ErrorAction SilentlyContinue; $forced++ }
+                            if (Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue) { Stop-Process -Id $item.ProcessId -Force -ErrorAction SilentlyContinue; $forced++ }
                         }
-                        $message = if ($forced -gt 0) {
-                            "Requested graceful close for $requested session(s); force-closed $forced unresponsive session(s). A force-closed recording may not finalize correctly."
-                        } else {
-                            "Closed $requested toolkit scrcpy session(s) gracefully."
-                        }
-                        Send-Json $Context @{ ok=$true; message=$message; requested=$requested; forced=$forced }
+                        if ($targets.Count -eq 0) { $message = 'No toolkit window was open.' }
+                        elseif ($forced -gt 0) { $message = "Closed $requested window(s) gracefully and force-closed $forced. A force-closed recording may not finish correctly." }
+                        else { $message = "Closed $requested window(s) gracefully." }
+                        if ($targets.Count -gt 0) { Add-Activity 'stop' $message }
+                        Send-Json $Context @{ ok = $true; message = $message; requested = $requested; forced = $forced }
                     }
                     'check' { Send-Json $Context (Get-Devices) }
-                    default { Send-Json $Context @{ error='Unknown action.' } 400 }
+                    default { Send-Json $Context @{ error = 'Unknown action.' } 400 }
                 }
-            } elseif ($Request.HttpMethod -eq 'POST' -and $Path -eq '/api/open-recordings') {
-                Start-Process explorer.exe -ArgumentList @($RecordDir)
-                Send-Json $Context @{ ok=$true }
-            } elseif ($Request.HttpMethod -eq 'POST' -and $Path -eq '/api/open-recording') {
+            } elseif ($Method -eq 'POST' -and $Path -eq '/api/key') {
                 $body = Read-Body $Request
-                $filePath = Get-SafeRecordingPath ([string]$body.name)
-                Start-Process -FilePath $filePath
-                Send-Json $Context @{ ok=$true }
-            } elseif ($Request.HttpMethod -eq 'POST' -and $Path -eq '/api/reveal-recording') {
+                Invoke-Key ([string](Get-Prop $body 'serial' '')) ([string](Get-Prop $body 'key' ''))
+                Send-Json $Context @{ ok = $true }
+            } elseif ($Method -eq 'POST' -and $Path -eq '/api/text') {
                 $body = Read-Body $Request
-                $filePath = Get-SafeRecordingPath ([string]$body.name)
-                Start-Process -FilePath explorer.exe -ArgumentList ('/select,"' + $filePath + '"')
-                Send-Json $Context @{ ok=$true }
-            } elseif ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/cleanup-preview') {
+                Send-PhoneText ([string](Get-Prop $body 'serial' '')) ([string](Get-Prop $body 'text' ''))
+                Send-Json $Context @{ ok = $true; message = 'Text sent to the phone.' }
+            } elseif ($Method -eq 'POST' -and $Path -eq '/api/wifi') {
+                $body = Read-Body $Request
+                $result = Invoke-Wifi ([string](Get-Prop $body 'action' '')) ([string](Get-Prop $body 'serial' '')) ([string](Get-Prop $body 'address' ''))
+                Add-Activity 'wifi' $result.message
+                Send-Json $Context (@{ ok = $true } + $result)
+            } elseif ($Method -eq 'POST' -and $Path -eq '/api/open-folder') {
+                $body = Read-Body $Request
+                $dir = $RecordDir
+                if ([string](Get-Prop $body 'kind' 'recordings') -eq 'screenshots') { $dir = $ShotDir }
+                Start-Process explorer.exe -ArgumentList @($dir)
+                Send-Json $Context @{ ok = $true }
+            } elseif ($Method -eq 'POST' -and $Path -in @('/api/open-recording', '/api/reveal-recording', '/api/open-file', '/api/reveal-file')) {
+                $body = Read-Body $Request
+                $kind = [string](Get-Prop $body 'kind' 'recordings')
+                if ($kind -eq 'screenshots') { $filePath = Get-SafeFile $ShotDir ([string]$body.name) $ImagePattern }
+                else { $filePath = Get-SafeFile $RecordDir ([string]$body.name) $VideoPattern }
+                if ($Path -like '*reveal*') { Start-Process -FilePath explorer.exe -ArgumentList ('/select,"' + $filePath + '"') }
+                else { Start-Process -FilePath $filePath }
+                Send-Json $Context @{ ok = $true }
+            } elseif ($Method -eq 'POST' -and $Path -eq '/api/delete-file') {
+                $body = Read-Body $Request
+                $kind = [string](Get-Prop $body 'kind' 'recordings')
+                if ($kind -eq 'screenshots') { $filePath = Get-SafeFile $ShotDir ([string]$body.name) $ImagePattern }
+                else {
+                    $filePath = Get-SafeFile $RecordDir ([string]$body.name) $VideoPattern
+                    foreach ($s in (Get-ToolkitSessions).sessions) { if ($s.file -eq [string]$body.name) { throw 'This recording is still in progress. Close its scrcpy window first.' } }
+                }
+                Remove-Item -LiteralPath $filePath -Force
+                Add-Activity 'delete' ('Deleted ' + [IO.Path]::GetFileName($filePath))
+                Send-Json $Context @{ ok = $true }
+            } elseif ($Method -eq 'GET' -and $Path -eq '/api/cleanup-preview') {
                 $days = 30
                 if ($Request.QueryString['days'] -match '^\d+$') { $days = [int]$Request.QueryString['days'] }
-                if ($days -notin @(30,60,90,180)) { throw 'Choose 30, 60, 90, or 180 days.' }
-                $cutoff = (Get-Date).AddDays(-$days)
-                $files = @(Get-ChildItem -LiteralPath $RecordDir -File | Where-Object { $_.Extension -in @('.mp4','.mkv') -and $_.LastWriteTime -lt $cutoff } | ForEach-Object { @{ name=$_.Name; size=[long]$_.Length } })
-                Send-Json $Context @{ files=@($files); days=$days }
-            } elseif ($Request.HttpMethod -eq 'POST' -and $Path -eq '/api/cleanup') {
+                if ($days -notin @(30, 60, 90, 180)) { throw 'Choose 30, 60, 90, or 180 days.' }
+                $kind = [string]$Request.QueryString['kind']
+                if ($kind -eq 'screenshots') { $old = Get-OldFiles $ShotDir @('.png') $days $false } else { $old = Get-OldFiles $RecordDir @('.mp4', '.mkv') $days $false }
+                Send-Json $Context @{ files = @($old | ForEach-Object { @{ name = $_.Name; size = [long]$_.Length } }); days = $days }
+            } elseif ($Method -eq 'POST' -and $Path -eq '/api/cleanup') {
                 $body = Read-Body $Request
                 $days = [int]$body.days
-                if ($days -notin @(30,60,90,180) -or -not [bool]$body.confirm) { throw 'Cleanup was not confirmed or the age selection is invalid.' }
-                $cutoff = (Get-Date).AddDays(-$days)
-                $deleted = 0
-                $freed = [long]0
-                $files = @(Get-ChildItem -LiteralPath $RecordDir -File | Where-Object { $_.Extension -in @('.mp4','.mkv') -and $_.LastWriteTime -lt $cutoff })
-                foreach ($file in $files) {
-                    $freed += [long]$file.Length
-                    Remove-Item -LiteralPath $file.FullName -Force
-                    $deleted++
-                }
-                Send-Json $Context @{ ok=$true; deleted=$deleted; freed=$freed }
+                if ($days -notin @(30, 60, 90, 180) -or -not [bool]$body.confirm) { throw 'Cleanup was not confirmed or the age selection is invalid.' }
+                if ([string](Get-Prop $body 'kind' 'recordings') -eq 'screenshots') { $old = Get-OldFiles $ShotDir @('.png') $days $true } else { $old = Get-OldFiles $RecordDir @('.mp4', '.mkv') $days $true }
+                $deleted = 0; $freed = [long]0
+                foreach ($file in $old) { $freed += [long]$file.Length; Remove-Item -LiteralPath $file.FullName -Force; $deleted++ }
+                if ($deleted -gt 0) { Add-Activity 'delete' ("Cleanup removed $deleted file(s).") }
+                Send-Json $Context @{ ok = $true; deleted = $deleted; freed = $freed }
             } else {
-                Send-Json $Context @{ error='Endpoint not found.' } 404
+                Send-Json $Context @{ error = 'Endpoint not found.' } 404
             }
         } catch {
-            try { Send-Json $Context @{ error=$_.Exception.Message } 400 } catch { try { $Context.Response.Close() } catch {} }
+            try { Send-Json $Context @{ error = $_.Exception.Message } 400 } catch { try { $Context.Response.Close() } catch {} }
         }
     }
 } finally {

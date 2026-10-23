@@ -2,28 +2,29 @@
 
 ## First run
 1. Extract the complete ZIP to a writable folder.
-2. Run Launch.bat.
-3. When the backend-ready message appears, open index.html.
-4. If the dashboard says backend offline, run Launch.bat again and refresh.
+2. Run `Launch.bat`. The dashboard opens at http://127.0.0.1:47821/.
+3. If the page says the backend is offline, run `Launch.bat` again and reload.
 
 ## Connect Android
-- Enable Developer options and USB debugging.
-- Connect using a USB data cable.
-- Unlock the phone and accept the USB debugging authorization prompt.
-- Open Device check in the dashboard.
+- Turn on Developer options and USB debugging.
+- Use a USB data cable, unlock the phone, and accept the debugging prompt.
+- The Console shows the phone with its battery level once it is ready.
 
-## Mirror and record
-Mirror phone opens an interactive scrcpy window. Start recording saves an MP4 in Recordings. Close the scrcpy window normally to finish the video. Stop scrcpy force-closes scrcpy processes launched from this toolkit folder.
+## Everyday use
+- **Mirror** opens an interactive scrcpy window.
+- **Record** opens one window that mirrors and records to `Recordings/` as MKV. Close the window normally to finish the file.
+- **Screenshot** saves a PNG to `Screenshots/`.
+- **Remote controls** send Back, Home, Recents, volume, power and text to the phone.
+- Press `Ctrl+K` for the command palette. Keys: `1`-`4` switch pages, `M` mirror, `R` record or stop, `S` screenshot.
 
-Audio depends on Android support and app restrictions.
+## Wi-Fi
+Plug the phone in once, open Devices, choose "Switch this phone to Wi-Fi", then unplug. Both devices must share a network. You can also connect to an address like 192.168.1.20:5555.
 
-## Settings and cleanup
-Save preferences in Settings; they are stored in Config/settings.json. Cleanup shows files matching the chosen age before asking for confirmation. Deleted files cannot be restored.
+## Settings
+Pick a preset or tune each value. Changes save to `Config/settings.json` and apply to the next session. The command preview shows exactly what scrcpy will run.
 
 ## Troubleshooting
-- Backend offline: run Launch.bat.
-- No device: check cable, USB debugging, phone unlock, and authorization.
-- Port busy: close another instance or change port 47821 in core/server/server.ps1 and assets/app.js.
-- Missing scrcpy: re-extract the full ZIP and make sure core/scrcpy/ remains intact.
-
-Keep the full folder together. Settings and recordings stay in that extracted copy. A fresh ZIP download is a clean snapshot, so back up recordings before replacing the folder.
+- No device: check the cable, USB debugging, unlock, and authorization, then use Restart ADB on Devices.
+- scrcpy closes immediately: a toast shows the last error. Full output is in `Logs/scrcpy-last.log`.
+- Port busy: close another instance, or change 47821 in `core/server/server.ps1`, `Launch.bat` and `assets/app.js`.
+- Missing scrcpy: extract the full ZIP again and keep `core/scrcpy/` intact.

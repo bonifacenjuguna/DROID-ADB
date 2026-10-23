@@ -1,5 +1,7 @@
 Recordings/*
 !Recordings/.gitkeep
+Screenshots/*
+!Screenshots/.gitkeep
 Logs/*
 !Logs/.gitkeep
 core/server/server.pid

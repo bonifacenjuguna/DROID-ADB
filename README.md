@@ -1,36 +1,36 @@
 # Scrcpy Toolkit
 
-A portable Windows dashboard for scrcpy, recording management, and Android Debug Bridge diagnostics.
+A portable Windows control center for scrcpy: mirror, record, screenshot, remote-control and manage your Android phone.
 
 This is a helper project around scrcpy v5.0.1. The original upstream binaries are unmodified. See LICENSE.txt for the upstream license.
 
 ## Start
 1. Download the repository ZIP and extract it fully.
 2. Double-click Launch.bat.
-3. The launcher starts the local backend, checks its health, and opens index.html automatically.
+3. The launcher starts the local backend, checks its health, and opens the dashboard at http://127.0.0.1:47821/.
 4. Keep the local backend running while using the dashboard.
 
 No Node.js, Python, cloud account, or paid API is required. The backend uses Windows PowerShell and .NET components included with Windows.
 
 ## Features
-- Redesigned responsive dashboard with live device, storage, and session metrics.
-- One-click phone mirroring and screen recording.
-- Automatic settings persistence for size, FPS, bitrate, and audio.
-- Automatic MKV output in `Recordings/` for new recordings, with existing MP4 files still supported.
-- Live session monitor for toolkit mirroring and recording processes.
-- Recording library with file size, modified time, open-video, and reveal-in-folder actions for MKV and MP4.
-- ADB device diagnostics and practical connection troubleshooting.
-- Age-based cleanup with preview and explicit confirmation.
-- Graceful window-close requests to help scrcpy finalize recordings instead of force-killing it.
-- API bound to `127.0.0.1` only; no cloud account or paid API required.
+- Console with a live device stage: model, Android version, battery, screen size and storage.
+- One-click mirror, recording (MKV), and phone screenshots.
+- Remote controls (Back, Home, Recents, volume, power, notifications) and a text sender.
+- Wi-Fi pairing, multi-device picker, and ADB restart.
+- Live session timers, activity feed, and readable errors when scrcpy closes early.
+- Library for recordings and screenshots with filter, sort, delete, and age-based cleanup.
+- Presets, codec and audio options, and a live command preview.
+- Command palette (Ctrl+K), keyboard shortcuts, light and dark themes.
+- Inline SVG icons only. Nothing is loaded from the internet, and the API listens on 127.0.0.1 only.
 
 ## Layout
 - index.html and assets/ are the dashboard.
 - Launch.bat starts the backend.
 - core/server/ contains the local PowerShell API.
 - core/scripts/ contains standalone Mirror and Record launchers.
+- core/server/lib.ps1 holds shared settings and launch logic.
 - Config/ contains settings.
-- Recordings/ and Logs/ are local data folders.
+- Recordings/, Screenshots/ and Logs/ are local data folders.
 
 ## Runtime files
 The original scrcpy executables, server, and DLLs are kept together in core/scrcpy/. They have not been modified. Keep this folder in place because scrcpy loads its supporting files from beside the executable.

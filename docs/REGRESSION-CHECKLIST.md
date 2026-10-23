@@ -39,3 +39,15 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Review the diff and confirm no recording flags, audio arguments, API routes, session handling, settings semantics, or cleanup eligibility rules changed unintentionally.
 - [ ] Run JavaScript syntax checks and any repository tests that exist.
 - [ ] Record which Windows/device checks were actually performed; mark unavailable checks as not tested.
+
+## Added in 2.0.0 (run on Windows with a real device; mark anything untested)
+- [ ] Console shows model, Android version, battery and charging state; values refresh after about 30 seconds.
+- [ ] Screenshot saves a PNG in `Screenshots/` and appears in Recent captures and the Library.
+- [ ] Back, Home, Recents, shade, volume, wake and power keys reach the phone; text sender rejects unsupported characters.
+- [ ] Switch to Wi-Fi works, the cable can be unplugged, and Disconnect all removes the device.
+- [ ] With two devices attached, the picker changes which phone mirrors, records and gets keys.
+- [ ] Starting scrcpy with no authorized device shows the error from `Logs/scrcpy-last.log`.
+- [ ] Deleting a file in progress is refused; deleting a finished file asks first.
+- [ ] Command preview matches the real scrcpy command line for Mirror and Record.
+- [ ] `Mirror.bat` and `Record.bat` run the same command as the dashboard.
+- [ ] Opening `index.html` directly (file://) still connects to the backend.
