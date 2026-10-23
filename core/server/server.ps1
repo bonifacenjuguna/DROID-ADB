@@ -89,7 +89,16 @@ function Get-ToolkitSessions {
 }
 function Get-SafeRecordingPath {
     param([string]$Name)
-    if ([string]::IsNullOrWhiteSpace($Name) -or [IO.Path]::GetFileName($Name) -ne $Name -or $Name -notmatch '(?i)\.mp4
+    if ([string]::IsNullOrWhiteSpace($Name) -or [IO.Path]::GetFileName($Name) -ne $Name -or $Name -notmatch '(?i)\.mp4$') {
+        throw 'Choose a valid MP4 recording from the library.'
+    }
+    $path = [IO.Path]::GetFullPath((Join-Path $RecordDir $Name))
+    $base = [IO.Path]::GetFullPath($RecordDir).TrimEnd('\') + '\'
+    if (-not $path.StartsWith($base, [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid recording path.' }
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'That recording no longer exists.' }
+    return $path
+}
+function Get-Recordings {
     $files = @(Get-ChildItem -LiteralPath $RecordDir -File -Filter '*.mp4' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | ForEach-Object {
         @{ name=$_.Name; size=[long]$_.Length; modified=$_.LastWriteTime.ToString('o') }
     })
@@ -155,7 +164,7 @@ try {
                 $body = Read-Body $Request
                 switch ([string]$body.action) {
                     'mirror' { Start-Scrcpy 'mirror'; Send-Json $Context @{ ok=$true; message='Mirror window launched.' } }
-                    'record' { Start-Scrcpy 'record'; Send-Json $Context @{ ok=$true; message='Recording window launched. The MP4 is saved in Recordings; close the window to finalize it.' } }
+                    'record' { Start-Scrcpy 'record'; Send-Json $Context @{ ok=$true; message='Recording started. Close its scrcpy window to finish the MP4.' } }
                     'stop' {
                         $count = 0
                         Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue |
@@ -178,123 +187,6 @@ try {
                 $body = Read-Body $Request
                 $filePath = Get-SafeRecordingPath ([string]$body.name)
                 Start-Process -FilePath explorer.exe -ArgumentList ('/select,"' + $filePath + '"')
-                Send-Json $Context @{ ok=$true }
-            } elseif ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/cleanup-preview') {
-                $days = 30
-                if ($Request.QueryString['days'] -match '^\d+$') { $days = [int]$Request.QueryString['days'] }
-                if ($days -notin @(30,60,90,180)) { throw 'Choose 30, 60, 90, or 180 days.' }
-                $cutoff = (Get-Date).AddDays(-$days)
-                $files = @(Get-ChildItem -LiteralPath $RecordDir -File -Filter '*.mp4' | Where-Object { $_.LastWriteTime -lt $cutoff } | ForEach-Object { @{ name=$_.Name; size=[long]$_.Length } })
-                Send-Json $Context @{ files=@($files); days=$days }
-            } elseif ($Request.HttpMethod -eq 'POST' -and $Path -eq '/api/cleanup') {
-                $body = Read-Body $Request
-                $days = [int]$body.days
-                if ($days -notin @(30,60,90,180) -or -not [bool]$body.confirm) { throw 'Cleanup was not confirmed or the age selection is invalid.' }
-                $cutoff = (Get-Date).AddDays(-$days)
-                $deleted = 0
-                $freed = [long]0
-                Get-ChildItem -LiteralPath $RecordDir -File -Filter '*.mp4' | Where-Object { $_.LastWriteTime -lt $cutoff } | ForEach-Object {
-                    $freed += $_.Length
-                    Remove-Item -LiteralPath $_.FullName -Force
-                    $deleted++
-                }
-                Send-Json $Context @{ ok=$true; deleted=$deleted; freed=$freed }
-            } else {
-                Send-Json $Context @{ error='Endpoint not found.' } 404
-            }
-        } catch {
-            try { Send-Json $Context @{ error=$_.Exception.Message } 400 } catch { try { $Context.Response.Close() } catch {} }
-        }
-    }
-} finally {
-    try { if ($Listener.IsListening) { $Listener.Stop() } } catch {}
-    try { $Listener.Close() } catch {}
-}) {
-        throw 'Choose a valid MP4 recording from the library.'
-    }
-    $path = [IO.Path]::GetFullPath((Join-Path $RecordDir $Name))
-    $base = [IO.Path]::GetFullPath($RecordDir).TrimEnd('\') + '\'
-    if (-not $path.StartsWith($base, [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid recording path.' }
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'That recording no longer exists.' }
-    return $path
-}
-function Get-Recordings {
-    $files = @(Get-ChildItem -LiteralPath $RecordDir -File -Filter '*.mp4' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | ForEach-Object {
-        @{ name=$_.Name; size=[long]$_.Length; modified=$_.LastWriteTime.ToString('o') }
-    })
-    $total = [long]0
-    foreach ($file in $files) { $total += [long]$file.size }
-    return @{ files=@($files); totalSize=$total }
-}
-function Start-Scrcpy {
-    param([ValidateSet('mirror','record')][string]$Mode)
-    if (-not (Test-Path $Scrcpy)) { throw 'scrcpy.exe is missing from core/scrcpy. Re-extract the complete ZIP.' }
-    $scriptName = if ($Mode -eq 'record') { 'Record.bat' } else { 'Mirror.bat' }
-    $scriptPath = Join-Path $Root ('core\scripts\' + $scriptName)
-    if (-not (Test-Path $scriptPath)) { throw ($scriptName + ' is missing from core/scripts.') }
-    Start-Process -FilePath $env:ComSpec -ArgumentList @('/c', ('"' + $scriptPath + '"')) -WorkingDirectory $Root -WindowStyle Hidden | Out-Null
-}
-try {
-    try {
-        $Listener.Start()
-    } catch {
-        $log = Join-Path $Root 'Logs\backend-error.log'
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $log) | Out-Null
-        ('[' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '] Listener startup failed: ' + $_.Exception.ToString()) | Add-Content -LiteralPath $log
-        throw
-    }
-    while ($Listener.IsListening) {
-        $Context = $Listener.GetContext()
-        try {
-            $Request = $Context.Request
-            $Path = $Request.Url.AbsolutePath.TrimEnd('/')
-            $Origin = $Request.Headers['Origin']
-            if (-not [string]::IsNullOrEmpty($Origin) -and $Origin -ne 'null') {
-                Send-Json $Context @{ error='This local API only accepts the local dashboard.' } 403
-                continue
-            }
-            if ($Request.HttpMethod -eq 'OPTIONS') {
-                $Context.Response.StatusCode = 204
-                $Context.Response.Headers['Access-Control-Allow-Origin'] = 'null'
-                $Context.Response.Headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-                $Context.Response.Headers['Access-Control-Allow-Headers'] = 'Content-Type'
-                $Context.Response.Close()
-                continue
-            }
-            if ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/status') {
-                # Health check must not invoke ADB; it should report whether the API itself is alive.
-                Send-Json $Context @{ ok=$true; version='1.0.0' }
-            } elseif ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/devices') {
-                Send-Json $Context (Get-Devices)
-            } elseif ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/recordings') {
-                Send-Json $Context (Get-Recordings)
-            } elseif ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/settings') {
-                Send-Json $Context @{ settings=(Get-Settings) }
-            } elseif ($Request.HttpMethod -eq 'POST' -and $Path -eq '/api/settings') {
-                $body = Read-Body $Request
-                if ([int]$body.maxSize -notin @(720,1024,1280,1600,1920,0)) { throw 'Choose a supported maximum size.' }
-                if ([int]$body.maxFps -notin @(15,24,30,45,60)) { throw 'Choose a supported frame rate.' }
-                if ([string]$body.bitrate -notin @('2M','4M','8M','12M','16M')) { throw 'Choose a supported bitrate.' }
-                $saved = @{ maxSize=[int]$body.maxSize; maxFps=[int]$body.maxFps; bitrate=[string]$body.bitrate; audio=[bool]$body.audio }
-                $saved | ConvertTo-Json | Set-Content -Encoding UTF8 $ConfigFile
-                Send-Json $Context @{ ok=$true; settings=$saved }
-            } elseif ($Request.HttpMethod -eq 'POST' -and $Path -eq '/api/action') {
-                $body = Read-Body $Request
-                switch ([string]$body.action) {
-                    'mirror' { Start-Scrcpy 'mirror'; Send-Json $Context @{ ok=$true; message='Mirror window launched.' } }
-                    'record' { Start-Scrcpy 'record'; Send-Json $Context @{ ok=$true; message='Recording started. Close its scrcpy window to finish the MP4.' } }
-                    'stop' {
-                        $count = 0
-                        Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue |
-                            Where-Object { $_.ExecutablePath -and ([IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($Scrcpy)) } |
-                            ForEach-Object { $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; if ($p -and $p.MainWindowHandle -ne 0 -and $p.CloseMainWindow()) { $count++ } }
-                        Send-Json $Context @{ ok=$true; message="Requested a normal close for $count toolkit scrcpy window(s). If a recording is active, let its window close normally to finalize the MP4." }
-                    }
-                    'check' { Send-Json $Context (Get-Devices) }
-                    default { Send-Json $Context @{ error='Unknown action.' } 400 }
-                }
-            } elseif ($Request.HttpMethod -eq 'POST' -and $Path -eq '/api/open-recordings') {
-                Start-Process explorer.exe -ArgumentList @($RecordDir)
                 Send-Json $Context @{ ok=$true }
             } elseif ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/cleanup-preview') {
                 $days = 30
