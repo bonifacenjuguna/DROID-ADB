@@ -10,7 +10,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%RESTART%" >nul 2>&1
 echo [2/3] Starting a fresh local backend...
 start "" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%SERVER%"
 for /l %%i in (1,1,15) do (
- powershell.exe -NoProfile -Command "try {$r=Invoke-WebRequest -UseBasicParsing http://127.0.0.1:47821/api/status -TimeoutSec 1;if($r.StatusCode -eq 200 -and $r.Content -match '"ok":true'){exit 0}else{exit 1}} catch {exit 1}" >nul 2>&1
+ powershell.exe -NoProfile -Command "try {$r=Invoke-WebRequest -UseBasicParsing http://127.0.0.1:47821/api/status -TimeoutSec 1;if($r.StatusCode -eq 200){exit 0}else{exit 1}} catch {exit 1}" >nul 2>&1
  if not errorlevel 1 goto ready
  timeout /t 1 >nul
 )
