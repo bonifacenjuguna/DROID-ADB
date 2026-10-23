@@ -109,6 +109,16 @@ function Get-Recordings {
 function Start-Scrcpy {
     param([ValidateSet('mirror','record')][string]$Mode)
     if (-not (Test-Path $Scrcpy)) { throw 'scrcpy.exe is missing from core/scrcpy. Re-extract the complete ZIP.' }
+    # A second scrcpy instance can create a second video/audio stream on the phone.
+    # Prevent duplicate toolkit sessions so recording does not silently double the workload.
+    $active = @(Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.ExecutablePath -and ([IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($Scrcpy)) })
+    if ($active.Count -gt 0) {
+        if ($Mode -eq 'record') {
+            throw 'A toolkit scrcpy window is already open. Close it first, then click Start recording. The recording window also mirrors your phone, so you only need one window.'
+        }
+        throw 'A toolkit scrcpy window is already open. Close it before starting another session to avoid extra device workload.'
+    }
     $scriptName = if ($Mode -eq 'record') { 'Record.bat' } else { 'Mirror.bat' }
     $scriptPath = Join-Path $Root ('core\scripts\' + $scriptName)
     if (-not (Test-Path $scriptPath)) { throw ($scriptName + ' is missing from core/scripts.') }
