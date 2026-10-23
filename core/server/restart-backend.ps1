@@ -1,12 +1,17 @@
 $ErrorActionPreference = 'Continue'
-$serverPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'server.ps1'))
+
+# Stop any previous instance launched from this toolkit, including one started
+# from an older extracted ZIP folder. Match the distinctive relative script path.
 try {
     $matches = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.IndexOf($serverPath, [StringComparison]::OrdinalIgnoreCase) -ge 0 })
+        Where-Object {
+            $_.ProcessId -ne $PID -and $_.CommandLine -and
+            ($_.CommandLine -match '(?i)core[\\/]server[\\/]server\.ps1')
+        })
     foreach ($proc in $matches) {
         Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
     }
-    Start-Sleep -Milliseconds 700
+    Start-Sleep -Milliseconds 1000
 } catch {
-    # A clean restart is best-effort; Launch.bat will report if the port remains occupied.
+    # Launch.bat's health check will report if the port is still occupied.
 }
