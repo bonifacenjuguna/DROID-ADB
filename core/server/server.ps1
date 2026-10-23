@@ -70,11 +70,17 @@ function Get-Devices {
     $message = if ($items.Count -eq 0) { 'No device detected. Connect USB, enable USB debugging, and authorize this computer.' } else { '' }
     return @{ devices=@($items); message=$message }
 }
+function Get-ToolkitScrcpyProcesses {
+    # Keep process discovery consistent across session reporting, launch guards, and Stop.
+    return @(Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.ExecutablePath -and
+            ([IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($Scrcpy))
+        })
+}
 function Get-ToolkitSessions {
     $sessions = @()
-    Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.ExecutablePath -and ([IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($Scrcpy)) } |
-        ForEach-Object {
+    Get-ToolkitScrcpyProcesses | ForEach-Object {
             $isRecording = ([string]$_.CommandLine -match '(?i)--record(?:\s|=)')
             $started = $null
             try { if ($_.CreationDate) { $started = ([datetime]$_.CreationDate).ToString('o') } } catch {}
@@ -111,8 +117,7 @@ function Start-Scrcpy {
     if (-not (Test-Path $Scrcpy)) { throw 'scrcpy.exe is missing from core/scrcpy. Re-extract the complete ZIP.' }
     # A second scrcpy instance can create a second video/audio stream on the phone.
     # Prevent duplicate toolkit sessions so recording does not silently double the workload.
-    $active = @(Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.ExecutablePath -and ([IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($Scrcpy)) })
+    $active = @(Get-ToolkitScrcpyProcesses)
     if ($active.Count -gt 0) {
         if ($Mode -eq 'record') {
             throw 'A toolkit scrcpy window is already open. Close it first, then click Start recording. The recording window also mirrors your phone, so you only need one window.'
@@ -176,8 +181,7 @@ try {
                     'mirror' { Start-Scrcpy 'mirror'; Send-Json $Context @{ ok=$true; message='Mirror window launched.' } }
                     'record' { Start-Scrcpy 'record'; Send-Json $Context @{ ok=$true; message='Recording started. Close its scrcpy window normally to finalize the MKV.' } }
                     'stop' {
-                        $targets = @(Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue |
-                            Where-Object { $_.ExecutablePath -and ([IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($Scrcpy)) })
+                        $targets = @(Get-ToolkitScrcpyProcesses)
                         $requested = 0
                         foreach ($item in $targets) {
                             $p = Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue
