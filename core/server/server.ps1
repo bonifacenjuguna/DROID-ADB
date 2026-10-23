@@ -89,7 +89,7 @@ function Get-ToolkitSessions {
 }
 function Get-SafeRecordingPath {
     param([string]$Name)
-    if ([string]::IsNullOrWhiteSpace($Name) -or [IO.Path]::GetFileName($Name) -ne $Name -or $Name -notmatch '(?i)\.(mp4|mkv) {
+    if ([string]::IsNullOrWhiteSpace($Name) -or [IO.Path]::GetFileName($Name) -ne $Name -or $Name -notmatch '(?i)\.(mp4|mkv)$') {
         throw 'Choose a valid MP4 or MKV recording from the library.'
     }
     $path = [IO.Path]::GetFullPath((Join-Path $RecordDir $Name))
