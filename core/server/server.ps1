@@ -69,14 +69,10 @@ function Get-Recordings {
 function Start-Scrcpy {
     param([ValidateSet('mirror','record')][string]$Mode)
     if (-not (Test-Path $Scrcpy)) { throw 'scrcpy.exe is missing from core/scrcpy. Re-extract the complete ZIP.' }
-    $s = Get-Settings
-    $args = @("--max-size=$($s.maxSize)", "--max-fps=$($s.maxFps)", "--video-bit-rate=$($s.bitrate)", '--window-title=Scrcpy Toolkit')
-    if ($Mode -eq 'record') {
-        $output = Join-Path $RecordDir ('Phone-' + (Get-Date -Format 'yyyy-MM-dd_HH-mm-ss') + '.mp4')
-        $args += @('--record', ('"' + $output + '"'))
-    }
-    if (-not $s.audio) { $args += '--no-audio' }
-    Start-Process -FilePath $Scrcpy -ArgumentList $args -WorkingDirectory $Runtime | Out-Null
+    $scriptName = if ($Mode -eq 'record') { 'Record.bat' } else { 'Mirror.bat' }
+    $scriptPath = Join-Path $Root ('core\scripts\' + $scriptName)
+    if (-not (Test-Path $scriptPath)) { throw ($scriptName + ' is missing from core/scripts.') }
+    Start-Process -FilePath $env:ComSpec -ArgumentList @('/c', ('"' + $scriptPath + '"')) -WorkingDirectory $Root -WindowStyle Hidden | Out-Null
 }
 try {
     $Listener.Start()
