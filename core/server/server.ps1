@@ -176,11 +176,31 @@ try {
                     'mirror' { Start-Scrcpy 'mirror'; Send-Json $Context @{ ok=$true; message='Mirror window launched.' } }
                     'record' { Start-Scrcpy 'record'; Send-Json $Context @{ ok=$true; message='Recording started. Close its scrcpy window normally to finalize the MKV.' } }
                     'stop' {
-                        $count = 0
-                        Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue |
-                            Where-Object { $_.ExecutablePath -and ([IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($Scrcpy)) } |
-                            ForEach-Object { $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; if ($p -and $p.MainWindowHandle -ne 0 -and $p.CloseMainWindow()) { $count++ } }
-                        Send-Json $Context @{ ok=$true; message="Requested a normal close for $count toolkit scrcpy window(s). If a recording is active, let its window close normally to finalize the video file." }
+                        $targets = @(Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue |
+                            Where-Object { $_.ExecutablePath -and ([IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($Scrcpy)) })
+                        $requested = 0
+                        foreach ($item in $targets) {
+                            $p = Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue
+                            if ($p -and $p.MainWindowHandle -ne 0 -and $p.CloseMainWindow()) { $requested++ }
+                        }
+                        # Give scrcpy time to finalize its recording after a normal window close.
+                        $deadline = (Get-Date).AddSeconds(3)
+                        do {
+                            Start-Sleep -Milliseconds 250
+                            $remaining = @($targets | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue })
+                        } while ($remaining.Count -gt 0 -and (Get-Date) -lt $deadline)
+                        $forced = 0
+                        foreach ($item in $remaining) {
+                            # The user explicitly requested Stop; only force-close processes that ignored the graceful close.
+                            $p = Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue
+                            if ($p) { Stop-Process -Id $item.ProcessId -Force -ErrorAction SilentlyContinue; $forced++ }
+                        }
+                        $message = if ($forced -gt 0) {
+                            "Requested graceful close for $requested session(s); force-closed $forced unresponsive session(s). A force-closed recording may not finalize correctly."
+                        } else {
+                            "Closed $requested toolkit scrcpy session(s) gracefully."
+                        }
+                        Send-Json $Context @{ ok=$true; message=$message; requested=$requested; forced=$forced }
                     }
                     'check' { Send-Json $Context (Get-Devices) }
                     default { Send-Json $Context @{ error='Unknown action.' } 400 }
