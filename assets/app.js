@@ -196,7 +196,7 @@ async function loadFiles(quiet=false) {
         $('#recording-count').textContent=String(recordingFiles.length);
         $('#recording-total').textContent=size(total);
         $('#recent-summary').textContent=recordingFiles.length+' video file(s) · '+size(total);
-        $('#recording-list').innerHTML=recordingFiles.length?recordingFiles.map(recordingRow).join(''):'<div class="no-recordings"><div class="empty-illustration">▤</div><b>No recordings yet</b><p>Start a recording from Overview. Finished MKV and MP4 files appear here automatically.</p></div>';
+        renderRecordingLibrary();
         await recent()
     }
     catch(e) {
@@ -341,3 +341,102 @@ document.addEventListener('visibilitychange', ()=> {
     if(document.visibilityState==='visible')refreshQuietly()
 }
 );
+
+
+/* ── Library controls and command palette ── */
+let libraryQuery = '';
+let librarySort = 'newest';
+function ensureLibraryControls() {
+    const list = $('#recording-list');
+    if (!list || $('#library-tools')) return;
+    const tools = document.createElement('div');
+    tools.id = 'library-tools';
+    tools.className = 'library-tools';
+    tools.innerHTML = '<label class="library-search"><span aria-hidden="true">⌕</span><input id="library-search-input" type="search" placeholder="Search recordings by filename…" autocomplete="off" aria-label="Search recordings"></label><label class="library-sort-label">Sort by <select id="library-sort" aria-label="Sort recordings"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="largest">Largest file</option><option value="smallest">Smallest file</option><option value="name">Filename A–Z</option></select></label><span id="library-result-count" class="library-result-count"></span>';
+    list.parentNode.insertBefore(tools, list);
+    $('#library-search-input').addEventListener('input', e => { libraryQuery = e.target.value.trim().toLowerCase(); renderRecordingLibrary(); });
+    $('#library-sort').addEventListener('change', e => { librarySort = e.target.value; renderRecordingLibrary(); });
+}
+function renderRecordingLibrary() {
+    const list = $('#recording-list');
+    if (!list) return;
+    ensureLibraryControls();
+    let files = recordingFiles.filter(f => String(f.name || '').toLowerCase().includes(libraryQuery));
+    files = [...files].sort((a,b) => {
+        if (librarySort === 'oldest') return new Date(a.modified) - new Date(b.modified);
+        if (librarySort === 'largest') return Number(b.size || 0) - Number(a.size || 0);
+        if (librarySort === 'smallest') return Number(a.size || 0) - Number(b.size || 0);
+        if (librarySort === 'name') return String(a.name || '').localeCompare(String(b.name || ''), undefined, {numeric:true, sensitivity:'base'});
+        return new Date(b.modified) - new Date(a.modified);
+    });
+    const count = $('#library-result-count');
+    if (count) count.textContent = files.length + ' of ' + recordingFiles.length + ' files';
+    if (files.length) list.innerHTML = files.map(recordingRow).join('');
+    else if (recordingFiles.length) list.innerHTML = '<div class="no-recordings"><div class="empty-illustration">⌕</div><b>No matching recordings</b><p>Try another filename or clear the search field.</p><button class="secondary-button" id="clear-library-search">Clear search</button></div>';
+    else list.innerHTML = '<div class="no-recordings"><div class="empty-illustration">▤</div><b>No recordings yet</b><p>Start a recording from Overview. Finished MKV and MP4 files appear here automatically.</p></div>';
+    const clear = $('#clear-library-search');
+    if (clear) clear.addEventListener('click', () => { libraryQuery=''; const input=$('#library-search-input'); if(input) input.value=''; renderRecordingLibrary(); });
+}
+function setupCommandPalette() {
+    if ($('#command-palette')) return;
+    const launcher = document.createElement('button');
+    launcher.type = 'button';
+    launcher.id = 'command-launcher';
+    launcher.className = 'command-launcher';
+    launcher.innerHTML = '<span aria-hidden="true">⌕</span><span>Quick jump or run a command</span><kbd>Ctrl K</kbd>';
+    launcher.setAttribute('aria-label', 'Open command palette');
+    const actions = $('.topbar-actions');
+    if (actions) actions.insertBefore(launcher, $('#refresh'));
+    const overlay = document.createElement('div');
+    overlay.id = 'command-palette';
+    overlay.className = 'command-overlay';
+    overlay.hidden = true;
+    overlay.innerHTML = '<section class="command-dialog" role="dialog" aria-modal="true" aria-labelledby="command-title"><div class="command-search-row"><span aria-hidden="true">⌕</span><input id="command-search" type="search" placeholder="Search pages and actions…" autocomplete="off" aria-label="Search commands"><kbd>ESC</kbd></div><div class="command-heading" id="command-title">QUICK ACTIONS</div><div id="command-results" class="command-results"></div><div class="command-footer"><span>Navigate with ↑ ↓</span><span>Enter to run · Esc to close</span></div></section>';
+    document.body.appendChild(overlay);
+    const commands = [
+      {label:'Go to Overview', detail:'Dashboard and live sessions', keys:'Alt 1', run:()=>view('home')},
+      {label:'Open recording library', detail:'Search, sort, and open saved videos', keys:'Alt 2', run:()=>view('recordings')},
+      {label:'Open Settings', detail:'Capture quality and audio preferences', keys:'Alt 3', run:()=>view('settings')},
+      {label:'Device diagnostics', detail:'Check ADB connection and authorization', keys:'Alt 4', run:()=>view('device')},
+      {label:'Start phone mirroring', detail:'Launch a scrcpy mirror window', keys:'', run:()=>action('mirror')},
+      {label:'Start screen recording', detail:'Mirror and record in one session', keys:'', run:()=>action('record')},
+      {label:'Stop toolkit sessions', detail:'Gracefully close toolkit scrcpy windows', keys:'', run:()=>action('stop')},
+      {label:'Run device check', detail:'Refresh Android device connection status', keys:'', run:()=>{view('device');$('#run-check').click()}},
+      {label:'Open recordings folder', detail:'Show saved videos in File Explorer', keys:'', run:()=>openFolder()},
+      {label:'Refresh dashboard', detail:'Update devices, recordings, and sessions', keys:'', run:()=>{loadStatus();recent();toast('Dashboard refreshed.')}} 
+    ];
+    let selected = 0;
+    let filtered = commands;
+    const input = $('#command-search');
+    const results = $('#command-results');
+    function paint() {
+      const q=input.value.trim().toLowerCase();
+      filtered=commands.filter(c=>(c.label+' '+c.detail).toLowerCase().includes(q));
+      selected=Math.min(selected,Math.max(0,filtered.length-1));
+      results.innerHTML=filtered.length?filtered.map((c,i)=>'<button type="button" class="command-item '+(i===selected?'selected':'')+'" data-command-index="'+i+'"><span class="command-item-icon">'+(i<4?'↗':'⌘')+'</span><span class="command-item-copy"><b>'+esc(c.label)+'</b><small>'+esc(c.detail)+'</small></span><kbd>'+esc(c.keys||'Run')+'</kbd></button>').join(''):'<div class="command-no-results">No matching commands. Try “recording” or “device”.</div>';
+      results.querySelectorAll('[data-command-index]').forEach(b=>b.addEventListener('click',()=>execute(Number(b.dataset.commandIndex))));
+    }
+    function open() { overlay.hidden=false; input.value=''; selected=0; paint(); setTimeout(()=>input.focus(),0); }
+    function close() { overlay.hidden=true; if(launcher) launcher.blur(); }
+    function execute(i) { const command=filtered[i]; if(!command)return; close(); command.run(); }
+    launcher.addEventListener('click',open);
+    overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+    input.addEventListener('input',()=>{selected=0;paint();});
+    input.addEventListener('keydown',e=>{
+      if(e.key==='ArrowDown'){e.preventDefault();selected=Math.min(selected+1,filtered.length-1);paint();}
+      else if(e.key==='ArrowUp'){e.preventDefault();selected=Math.max(0,selected-1);paint();}
+      else if(e.key==='Enter'){e.preventDefault();execute(selected);}
+      else if(e.key==='Escape')close();
+    });
+    document.addEventListener('keydown',e=>{
+      if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();open();return;}
+      if(e.key==='Escape'&&!overlay.hidden){close();return;}
+      if(e.altKey&&!e.ctrlKey&&!e.metaKey){
+        const pages={'1':'home','2':'recordings','3':'settings','4':'device'};
+        if(pages[e.key]&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){e.preventDefault();view(pages[e.key]);}
+      }
+    });
+    paint();
+}
+setupCommandPalette();
+ensureLibraryControls();
