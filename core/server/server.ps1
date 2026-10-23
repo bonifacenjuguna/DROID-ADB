@@ -75,7 +75,14 @@ function Start-Scrcpy {
     Start-Process -FilePath $env:ComSpec -ArgumentList @('/c', ('"' + $scriptPath + '"')) -WorkingDirectory $Root -WindowStyle Hidden | Out-Null
 }
 try {
-    $Listener.Start()
+    try {
+        $Listener.Start()
+    } catch {
+        $log = Join-Path $Root 'Logs\backend-error.log'
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $log) | Out-Null
+        ('[' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '] Listener startup failed: ' + $_.Exception.ToString()) | Add-Content -LiteralPath $log
+        throw
+    }
     while ($Listener.IsListening) {
         $Context = $Listener.GetContext()
         try {
@@ -157,6 +164,6 @@ try {
         }
     }
 } finally {
-    $Listener.Stop()
-    $Listener.Close()
+    try { if ($Listener.IsListening) { $Listener.Stop() } } catch {}
+    try { $Listener.Close() } catch {}
 }
