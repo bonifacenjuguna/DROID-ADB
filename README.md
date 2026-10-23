@@ -28,8 +28,8 @@ No Node.js, Python, cloud account, or paid API is required. The backend uses Win
 - Config/ contains settings.
 - Recordings/ and Logs/ are local data folders.
 
-## V1 packaging note
-For V1, keep the original scrcpy executables and DLLs in the repository root beside Launch.bat. They have not been changed. Moving binaries into core/scrcpy is a follow-up packaging task; do not move them manually yet.
+## Runtime files
+The original scrcpy executables, server, and DLLs are kept together in core/scrcpy/. They have not been modified. Keep this folder in place because scrcpy loads its supporting files from beside the executable.
 
 ## Safety and license
 The backend binds only to localhost and does not expose remote network access. Use this toolkit only from a folder you trust. scrcpy is distributed under Apache License 2.0; see LICENSE.txt.
