@@ -44,6 +44,12 @@ function date(value) {
     const d=new Date(value);
     return Number.isNaN(d.getTime())?'Unknown date':d.toLocaleString()
 }
+function duration(value) {
+    const seconds=Math.max(0,Math.floor((Date.now()-new Date(value).getTime())/1000));
+    if(!Number.isFinite(seconds))return 'Time unavailable';
+    const h=Math.floor(seconds/3600),m=Math.floor((seconds%3600)/60),s=seconds%60;
+    return h?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
 function ago(value) {
     const seconds=Math.max(0, Math.floor((Date.now()-new Date(value).getTime())/1000));
     if(!Number.isFinite(seconds))return 'Date unavailable';
@@ -97,7 +103,7 @@ async function loadSession() {
         $('#metric-session-note').textContent=processes.length?processes.filter(p=>p.recording).length+' recording · '+processes.filter(p=>!p.recording).length+' mirror':'No active windows';
         $('#session-badge').className='mini-badge '+(processes.length?'good':'');
         $('#session-badge').textContent=processes.length?processes.length+' active':'No active sessions';
-        $('#session-list').innerHTML=processes.length?processes.map(p=>'<div class="session-row"><span class="session-kind '+(p.recording?'recording':'')+'">'+(p.recording?'●':'▣')+'</span><div class="session-info"><b>'+esc(p.recording?'Screen recording':'Phone mirroring')+'</b><small>Process '+esc(p.pid)+(p.started?' · Started '+esc(date(p.started)):'')+'</small></div><span class="session-state '+(p.recording?'recording':'')+'">'+(p.recording?'RECORDING':'MIRRORING')+'</span></div>').join(''):'<div class="session-empty"><span class="session-empty-mark">◌</span><span>No active toolkit windows. Use Mirror phone or Start recording to begin a session.</span></div>'
+        $('#session-list').innerHTML=processes.length?processes.map(p=>'<div class="session-row"><span class="session-kind '+(p.recording?'recording':'')+'">'+(p.recording?'●':'▣')+'</span><div class="session-info"><b>'+esc(p.recording?'Screen recording':'Phone mirroring')+'</b><small>Process '+esc(p.pid)+(p.started?' · Running '+esc(duration(p.started))+' · Started '+esc(date(p.started)):'')+'</small></div><span class="session-state '+(p.recording?'recording':'')+'">'+(p.recording?'RECORDING':'MIRRORING')+'</span></div>').join(''):'<div class="session-empty"><span class="session-empty-mark">◌</span><span>No active toolkit windows. Use Mirror phone or Start recording to begin a session.</span></div>'
     }
     catch {
         $('#metric-sessions').textContent='—';
