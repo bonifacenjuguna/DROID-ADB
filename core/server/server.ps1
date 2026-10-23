@@ -4,8 +4,8 @@ $Root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $RecordDir=Join-Path $Root 'Recordings'
 $ConfigDir=Join-Path $Root 'Config'
 $ConfigFile=Join-Path $ConfigDir 'settings.json'
-$Scrcpy=Join-Path $Root 'scrcpy.exe'
-$Adb=Join-Path $Root 'adb.exe'
+$Scrcpy=Join-Path $Root 'core\scrcpy\scrcpy.exe'
+$Adb=Join-Path $Root 'core\scrcpy\adb.exe'
 $Listener=New-Object Net.HttpListener
 $Listener.Prefixes.Add("http://127.0.0.1:$Port/")
 New-Item -ItemType Directory -Force -Path $RecordDir,$ConfigDir | Out-Null
@@ -16,7 +16,7 @@ function Reply($c,$data,$status=200){$b=[Text.Encoding]::UTF8.GetBytes((ConvertT
 function Devices {if(-not(Test-Path $Adb)){return @{devices=@();message='adb.exe is missing from the toolkit root.'}};$lines=@(& $Adb devices -l 2>&1);$items=@();foreach($line in $lines){if($line -match '^([^\s]+)\s+(device|unauthorized|offline)(?:\s+(.*))?$'){$items+=@{id=$Matches[1];state=$Matches[2];details=([string]$Matches[3]).Trim()}}};$msg=if($items.Count-eq 0){'No device detected. Connect USB, enable USB debugging, and authorize this computer.'}else{''};return @{devices=@($items);message=$msg}}
 function Recordings {$files=@(Get-ChildItem -LiteralPath $RecordDir -File -Filter '*.mp4' -ErrorAction SilentlyContinue|Sort-Object LastWriteTime -Descending|ForEach-Object {@{name=$_.Name;size=[long]$_.Length;modified=$_.LastWriteTime.ToString('o')}});$total=[long]0;foreach($f in $files){$total+=[long]$f.size};return @{files=@($files);totalSize=$total}}
 function Body($r){if($r.ContentLength64-gt 8192){throw 'Request too large.'};$reader=New-Object IO.StreamReader($r.InputStream,$r.ContentEncoding);try{$t=$reader.ReadToEnd();if([string]::IsNullOrWhiteSpace($t)){return @{}};return ($t|ConvertFrom-Json)}finally{$reader.Dispose()}}
-function LaunchScrcpy($mode){if(-not(Test-Path $Scrcpy)){throw 'scrcpy.exe is missing from the toolkit root. Re-extract the complete ZIP.'};$s=Settings;$a=@("--max-size=$($s.maxSize)","--max-fps=$($s.maxFps)","--video-bit-rate=$($s.bitrate)",'--window-title=Scrcpy Toolkit');if($mode-eq'record'){$o=Join-Path $RecordDir ('Phone-'+(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss')+'.mp4');$a+=@('--record',$o)};if(-not$s.audio){$a+='--no-audio'};Start-Process -FilePath $Scrcpy -ArgumentList $a -WorkingDirectory $Root|Out-Null}
+function LaunchScrcpy($mode){if(-not(Test-Path $Scrcpy)){throw 'scrcpy.exe is missing from core/scrcpy. Re-extract the complete ZIP.'};$s=Settings;$a=@("--max-size=$($s.maxSize)","--max-fps=$($s.maxFps)","--video-bit-rate=$($s.bitrate)",'--window-title=Scrcpy Toolkit');if($mode-eq'record'){$o=Join-Path $RecordDir ('Phone-'+(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss')+'.mp4');$a+=@('--record',('"'+$o+'"'))};if(-not$s.audio){$a+='--no-audio'};Start-Process -FilePath $Scrcpy -ArgumentList $a -WorkingDirectory (Split-Path $Scrcpy)|Out-Null}
 try{$Listener.Start();while($Listener.IsListening){$c=$Listener.GetContext();try{$r=$c.Request;$p=$r.Url.AbsolutePath.TrimEnd('/');if($r.HttpMethod-eq'OPTIONS'){$c.Response.StatusCode=204;$c.Response.Headers['Access-Control-Allow-Origin']='*';$c.Response.Headers['Access-Control-Allow-Methods']='GET, POST, OPTIONS';$c.Response.Headers['Access-Control-Allow-Headers']='Content-Type';$c.Response.Close();continue}
 if($r.HttpMethod-eq'GET'-and$p-eq'/api/status'){$d=Devices;Reply $c @{ok=$true;version='1.0.0';deviceCount=@($d.devices|Where-Object state -eq 'device').Count}}
 elseif($r.HttpMethod-eq'GET'-and$p-eq'/api/devices'){Reply $c (Devices)}
