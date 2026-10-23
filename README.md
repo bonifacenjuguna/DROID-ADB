@@ -12,13 +12,17 @@ This is a helper project around scrcpy v5.0.1. The original upstream binaries ar
 
 No Node.js, Python, cloud account, or paid API is required. The backend uses Windows PowerShell and .NET components included with Windows.
 
-## V1 features
-- Mirror and record phone screen.
-- Shared settings for size, FPS, bitrate, and audio, saved automatically when changed.
-- ADB device diagnostics.
-- Recording library and folder shortcut.
-- Age-based cleanup with preview and confirmation.
-- API bound to 127.0.0.1 only.
+## Features
+- Redesigned responsive dashboard with live device, storage, and session metrics.
+- One-click phone mirroring and screen recording.
+- Automatic settings persistence for size, FPS, bitrate, and audio.
+- Automatic MP4 output in `Recordings/` whenever a recording is deliberately started.
+- Live session monitor for toolkit mirroring and recording processes.
+- Recording library with file size, modified time, open-video, and reveal-in-folder actions.
+- ADB device diagnostics and practical connection troubleshooting.
+- Age-based cleanup with preview and explicit confirmation.
+- Graceful window-close requests to help scrcpy finalize recordings instead of force-killing it.
+- API bound to `127.0.0.1` only; no cloud account or paid API required.
 
 ## Layout
 - index.html and assets/ are the dashboard.
