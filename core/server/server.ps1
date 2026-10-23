@@ -139,8 +139,8 @@ try {
                         $count = 0
                         Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue |
                             Where-Object { $_.ExecutablePath -and ([IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($Scrcpy)) } |
-                            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $count++ }
-                        Send-Json $Context @{ ok=$true; message="Closed $count toolkit scrcpy process(es)." }
+                            ForEach-Object { $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; if ($p -and $p.MainWindowHandle -ne 0 -and $p.CloseMainWindow()) { $count++ } }
+                        Send-Json $Context @{ ok=$true; message="Requested a normal close for $count toolkit scrcpy window(s). If a recording is active, let its window close normally to finalize the MP4." }
                     }
                     'check' { Send-Json $Context (Get-Devices) }
                     default { Send-Json $Context @{ error='Unknown action.' } 400 }
