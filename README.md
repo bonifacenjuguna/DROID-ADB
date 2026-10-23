@@ -6,15 +6,15 @@ This is a helper project around scrcpy v5.0.1. The original upstream binaries ar
 
 ## Start
 1. Download the repository ZIP and extract it fully.
-2. Double-click Launch.bat and wait for the backend-ready message.
-3. Double-click index.html.
+2. Double-click Launch.bat.
+3. The launcher starts the local backend, checks its health, and opens index.html automatically.
 4. Keep the local backend running while using the dashboard.
 
 No Node.js, Python, cloud account, or paid API is required. The backend uses Windows PowerShell and .NET components included with Windows.
 
 ## V1 features
 - Mirror and record phone screen.
-- Shared settings for size, FPS, bitrate, and audio.
+- Shared settings for size, FPS, bitrate, and audio, saved automatically when changed.
 - ADB device diagnostics.
 - Recording library and folder shortcut.
 - Age-based cleanup with preview and confirmation.
