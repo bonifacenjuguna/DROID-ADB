@@ -6,6 +6,7 @@ set "SERVER=%~dp0core\server\server.ps1"
 set "RESTART=%~dp0core\server\restart-backend.ps1"
 set "DASHBOARD=%~dp0index.html"
 if not exist "%SERVER%" (echo Backend file missing. Re-download the complete ZIP.& pause & exit /b 1)
+if not exist "%RESTART%" (echo Backend restart script is missing. Re-download the complete ZIP.& pause & exit /b 1)
 if not exist "%DASHBOARD%" (echo index.html is missing. Re-download the complete ZIP.& pause & exit /b 1)
 echo [1/3] Stopping any previous Scrcpy Toolkit backend...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%RESTART%" >nul 2>&1
