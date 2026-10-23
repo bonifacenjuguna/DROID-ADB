@@ -48,7 +48,17 @@ function Read-Body {
 }
 function Get-Devices {
     if (-not (Test-Path $Adb)) { return @{ devices=@(); message='adb.exe is missing from core/scrcpy.' } }
-    $lines = @(& $Adb devices -l 2>&1)
+    # ADB writes normal daemon startup messages to stderr. With Stop as the
+    # global error preference, Windows PowerShell 5.1 can treat that text as a
+    # terminating error and return it as the API response instead of device data.
+    $previousErrorPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $lines = @(& $Adb devices -l 2>&1 | ForEach-Object { [string]$_ })
+        $adbExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorPreference
+    }
     $items = @()
     foreach ($line in $lines) {
         if ($line -match '^([^\s]+)\s+(device|unauthorized|offline)(?:\s+(.*))?$') {
