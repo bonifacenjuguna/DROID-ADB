@@ -1,0 +1,6 @@
+{
+  "maxSize": 1280,
+  "maxFps": 30,
+  "bitrate": "8M",
+  "audio": true
+}
