@@ -212,9 +212,10 @@ try {
                 $cutoff = (Get-Date).AddDays(-$days)
                 $deleted = 0
                 $freed = [long]0
-                $files = @(Get-ChildItem -LiteralPath $RecordDir -File | Where-Object { $_.Extension -in @('.mp4','.mkv') -and $_.LastWriteTime -lt $cutoff } | ForEach-Object { @{ name=$_.Name; size=[long]$_.Length } })
-                    $freed += $_.Length
-                    Remove-Item -LiteralPath $_.FullName -Force
+                $files = @(Get-ChildItem -LiteralPath $RecordDir -File | Where-Object { $_.Extension -in @('.mp4','.mkv') -and $_.LastWriteTime -lt $cutoff })
+                foreach ($file in $files) {
+                    $freed += [long]$file.Length
+                    Remove-Item -LiteralPath $file.FullName -Force
                     $deleted++
                 }
                 Send-Json $Context @{ ok=$true; deleted=$deleted; freed=$freed }
