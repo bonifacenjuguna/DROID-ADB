@@ -10,7 +10,7 @@ $Adb = Join-Path $Runtime 'adb.exe'
 $Listener = New-Object Net.HttpListener
 $Listener.Prefixes.Add("http://127.0.0.1:$Port/")
 New-Item -ItemType Directory -Force -Path $RecordDir, $ConfigDir | Out-Null
-$Default = @{ maxSize = 1280; maxFps = 30; bitrate = '8M'; audio = $true }
+$Default = @{ maxSize = 1280; maxFps = 30; bitrate = '8M'; audio = $true; stayAwake = $true; turnScreenOff = $false; showTouches = $false; alwaysOnTop = $false }
 if (-not (Test-Path $ConfigFile)) { $Default | ConvertTo-Json | Set-Content -Encoding UTF8 $ConfigFile }
 
 function Get-Settings {
@@ -19,7 +19,7 @@ function Get-Settings {
         if ([int]$s.maxSize -notin @(720,1024,1280,1600,1920,0)) { throw 'Invalid size' }
         if ([int]$s.maxFps -notin @(15,24,30,45,60)) { throw 'Invalid FPS' }
         if ([string]$s.bitrate -notin @('2M','4M','8M','12M','16M')) { throw 'Invalid bitrate' }
-        return @{ maxSize=[int]$s.maxSize; maxFps=[int]$s.maxFps; bitrate=[string]$s.bitrate; audio=[bool]$s.audio }
+        return @{ maxSize=[int]$s.maxSize; maxFps=[int]$s.maxFps; bitrate=[string]$s.bitrate; audio=[bool]$s.audio; stayAwake=[bool]$s.stayAwake; turnScreenOff=[bool]$s.turnScreenOff; showTouches=[bool]$s.showTouches; alwaysOnTop=[bool]$s.alwaysOnTop }
     } catch { return $Default }
 }
 function Send-Json {
@@ -172,7 +172,7 @@ try {
                 if ([int]$body.maxSize -notin @(720,1024,1280,1600,1920,0)) { throw 'Choose a supported maximum size.' }
                 if ([int]$body.maxFps -notin @(15,24,30,45,60)) { throw 'Choose a supported frame rate.' }
                 if ([string]$body.bitrate -notin @('2M','4M','8M','12M','16M')) { throw 'Choose a supported bitrate.' }
-                $saved = @{ maxSize=[int]$body.maxSize; maxFps=[int]$body.maxFps; bitrate=[string]$body.bitrate; audio=[bool]$body.audio }
+                $saved = @{ maxSize=[int]$body.maxSize; maxFps=[int]$body.maxFps; bitrate=[string]$body.bitrate; audio=[bool]$body.audio; stayAwake=[bool]$body.stayAwake; turnScreenOff=[bool]$body.turnScreenOff; showTouches=[bool]$body.showTouches; alwaysOnTop=[bool]$body.alwaysOnTop }
                 $saved | ConvertTo-Json | Set-Content -Encoding UTF8 $ConfigFile
                 Send-Json $Context @{ ok=$true; settings=$saved }
             } elseif ($Request.HttpMethod -eq 'POST' -and $Path -eq '/api/action') {
