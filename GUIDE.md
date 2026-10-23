@@ -24,6 +24,6 @@ Save preferences in Settings; they are stored in Config/settings.json. Cleanup s
 - Backend offline: run Launch.bat.
 - No device: check cable, USB debugging, phone unlock, and authorization.
 - Port busy: close another instance or change port 47821 in core/server/server.ps1 and assets/app.js.
-- Missing scrcpy: re-extract the full ZIP. Do not move the original executables in V1.
+- Missing scrcpy: re-extract the full ZIP and make sure core/scrcpy/ remains intact.
 
 Keep the full folder together. Settings and recordings stay in that extracted copy. A fresh ZIP download is a clean snapshot, so back up recordings before replacing the folder.
