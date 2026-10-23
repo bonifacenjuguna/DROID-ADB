@@ -19,7 +19,7 @@ function Get-Settings {
         if ([int]$s.maxSize -notin @(720,1024,1280,1600,1920,0)) { throw 'Invalid size' }
         if ([int]$s.maxFps -notin @(15,24,30,45,60)) { throw 'Invalid FPS' }
         if ([string]$s.bitrate -notin @('2M','4M','8M','12M','16M')) { throw 'Invalid bitrate' }
-        return @{ maxSize=[int]$s.maxSize; maxFps=[int]$s.maxFps; bitrate=[string]$s.bitrate; audio=[bool]$s.audio; stayAwake=[bool]$s.stayAwake; turnScreenOff=[bool]$s.turnScreenOff; showTouches=[bool]$s.showTouches; alwaysOnTop=[bool]$s.alwaysOnTop }
+        return @{ maxSize=[int]$s.maxSize; maxFps=[int]$s.maxFps; bitrate=[string]$s.bitrate; audio=[bool]$s.audio; stayAwake=($s.stayAwake -ne $false); turnScreenOff=($s.turnScreenOff -eq $true); showTouches=($s.showTouches -eq $true); alwaysOnTop=($s.alwaysOnTop -eq $true) }
     } catch { return $Default }
 }
 function Send-Json {
