@@ -263,6 +263,10 @@ async function loadSettings() {
         f.elements.maxFps.value=String(d.settings.maxFps);
         f.elements.bitrate.value=d.settings.bitrate;
         f.elements.audio.checked=!!d.settings.audio;
+        f.elements.stayAwake.checked=d.settings.stayAwake !== false;
+        f.elements.turnScreenOff.checked=!!d.settings.turnScreenOff;
+        f.elements.showTouches.checked=!!d.settings.showTouches;
+        f.elements.alwaysOnTop.checked=!!d.settings.alwaysOnTop;
         $('#settings-message').textContent='Your saved preferences are loaded.'
     }
     catch(e) {
@@ -273,7 +277,7 @@ async function saveSettings() {
     const f=$('#settings-form');
     const seq=++settingsSaveSequence;
     const s= {
-        maxSize:Number(f.elements.maxSize.value), maxFps:Number(f.elements.maxFps.value), bitrate:f.elements.bitrate.value, audio:f.elements.audio.checked
+        maxSize:Number(f.elements.maxSize.value), maxFps:Number(f.elements.maxFps.value), bitrate:f.elements.bitrate.value, audio:f.elements.audio.checked, stayAwake:f.elements.stayAwake.checked, turnScreenOff:f.elements.turnScreenOff.checked, showTouches:f.elements.showTouches.checked, alwaysOnTop:f.elements.alwaysOnTop.checked
     }
     ;
     $('#settings-message').textContent='Saving changes…';
@@ -440,3 +444,46 @@ function setupCommandPalette() {
 }
 setupCommandPalette();
 ensureLibraryControls();
+
+
+/* Session profiles and advanced scrcpy controls */
+function ensureAdvancedSettings() {
+    const form = $('#settings-form');
+    if (!form || $('#session-profile-panel')) return;
+    const heading = form.querySelector('.card-heading');
+    const panel = document.createElement('section');
+    panel.id = 'session-profile-panel';
+    panel.className = 'profile-panel';
+    panel.innerHTML = '<div class="profile-panel-heading"><div><b>Session profiles</b><small>Apply a ready-made setup, then fine-tune any setting.</small></div><span class="profile-local-tag">LOCAL PRESETS</span></div><div class="profile-buttons"><button type="button" data-profile="balanced"><b>Balanced</b><small>Everyday use</small></button><button type="button" data-profile="low"><b>Low resource</b><small>Lightweight capture</small></button><button type="button" data-profile="tutorial"><b>Tutorial</b><small>Show touch points</small></button><button type="button" data-profile="detail"><b>High detail</b><small>Sharper capture</small></button></div>';
+    if (heading) heading.insertAdjacentElement('afterend', panel);
+    const toggles = document.createElement('section');
+    toggles.id = 'advanced-session-options';
+    toggles.className = 'advanced-session-options';
+    toggles.innerHTML = '<div class="advanced-options-heading"><b>Mirror & recording behavior</b><small>These options are applied when the next session starts.</small></div>' +
+      advancedToggle('stayAwake','Keep phone awake','Prevent the device from sleeping during a session.') +
+      advancedToggle('turnScreenOff','Turn off phone screen','Save phone display power while the desktop mirror stays available.') +
+      advancedToggle('showTouches','Show touch indicators','Useful for tutorials and demonstrations.') +
+      advancedToggle('alwaysOnTop','Keep mirror on top','Keep the scrcpy window above other desktop windows.');
+    const audio = form.querySelector('#setting-audio')?.closest('.setting-toggle');
+    if (audio) audio.insertAdjacentElement('afterend', toggles);
+    panel.querySelectorAll('[data-profile]').forEach(button => button.addEventListener('click', () => {
+      const presets = {
+        balanced:{maxSize:1280,maxFps:30,bitrate:'8M',audio:true,stayAwake:true,turnScreenOff:false,showTouches:false,alwaysOnTop:false},
+        low:{maxSize:720,maxFps:24,bitrate:'2M',audio:false,stayAwake:true,turnScreenOff:false,showTouches:false,alwaysOnTop:false},
+        tutorial:{maxSize:1280,maxFps:30,bitrate:'8M',audio:true,stayAwake:true,turnScreenOff:false,showTouches:true,alwaysOnTop:true},
+        detail:{maxSize:1920,maxFps:60,bitrate:'16M',audio:true,stayAwake:true,turnScreenOff:false,showTouches:false,alwaysOnTop:true}
+      };
+      const p=presets[button.dataset.profile]; if(!p)return;
+      Object.entries(p).forEach(([key,value])=>{if(key==='audio'||key==='stayAwake'||key==='turnScreenOff'||key==='showTouches'||key==='alwaysOnTop')form.elements[key].checked=value;else form.elements[key].value=String(value);});
+      panel.querySelectorAll('[data-profile]').forEach(b=>b.classList.toggle('selected',b===button));
+      clearTimeout(settingsSaveTimer);saveSettings();
+      toast('Applied '+button.querySelector('b').textContent+' profile.');
+    }));
+    toggles.querySelectorAll('input').forEach(input=>input.addEventListener('change',()=> {
+      toggles.querySelectorAll('.setting-toggle').forEach(row=>row.classList.toggle('option-enabled',row.querySelector('input')?.checked));
+    }));
+}
+function advancedToggle(name,label,description) {
+    return '<div class="setting-toggle advanced-toggle"><div class="toggle-copy"><label for="setting-'+name+'">'+label+'</label><small>'+description+'</small></div><label class="switch"><input id="setting-'+name+'" type="checkbox" name="'+name+'"><span class="switch-track"></span></label></div>';
+}
+ensureAdvancedSettings();
