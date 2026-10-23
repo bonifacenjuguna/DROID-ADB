@@ -48,16 +48,18 @@ function Read-Body {
 }
 function Get-Devices {
     if (-not (Test-Path $Adb)) { return @{ devices=@(); message='adb.exe is missing from core/scrcpy.' } }
-    # ADB writes normal daemon startup messages to stderr. With Stop as the
-    # global error preference, Windows PowerShell 5.1 can treat that text as a
-    # terminating error and return it as the API response instead of device data.
-    $previousErrorPreference = $ErrorActionPreference
+    # Capture native stdout/stderr to files. In Windows PowerShell 5.1,
+    # native stderr can become a terminating NativeCommandError when the
+    # script-wide ErrorActionPreference is Stop.
+    $stdoutFile = Join-Path $env:TEMP ('scrcpy-adb-out-' + [guid]::NewGuid().ToString('N') + '.txt')
+    $stderrFile = Join-Path $env:TEMP ('scrcpy-adb-err-' + [guid]::NewGuid().ToString('N') + '.txt')
     try {
-        $ErrorActionPreference = 'Continue'
-        $lines = @(& $Adb devices -l 2>&1 | ForEach-Object { [string]$_ })
-        $adbExitCode = $LASTEXITCODE
+        $proc = Start-Process -FilePath $Adb -ArgumentList 'devices -l' -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile
+        $lines = @()
+        if (Test-Path $stdoutFile) { $lines += @(Get-Content -LiteralPath $stdoutFile -ErrorAction SilentlyContinue) }
+        if (Test-Path $stderrFile) { $lines += @(Get-Content -LiteralPath $stderrFile -ErrorAction SilentlyContinue) }
     } finally {
-        $ErrorActionPreference = $previousErrorPreference
+        Remove-Item -LiteralPath $stdoutFile,$stderrFile -Force -ErrorAction SilentlyContinue
     }
     $items = @()
     foreach ($line in $lines) {
@@ -112,8 +114,8 @@ try {
                 continue
             }
             if ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/status') {
-                $devices = Get-Devices
-                Send-Json $Context @{ ok=$true; version='1.0.0'; deviceCount=@($devices.devices | Where-Object { $_.state -eq 'device' }).Count }
+                # Health check must not invoke ADB; it should report whether the API itself is alive.
+                Send-Json $Context @{ ok=$true; version='1.0.0' }
             } elseif ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/devices') {
                 Send-Json $Context (Get-Devices)
             } elseif ($Request.HttpMethod -eq 'GET' -and $Path -eq '/api/recordings') {
