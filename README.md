@@ -16,9 +16,9 @@ No Node.js, Python, cloud account, or paid API is required. The backend uses Win
 - Redesigned responsive dashboard with live device, storage, and session metrics.
 - One-click phone mirroring and screen recording.
 - Automatic settings persistence for size, FPS, bitrate, and audio.
-- Automatic MP4 output in `Recordings/` whenever a recording is deliberately started.
+- Automatic MKV output in `Recordings/` for new recordings, with existing MP4 files still supported.
 - Live session monitor for toolkit mirroring and recording processes.
-- Recording library with file size, modified time, open-video, and reveal-in-folder actions.
+- Recording library with file size, modified time, open-video, and reveal-in-folder actions for MKV and MP4.
 - ADB device diagnostics and practical connection troubleshooting.
 - Age-based cleanup with preview and explicit confirmation.
 - Graceful window-close requests to help scrcpy finalize recordings instead of force-killing it.
