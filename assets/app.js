@@ -538,10 +538,14 @@ function toggleTheme() {
 
 /* ---------- refresh loop ---------- */
 async function refreshAll(loud) {
-  const ok = await loadStatus();
-  if (!ok) { if (loud) toast('The local backend is offline. Run Launch.bat.', 'bad'); return; }
-  await Promise.all([loadDevices(true), loadSessions(), loadActivity(), loadLibrary()]);
-  if (loud) toast('Refreshed.');
+  if (state.polling || state.busy) { if (loud) toast('A refresh or action is already running.'); return; }
+  state.polling = true;
+  try {
+    const ok = await loadStatus();
+    if (!ok) { if (loud) toast('The local backend is not responding yet. Retrying automatically.', 'bad'); return; }
+    await Promise.all([loadDevices(true), loadSessions(), loadActivity(), loadLibrary()]);
+    if (loud) toast('Refresh complete.');
+  } finally { state.polling = false; }
 }
 function tickClocks() {
   $$('.timer[data-since]').forEach(el => { el.textContent = clock(el.dataset.since); });
