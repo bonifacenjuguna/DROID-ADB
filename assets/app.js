@@ -380,10 +380,26 @@ async function copyText(text, label) {
   catch (e) { toast('Copy was blocked by the browser. Select the text and copy it manually.', 'bad'); }
 }
 async function copyReport() {
-  const lines = [`Scrcpy Toolkit ${state.version}`, `Backend: ${state.online ? 'online' : 'offline'}`];
-  state.devices.forEach(d => { const i = state.info[d.id] || {}; lines.push(`Device ${d.id}: ${d.state} (${d.transport})${i.model ? ' ' + [i.manufacturer, i.model].join(' ') : ''}${i.android ? ', Android ' + i.android : ''}`); });
-  if (!state.devices.length) lines.push('No devices detected');
-  copyText(lines.join('\n'), 'Report');
+  const lines = [
+    `Scrcpy Toolkit ${state.version || 'unknown'}`,
+    `Backend: ${state.online ? 'online' : 'unreachable'}`,
+    `API port: ${state.status?.port || 47821}`,
+    `ADB: ${state.status ? (state.status.adb ? 'present' : 'missing') : 'unknown'}`,
+    `scrcpy: ${state.status ? (state.status.scrcpy ? 'present' : 'missing') : 'unknown'}`,
+    `Refresh interval: ${state.settings?.pollInterval || 10}s`,
+    `Active sessions: ${state.sessions.length}`
+  ];
+  for (const d of state.devices) {
+    const i = state.info[d.id] || {};
+    lines.push(`Device ${d.id}: ${d.state}, ${d.transport}${i.model ? ', ' + i.model : ''}${i.android ? ', Android ' + i.android : ''}${i.battery >= 0 ? ', battery ' + i.battery + '%' : ''}`);
+  }
+  for (const s of state.sessions) lines.push(`Session ${s.pid}: ${s.recording ? 'recording' : 'mirroring'}, device ${s.serial || 'unknown'}, since ${s.started || 'unknown'}${s.file ? ', file ' + s.file : ''}`);
+  try {
+    const r = await api('/log');
+    const recent = String(r.log || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean).slice(-8);
+    lines.push('Recent scrcpy log:', ...(recent.length ? recent : ['No recent log output.']));
+  } catch (e) { lines.push('Log unavailable: ' + e.message); }
+  copyText(lines.join('\n'), 'Diagnostic report');
 }
 
 /* library actions */
