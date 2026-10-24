@@ -6,7 +6,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
 const state = {
-  view: 'console', online: false, version: '', status: null,
+  view: 'console', online: false, healthFailures: 0, polling: false, version: '', status: null,
   devices: [], selected: '', info: {}, sessions: [], recs: [], shots: [], disk: null,
   activity: [], settings: null, tab: 'recordings', filter: '', sort: 'new',
   previewMode: 'mirror', busy: false, fileTarget: null
@@ -97,19 +97,32 @@ const recording = () => state.sessions.find(s => s.recording);
 
 async function loadStatus() {
   try {
-    const s = await api('/status');
+    const s = await api('/status', { signal: AbortSignal.timeout(10000) });
+    state.healthFailures = 0;
     state.online = true; state.status = s; state.version = s.version;
     $('#conn-chip').className = 'chip ok';
     $('#conn-chip').innerHTML = '<i class="dot"></i><b>Backend online</b>';
+    $('#conn-chip').title = 'Local backend responded successfully.';
     $('#rail-dot').className = 'dot ok';
     $('#rail-version').textContent = 'v' + String(s.version).split('.').slice(0, 2).join('.');
     state.disk = s.disk;
   } catch (e) {
-    state.online = false;
-    $('#conn-chip').className = 'chip bad';
-    $('#conn-chip').innerHTML = '<i class="dot"></i><b>Backend offline</b>';
-    $('#rail-dot').className = 'dot bad';
-    renderAll();
+    state.healthFailures = (state.healthFailures || 0) + 1;
+    if (state.online && state.healthFailures < 3) {
+      $('#conn-chip').className = 'chip warn';
+      $('#conn-chip').innerHTML = '<i class="dot"></i><b>Backend slow · retrying</b>';
+      $('#conn-chip').title = 'A health check failed. Existing controls remain available while the dashboard retries.';
+    } else if (state.healthFailures >= 3) {
+      state.online = false;
+      $('#conn-chip').className = 'chip bad';
+      $('#conn-chip').innerHTML = '<i class="dot"></i><b>Backend unreachable</b>';
+      $('#conn-chip').title = 'Three consecutive health checks failed. Check Launch.bat and the local API.';
+      $('#rail-dot').className = 'dot bad';
+      renderStageActions();
+    } else {
+      $('#conn-chip').className = 'chip warn';
+      $('#conn-chip').innerHTML = '<i class="dot"></i><b>Connecting · retrying</b>';
+    }
   }
   return state.online;
 }
@@ -206,16 +219,16 @@ function renderStage() {
   renderStageActions();
 }
 function renderStageActions() {
-  const online = state.online, dev = current(), rec = recording(), n = activeSessions();
+  const dev = current(), rec = recording(), n = activeSessions();
   const box = $('#stage-actions');
   box.classList.toggle('has-sessions', n > 0);
-  $$('[data-act="mirror"],[data-act="screenshot"]', box).forEach(b => b.disabled = !online || !dev);
+  $('[data-act="mirror"],[data-act="screenshot"]', box).forEach(b => { b.disabled = !dev || state.busy; b.classList.toggle('is-pending', state.busy && b.dataset.act === state.pendingAction); b.setAttribute('aria-busy', String(!!(state.busy && b.dataset.act === state.pendingAction))); });
   const rb = $('#rec-btn');
-  rb.disabled = !online || (!dev && !rec);
+  rb.disabled = (!dev && !rec) || state.busy; rb.classList.toggle('is-pending', state.busy && ['record','stop'].includes(state.pendingAction)); rb.setAttribute('aria-busy', String(!!(state.busy && ['record','stop'].includes(state.pendingAction))));
   rb.classList.toggle('live', !!rec);
   rb.dataset.act = rec ? 'stop' : 'record';
   rb.innerHTML = rec ? `${icon('stop')}<span>Stop recording <time id="rec-clock">${clock(rec.started)}</time></span>` : `${icon('record')}<span>Record</span>`;
-  $$('#keys .key, #text-send, #text-input').forEach(b => b.disabled = !online || !dev);
+  $('#keys .key, #text-send, #text-input').forEach(b => b.disabled = !dev || state.busy);
 }
 function renderSessions() {
   const box = $('#sessions'), list = state.sessions;
@@ -320,7 +333,8 @@ function renderAll() { renderStage(); renderSessions(); renderFeed(); renderStri
 async function run(act) {
   if (state.busy) return;
   const dev = sel();
-  state.busy = true;
+  state.busy = true; state.pendingAction = act;
+  renderStageActions();
   try {
     if (act === 'mirror' || act === 'record') {
       const r = await post('/action', { action: act, serial: dev });
@@ -336,7 +350,8 @@ async function run(act) {
       setTimeout(() => { loadSessions(); loadLibrary(); }, 600);
     }
   } catch (e) { toast(e.message, 'bad'); }
-  state.busy = false;
+  state.busy = false; state.pendingAction = '';
+  renderStageActions();
   loadActivity();
   setTimeout(loadSessions, 900);
 }
@@ -593,6 +608,16 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
   go((location.hash || '#console').slice(1));
   await refreshAll(false);
   setInterval(tickClocks, 1000);
-  setInterval(() => { if (!document.hidden) { loadStatus().then(ok => { if (ok) { loadSessions(); loadDevices(false); loadActivity(); if (state.view === 'library') loadLibrary(); } }); } }, 4000);
+  setInterval(async () => {
+    if (document.hidden || state.polling) return;
+    state.polling = true;
+    try {
+      const ok = await loadStatus();
+      if (ok) {
+        await Promise.all([loadSessions(), loadDevices(false), loadActivity()]);
+        if (state.view === 'library') await loadLibrary();
+      }
+    } finally { state.polling = false; }
+  }, 6000);
 })();
 })();
