@@ -689,6 +689,16 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshAll(false); });
 
+/* ---------- session reconciliation ---------- */
+// While a scrcpy window is active, check its real process state frequently so
+// externally closed recording/mirroring windows do not leave a stale timer.
+const pollSessionsLoop = async () => {
+  if (!document.hidden && state.online && !state.busy) {
+    try { await loadSessions(); } catch (e) {}
+  }
+  setTimeout(pollSessionsLoop, state.sessions.length ? 1200 : 5000);
+};
+
 /* ---------- boot ---------- */
 (async function boot() {
   renderAll();
@@ -710,5 +720,6 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
     setTimeout(pollLoop, Math.max(4000, Math.min(15000, seconds * 1000)));
   };
   setTimeout(pollLoop, 6000);
+  setTimeout(pollSessionsLoop, 1500);
 })();
 })();
