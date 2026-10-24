@@ -3,6 +3,43 @@ $ErrorActionPreference = 'Stop'
 $Port = 47821
 $HostHeader = "127.0.0.1:$Port"
 $OwnOrigin = "http://$HostHeader"
+
+# Clear a previous instance of this exact backend before registering the listener.
+# Never terminate unrelated processes just because they may be using the same port.
+$scriptPath = [IO.Path]::GetFullPath($MyInvocation.MyCommand.Path)
+try {
+    $previousBackends = @(Get-CimInstance Win32_Process -ErrorAction Stop |
+        Where-Object {
+            $_.ProcessId -ne $PID -and
+            $_.Name -in @('powershell.exe', 'pwsh.exe') -and
+            -not [string]::IsNullOrWhiteSpace([string]$_.CommandLine) -and
+            $_.CommandLine.IndexOf($scriptPath, [StringComparison]::OrdinalIgnoreCase) -ge 0
+        })
+    foreach ($previous in $previousBackends) {
+        Stop-Process -Id ([int]$previous.ProcessId) -Force -ErrorAction SilentlyContinue
+    }
+    if ($previousBackends.Count -gt 0) {
+        $deadline = (Get-Date).AddSeconds(4)
+        do {
+            Start-Sleep -Milliseconds 200
+            $stillRunning = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $_.ProcessId -ne $PID -and
+                    $_.Name -in @('powershell.exe', 'pwsh.exe') -and
+                    -not [string]::IsNullOrWhiteSpace([string]$_.CommandLine) -and
+                    $_.CommandLine.IndexOf($scriptPath, [StringComparison]::OrdinalIgnoreCase) -ge 0
+                })
+        } while ($stillRunning.Count -gt 0 -and (Get-Date) -lt $deadline)
+        if ($stillRunning.Count -gt 0) {
+            throw 'A previous Scrcpy Toolkit backend is still running. Close it before launching another instance.'
+        }
+    }
+} catch {
+    $message = 'Backend pre-launch port check failed: ' + $_.Exception.Message
+    try { $message | Add-Content -LiteralPath (Join-Path $LogDir 'backend-error.log') } catch {}
+    throw $message
+}
+
 $Started = Get-Date
 $Listener = New-Object Net.HttpListener
 $Listener.Prefixes.Add("http://127.0.0.1:$Port/")
