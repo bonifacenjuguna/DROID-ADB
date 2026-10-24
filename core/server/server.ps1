@@ -109,8 +109,19 @@ function Get-DeviceInfo {
 }
 
 function Get-ToolkitScrcpyProcesses {
+    $expected = [IO.Path]::GetFullPath($Scrcpy)
     return @(Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.ExecutablePath -and ([IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($Scrcpy)) })
+        Where-Object {
+            $pathMatch = $false
+            if ($_.ExecutablePath) {
+                try { $pathMatch = ([IO.Path]::GetFullPath($_.ExecutablePath) -eq $expected) } catch {}
+            }
+            # Some Windows configurations return a blank ExecutablePath through CIM.
+            # The full path is still present in the command line for toolkit-launched processes.
+            $commandLine = [string]$_.CommandLine
+            $commandMatch = $commandLine.IndexOf($expected, [StringComparison]::OrdinalIgnoreCase) -ge 0
+            $pathMatch -or $commandMatch
+        })
 }
 
 function Get-ToolkitSessions {
@@ -336,7 +347,7 @@ try {
                             $p = Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue
                             if ($p -and $p.MainWindowHandle -ne 0 -and $p.CloseMainWindow()) { $requested++ }
                         }
-                        $deadline = (Get-Date).AddSeconds(3)
+                        $deadline = (Get-Date).AddSeconds(8)
                         do {
                             Start-Sleep -Milliseconds 250
                             $remaining = @($targets | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue })
