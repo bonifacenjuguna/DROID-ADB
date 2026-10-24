@@ -360,7 +360,7 @@ try {
                             Add-Activity 'mirror' 'Mirror window opened.'
                             $msg = 'Mirror window opening.'
                         }
-                        Send-Json $Context @{ ok = $true; message = $msg }
+                        Send-Json $Context @{ ok = $true; message = $msg; active = ($targets.Count -eq 0); recording = $false }
                     }
                     'record' {
                         $returnToMirror = $false
@@ -376,7 +376,7 @@ try {
                         $started = Start-ToolkitScrcpy -Mode 'record' -Serial $serial
                         Add-Activity 'record' ('Recording started: ' + $started.file)
                         $msg = if ($returnToMirror) { 'Recording started in the existing session. Stop recording to return to mirroring.' } else { 'Recording to ' + $started.file + '. Close the scrcpy window to finish the file.' }
-                        Send-Json $Context @{ ok = $true; message = $msg; file = $started.file; returnedToMirror = $returnToMirror }
+                        Send-Json $Context @{ ok = $true; message = $msg; file = $started.file; returnedToMirror = $returnToMirror; active = $true; recording = $true }
                     }
                     'stop-recording' {
                         if ($sessions.Count -eq 0 -or -not $sessions[0].recording) { throw 'No recording session is active.' }
@@ -389,10 +389,10 @@ try {
                             $script:SessionSerial = $serial
                             [void](Start-ToolkitScrcpy -Mode 'mirror' -Serial $serial)
                             Add-Activity 'mirror' 'Recording stopped; mirror window restored.'
-                            Send-Json $Context @{ ok = $true; message = 'Recording stopped. Back to mirroring.'; returnedToMirror = $true }
+                            Send-Json $Context @{ ok = $true; message = 'Recording stopped. Back to mirroring.'; returnedToMirror = $true; active = $true; recording = $false }
                         } else {
                             Add-Activity 'stop' 'Recording stopped.'
-                            Send-Json $Context @{ ok = $true; message = 'Recording stopped.'; returnedToMirror = $false }
+                            Send-Json $Context @{ ok = $true; message = 'Recording stopped.'; returnedToMirror = $false; active = $false; recording = $false }
                         }
                     }
                     'screenshot' {
@@ -407,7 +407,7 @@ try {
                         elseif ($closed.forced -gt 0) { $message = "Closed $($closed.requested) window(s) gracefully and force-closed $($closed.forced). A force-closed recording may not finish correctly." }
                         else { $message = "Closed $($closed.requested) window(s) gracefully." }
                         if ($targets.Count -gt 0) { Add-Activity 'stop' $message }
-                        Send-Json $Context @{ ok = $true; message = $message; requested = $closed.requested; forced = $closed.forced }
+                        Send-Json $Context @{ ok = $true; message = $message; requested = $closed.requested; forced = $closed.forced; active = $false; recording = $false }
                     }
                     'check' { Send-Json $Context (Get-Devices) }
                     default { Send-Json $Context @{ error = 'Unknown action.' } 400 }
