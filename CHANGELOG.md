@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- Reworked the dashboard into a desktop-first Scrcpy Studio interface with a wider branded navigation rail, refined hierarchy, spacious device workspace, and a cohesive dark mint palette.
+- Improved card surfaces, action states, controls, and responsive layouts while preserving existing app behavior and the light theme.
 - Moved live screen preview into the phone mockup, clipped to the rounded display area.
 - Moved live-preview toggle and manual Update action beside device connection and battery details.
 - Kept the last successful preview visible after refresh failures and added status feedback.
