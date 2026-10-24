@@ -8,6 +8,13 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Confirm a missing backend or dashboard file produces a useful error instead of silently failing.
 - [ ] Refresh the dashboard and confirm the status and device information reload.
 
+## Desktop-first UI redesign
+- [ ] At desktop width (1440px or wider), confirm the branded sidebar, page header, device workspace, and right-hand session/activity column have clear hierarchy and no overlap.
+- [ ] Confirm the phone preview remains fully inside the phone screen and the device details, battery percentage, Update, and live-preview toggle remain readable.
+- [ ] Switch between dark and light themes and confirm text, borders, status chips, and controls retain contrast.
+- [ ] Resize through tablet and mobile widths and confirm navigation, controls, panels, and toolbars reflow without horizontal page overflow.
+- [ ] Confirm all existing navigation views and controls still work after the visual changes.
+
 ## Console live preview
 - [ ] With an authorized phone connected, select Update and confirm its screen appears inside the phone frame, clipped to the rounded display.
 - [ ] Confirm the image does not cover the bezel/notch or the device details and controls.
