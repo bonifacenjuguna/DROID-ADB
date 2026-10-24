@@ -136,7 +136,7 @@ function Get-ToolkitSessions {
 }
 
 function Close-ToolkitScrcpySession {
-    param([object[]]$Targets = @(Get-ToolkitScrcpyProcesses))
+    param([object[]]$Targets)
     $requested = 0
     foreach ($item in $Targets) {
         $p = Get-Process -Id ([int]$item.ProcessId) -ErrorAction SilentlyContinue
