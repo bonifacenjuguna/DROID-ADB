@@ -9,7 +9,7 @@ const state = {
   view: 'console', online: false, healthFailures: 0, polling: false, version: '', status: null,
   devices: [], selected: '', info: {}, sessions: [], recs: [], shots: [], disk: null,
   activity: [], settings: null, tab: 'recordings', filter: '', sort: 'new',
-  previewMode: 'mirror', busy: false, fileTarget: null
+  previewMode: 'mirror', busy: false, pendingKey: '', fileTarget: null
 };
 
 /* ---------- helpers ---------- */
@@ -228,7 +228,17 @@ function renderStageActions() {
   rb.classList.toggle('live', !!rec);
   rb.dataset.act = rec ? 'stop' : 'record';
   rb.innerHTML = rec ? `${icon('stop')}<span>Stop recording <time id="rec-clock">${clock(rec.started)}</time></span>` : `${icon('record')}<span>Record</span>`;
-  $$('#keys .key, #text-send, #text-input').forEach(b => b.disabled = !dev || state.busy);
+  $('#keys .key').forEach(b => {
+    const pending = state.pendingKey === b.dataset.key;
+    b.disabled = !dev || state.busy || !!state.pendingKey;
+    b.classList.toggle('is-pending', pending);
+    b.setAttribute('aria-busy', String(pending));
+  });
+  const textPending = state.pendingKey === 'text';
+  $('#text-send').disabled = !dev || state.busy || !!state.pendingKey;
+  $('#text-send').classList.toggle('is-pending', textPending);
+  $('#text-send').setAttribute('aria-busy', String(textPending));
+  $('#text-input').disabled = !dev || state.busy || !!state.pendingKey;
 }
 function renderSessions() {
   const box = $('#sessions'), list = state.sessions;
@@ -364,12 +374,25 @@ async function explainFailure() {
   } catch (e) {}
 }
 async function sendKey(key) {
-  try { await post('/key', { serial: sel(), key }); } catch (e) { toast(e.message, 'bad'); }
+  if (state.pendingKey || state.busy) return;
+  const labels = { back: 'Back', home: 'Home', recents: 'Recents', notifications: 'Notifications', voldown: 'Volume down', volup: 'Volume up', wake: 'Wake', power: 'Power', sleep: 'Sleep', mute: 'Mute', menu: 'Menu' };
+  state.pendingKey = key;
+  renderStageActions();
+  try {
+    await post('/key', { serial: sel(), key });
+    toast((labels[key] || 'Phone key') + ' sent.');
+  } catch (e) { toast(e.message, 'bad'); }
+  finally { state.pendingKey = ''; renderStageActions(); }
 }
 async function sendText() {
+  if (state.pendingKey || state.busy) return;
   const input = $('#text-input'), text = input.value.trim();
   if (!text) return;
-  try { const r = await post('/text', { serial: sel(), text }); input.value = ''; toast(r.message); } catch (e) { toast(e.message, 'bad'); }
+  state.pendingKey = 'text';
+  renderStageActions();
+  try { const r = await post('/text', { serial: sel(), text }); input.value = ''; toast(r.message); }
+  catch (e) { toast(e.message, 'bad'); }
+  finally { state.pendingKey = ''; renderStageActions(); }
 }
 async function wifi(action, extra = {}) {
   try { const r = await post('/wifi', { action, serial: sel(), ...extra }); toast(r.message); await loadDevices(true); loadActivity(); return r; }
