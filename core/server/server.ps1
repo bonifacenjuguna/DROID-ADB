@@ -69,7 +69,7 @@ function Read-Body {
 
 function Get-Devices {
     if (-not (Test-Path -LiteralPath $Adb)) { return @{ devices = @(); message = 'adb.exe is missing from core/scrcpy.' } }
-    $r = Invoke-Adb 'devices -l' 15
+    $r = Invoke-Adb 'devices -l' 6
     $items = @()
     foreach ($line in (($r.out + "`n" + $r.err) -split "`r?`n")) {
         if ($line -match '^([^\s]+)\s+(device|unauthorized|offline)(?:\s+(.*))?$') {
@@ -88,7 +88,7 @@ function Get-DeviceInfo {
     $cmd = 'echo model=$(getprop ro.product.model);echo maker=$(getprop ro.product.manufacturer);echo release=$(getprop ro.build.version.release);echo sdk=$(getprop ro.build.version.sdk);echo size=$(wm size | tail -n 1);echo density=$(wm density | tail -n 1);echo df=$(df -k /data | tail -n 1);dumpsys battery'
     $sel = ''
     if ($Serial) { $sel = "-s $Serial " }
-    $r = Invoke-Adb ($sel + 'shell "' + $cmd + '"') 15
+    $r = Invoke-Adb ($sel + 'shell "' + $cmd + '"') 8
     $t = $r.out
     function Grab([string]$pattern) { if ($t -match $pattern) { return $Matches[1].Trim() } else { return '' } }
     $info = @{ id = $Serial }
