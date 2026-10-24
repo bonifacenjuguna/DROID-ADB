@@ -249,15 +249,23 @@ function renderStage() {
 }
 function renderStageActions() {
   const dev = current(), rec = recording(), n = activeSessions();
+  const mirror = state.sessions.find(s => !s.recording);
   const box = $('#stage-actions');
   box.classList.toggle('has-sessions', n > 0);
-  $$('[data-act]', box).forEach(b => { const pending = state.busy && b.dataset.act === state.pendingAction; b.disabled = state.busy || (['mirror', 'screenshot'].includes(b.dataset.act) && !dev); b.classList.toggle('is-pending', pending); b.setAttribute('aria-busy', String(!!pending)); });
+  $('[data-act]', box).forEach(b => { const pending = state.busy && b.dataset.act === state.pendingAction; b.disabled = state.busy || (['mirror', 'screenshot'].includes(b.dataset.act) && !dev); b.classList.toggle('is-pending', pending); b.setAttribute('aria-busy', String(!!pending)); });
+  const mb = $('[data-act="mirror"]', box);
+  mb.disabled = state.busy || (!dev && !mirror) || !!rec;
+  mb.classList.toggle('live', !!mirror);
+  mb.setAttribute('aria-pressed', String(!!mirror));
+  mb.innerHTML = mirror ? `${icon('stop')}<span>Stop mirroring</span>` : rec ? `${icon('mirror')}<span>Recording active</span>` : `${icon('mirror')}<span>Mirror</span>`;
   const rb = $('#rec-btn');
-  rb.disabled = (!dev && !rec) || state.busy; rb.classList.toggle('is-pending', state.busy && ['record','stop'].includes(state.pendingAction)); rb.setAttribute('aria-busy', String(!!(state.busy && ['record','stop'].includes(state.pendingAction))));
+  rb.disabled = (!dev && !rec) || state.busy;
+  rb.classList.toggle('is-pending', state.busy && ['record','stop-recording'].includes(state.pendingAction));
+  rb.setAttribute('aria-busy', String(!!(state.busy && ['record','stop-recording'].includes(state.pendingAction))));
   rb.classList.toggle('live', !!rec);
-  rb.dataset.act = rec ? 'stop' : 'record';
+  rb.dataset.act = rec ? 'stop-recording' : 'record';
   rb.innerHTML = rec ? `${icon('stop')}<span>Stop recording <time id="rec-clock">${clock(rec.started)}</time></span>` : `${icon('record')}<span>Record</span>`;
-  $$('#keys .key').forEach(b => {
+  $('#keys .key').forEach(b => {
     const pending = state.pendingKey === b.dataset.key;
     b.disabled = !dev || state.busy || !!state.pendingKey;
     b.classList.toggle('is-pending', pending);
@@ -375,47 +383,36 @@ async function run(act) {
   state.busy = true; state.pendingAction = act;
   renderStageActions();
   try {
-    if (act === 'mirror' || act === 'record') {
+    if (['mirror', 'record', 'stop-recording', 'stop'].includes(act)) {
       const r = await post('/action', { action: act, serial: dev });
-      toast(r.message);
-      // Reconcile against the backend repeatedly while scrcpy starts; do not
-      // let a guessed frontend state become the source of truth.
-      let checks = 0;
-      const reconcileStart = async () => {
-        await loadSessions();
-        if (state.sessions.length || ++checks >= 8) {
-          if (!state.sessions.length) explainFailure();
-          await loadActivity();
-          return;
-        }
-        setTimeout(reconcileStart, 500);
+      toast(r.message, r.forced ? 'bad' : 'ok');
+      const expected = {
+        active: typeof r.active === 'boolean' ? r.active : (act === 'record' || (act === 'stop-recording' && !!r.returnedToMirror)),
+        recording: typeof r.recording === 'boolean' ? r.recording : act === 'record'
       };
-      setTimeout(reconcileStart, 350);
+      let confirmed = false;
+      for (let i = 0; i < 10; i++) {
+        await new Promise(resolve => setTimeout(resolve, i === 0 ? 150 : 350));
+        await loadSessions();
+        const actualActive = state.sessions.length > 0;
+        const actualRecording = state.sessions.some(s => s.recording);
+        if (actualActive === expected.active && actualRecording === expected.recording) { confirmed = true; break; }
+      }
+      if (!confirmed && expected.active && !state.sessions.length) await explainFailure();
+      await loadLibrary();
+      await loadActivity();
     } else if (act === 'screenshot') {
       const r = await post('/action', { action: 'screenshot', serial: dev });
       toast(r.message + ' ' + r.name);
-      loadLibrary();
-    } else if (act === 'stop') {
-      const r = await post('/action', { action: 'stop' });
-      toast(r.message, r.forced ? 'bad' : 'ok');
-      // Stop can close windows externally too; keep reconciling until the API
-      // confirms that all toolkit scrcpy processes have exited.
-      let checks = 0;
-      const reconcileStop = async () => {
-        await loadSessions();
-        if (!state.sessions.length || ++checks >= 8) {
-          await loadLibrary();
-          return;
-        }
-        setTimeout(reconcileStop, 350);
-      };
-      setTimeout(reconcileStop, 150);
+      await loadLibrary();
     }
   } catch (e) { toast(e.message, 'bad'); }
-  state.busy = false; state.pendingAction = '';
-  renderStageActions();
-  loadActivity();
-  setTimeout(loadSessions, 900);
+  finally {
+    state.busy = false; state.pendingAction = '';
+    renderStageActions();
+    await loadSessions();
+    loadActivity();
+  }
 }
 async function explainFailure() {
   try {

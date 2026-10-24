@@ -7,6 +7,9 @@ $Started = Get-Date
 $Listener = New-Object Net.HttpListener
 $Listener.Prefixes.Add("http://127.0.0.1:$Port/")
 $script:Activity = New-Object System.Collections.ArrayList
+# True only when recording was entered from an existing mirror session.
+$script:ReturnToMirrorAfterRecording = $false
+$script:SessionSerial = ''
 
 function Add-Activity {
     param([string]$Kind, [string]$Text)
@@ -130,6 +133,29 @@ function Get-ToolkitSessions {
         $sessions += @{ pid = [int]$proc.ProcessId; recording = [bool]$isRecording; type = $(if ($isRecording) { 'Recording' } else { 'Mirroring' }); started = $started; file = $file; fileSize = $fileSize; serial = $serial }
     }
     return @{ sessions = @($sessions); count = $sessions.Count; recordingCount = @($sessions | Where-Object { $_.recording }).Count }
+}
+
+function Close-ToolkitScrcpySession {
+    param([object[]]$Targets)
+    $requested = 0
+    foreach ($item in $Targets) {
+        $p = Get-Process -Id ([int]$item.ProcessId) -ErrorAction SilentlyContinue
+        if ($p -and $p.MainWindowHandle -ne 0 -and $p.CloseMainWindow()) { $requested++ }
+    }
+    $deadline = (Get-Date).AddSeconds(3)
+    $remaining = @()
+    do {
+        Start-Sleep -Milliseconds 200
+        $remaining = @($Targets | Where-Object { Get-Process -Id ([int]$_.ProcessId) -ErrorAction SilentlyContinue })
+    } while ($remaining.Count -gt 0 -and (Get-Date) -lt $deadline)
+    $forced = 0
+    foreach ($item in $remaining) {
+        if (Get-Process -Id ([int]$item.ProcessId) -ErrorAction SilentlyContinue) {
+            Stop-Process -Id ([int]$item.ProcessId) -Force -ErrorAction SilentlyContinue
+            $forced++
+        }
+    }
+    return @{ requested = $requested; forced = $forced }
 }
 
 function Get-DiskInfo {
@@ -314,14 +340,60 @@ try {
             } elseif ($Method -eq 'POST' -and $Path -eq '/api/action') {
                 $body = Read-Body $Request
                 $serial = [string](Get-Prop $body 'serial' '')
-                switch ([string]$body.action) {
-                    { $_ -in @('mirror', 'record') } {
-                        $mode = [string]$body.action
-                        if ((Get-ToolkitScrcpyProcesses).Count -gt 0) { throw 'A toolkit scrcpy window is already open. Close it first; one window mirrors and records at the same time.' }
-                        $started = Start-ToolkitScrcpy -Mode $mode -Serial $serial
-                        if ($mode -eq 'record') { Add-Activity 'record' ('Recording started: ' + $started.file); $msg = 'Recording to ' + $started.file + '. Close the scrcpy window to finish the file.' }
-                        else { Add-Activity 'mirror' 'Mirror window opened.'; $msg = 'Mirror window opening.' }
-                        Send-Json $Context @{ ok = $true; message = $msg; file = $started.file }
+                $action = [string](Get-Prop $body 'action' '')
+                $targets = @(Get-ToolkitScrcpyProcesses)
+                $sessions = @((Get-ToolkitSessions).sessions)
+                switch ($action) {
+                    'mirror' {
+                        if ($sessions.Count -gt 0 -and $sessions[0].recording) {
+                            throw 'Recording is active. Stop recording first to return to mirroring.'
+                        }
+                        if ($targets.Count -gt 0) {
+                            $closed = Close-ToolkitScrcpySession -Targets $targets
+                            $script:ReturnToMirrorAfterRecording = $false
+                            Add-Activity 'stop' 'Mirror window closed.'
+                            $msg = 'Mirror window closed.'
+                        } else {
+                            $script:SessionSerial = $serial
+                            $script:ReturnToMirrorAfterRecording = $false
+                            [void](Start-ToolkitScrcpy -Mode 'mirror' -Serial $serial)
+                            Add-Activity 'mirror' 'Mirror window opened.'
+                            $msg = 'Mirror window opening.'
+                        }
+                        Send-Json $Context @{ ok = $true; message = $msg; active = ($targets.Count -eq 0); recording = $false }
+                    }
+                    'record' {
+                        $returnToMirror = $false
+                        if ($sessions.Count -gt 0) {
+                            if ($sessions[0].recording) { throw 'Recording is already active.' }
+                            $returnToMirror = $true
+                            $serial = [string]$sessions[0].serial
+                            $closed = Close-ToolkitScrcpySession -Targets $targets
+                            if ($closed.forced -gt 0) { throw 'Could not close the mirror cleanly; recording was not started.' }
+                        }
+                        $script:SessionSerial = $serial
+                        $script:ReturnToMirrorAfterRecording = $returnToMirror
+                        $started = Start-ToolkitScrcpy -Mode 'record' -Serial $serial
+                        Add-Activity 'record' ('Recording started: ' + $started.file)
+                        $msg = if ($returnToMirror) { 'Recording started in the existing session. Stop recording to return to mirroring.' } else { 'Recording to ' + $started.file + '. Close the scrcpy window to finish the file.' }
+                        Send-Json $Context @{ ok = $true; message = $msg; file = $started.file; returnedToMirror = $returnToMirror; active = $true; recording = $true }
+                    }
+                    'stop-recording' {
+                        if ($sessions.Count -eq 0 -or -not $sessions[0].recording) { throw 'No recording session is active.' }
+                        $serial = [string]$sessions[0].serial
+                        $returnToMirror = [bool]$script:ReturnToMirrorAfterRecording
+                        $closed = Close-ToolkitScrcpySession -Targets $targets
+                        $script:ReturnToMirrorAfterRecording = $false
+                        if ($closed.forced -gt 0) { throw 'The recording process had to be force-closed; its file may be incomplete.' }
+                        if ($returnToMirror) {
+                            $script:SessionSerial = $serial
+                            [void](Start-ToolkitScrcpy -Mode 'mirror' -Serial $serial)
+                            Add-Activity 'mirror' 'Recording stopped; mirror window restored.'
+                            Send-Json $Context @{ ok = $true; message = 'Recording stopped. Back to mirroring.'; returnedToMirror = $true; active = $true; recording = $false }
+                        } else {
+                            Add-Activity 'stop' 'Recording stopped.'
+                            Send-Json $Context @{ ok = $true; message = 'Recording stopped.'; returnedToMirror = $false; active = $false; recording = $false }
+                        }
                     }
                     'screenshot' {
                         $name = Save-Screenshot $serial
@@ -329,26 +401,13 @@ try {
                         Send-Json $Context @{ ok = $true; message = 'Screenshot saved.'; name = $name }
                     }
                     'stop' {
-                        $targets = @(Get-ToolkitScrcpyProcesses)
-                        $requested = 0
-                        foreach ($item in $targets) {
-                            $p = Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue
-                            if ($p -and $p.MainWindowHandle -ne 0 -and $p.CloseMainWindow()) { $requested++ }
-                        }
-                        $deadline = (Get-Date).AddSeconds(3)
-                        do {
-                            Start-Sleep -Milliseconds 250
-                            $remaining = @($targets | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue })
-                        } while ($remaining.Count -gt 0 -and (Get-Date) -lt $deadline)
-                        $forced = 0
-                        foreach ($item in $remaining) {
-                            if (Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue) { Stop-Process -Id $item.ProcessId -Force -ErrorAction SilentlyContinue; $forced++ }
-                        }
+                        $closed = Close-ToolkitScrcpySession -Targets $targets
+                        $script:ReturnToMirrorAfterRecording = $false
                         if ($targets.Count -eq 0) { $message = 'No toolkit window was open.' }
-                        elseif ($forced -gt 0) { $message = "Closed $requested window(s) gracefully and force-closed $forced. A force-closed recording may not finish correctly." }
-                        else { $message = "Closed $requested window(s) gracefully." }
+                        elseif ($closed.forced -gt 0) { $message = "Closed $($closed.requested) window(s) gracefully and force-closed $($closed.forced). A force-closed recording may not finish correctly." }
+                        else { $message = "Closed $($closed.requested) window(s) gracefully." }
                         if ($targets.Count -gt 0) { Add-Activity 'stop' $message }
-                        Send-Json $Context @{ ok = $true; message = $message; requested = $requested; forced = $forced }
+                        Send-Json $Context @{ ok = $true; message = $message; requested = $closed.requested; forced = $closed.forced; active = $false; recording = $false }
                     }
                     'check' { Send-Json $Context (Get-Devices) }
                     default { Send-Json $Context @{ error = 'Unknown action.' } 400 }
