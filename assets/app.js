@@ -222,7 +222,7 @@ function renderStageActions() {
   const dev = current(), rec = recording(), n = activeSessions();
   const box = $('#stage-actions');
   box.classList.toggle('has-sessions', n > 0);
-  $('[data-act="mirror"],[data-act="screenshot"]', box).forEach(b => { b.disabled = !dev || state.busy; b.classList.toggle('is-pending', state.busy && b.dataset.act === state.pendingAction); b.setAttribute('aria-busy', String(!!(state.busy && b.dataset.act === state.pendingAction))); });
+  $('[data-act]', box).forEach(b => { const pending = state.busy && b.dataset.act === state.pendingAction; b.disabled = state.busy || (['mirror', 'screenshot'].includes(b.dataset.act) && !dev); b.classList.toggle('is-pending', pending); b.setAttribute('aria-busy', String(!!pending)); });
   const rb = $('#rec-btn');
   rb.disabled = (!dev && !rec) || state.busy; rb.classList.toggle('is-pending', state.busy && ['record','stop'].includes(state.pendingAction)); rb.setAttribute('aria-busy', String(!!(state.busy && ['record','stop'].includes(state.pendingAction))));
   rb.classList.toggle('live', !!rec);
@@ -463,7 +463,7 @@ function renderSettings() {
     $('#fields-' + group).innerHTML = list.map(f => {
       const ctl = f.t === 'sw'
         ? `<label class="switch"><input type="checkbox" data-set="${f.k}" ${s[f.k] ? 'checked' : ''} aria-label="${esc(f.n)}"><i></i></label>`
-        : `<div class="seg" role="group" aria-label="${esc(f.n)}">${SEG[f.k].map(o => `<button type="button" data-seg="${f.k}" data-val="${esc(o[0])}" class="${String(s[f.k]) === String(o[0]) ? 'is-active' : ''}">${esc(o[1])}</button>`).join('')}</div>`;
+        : `<div class="seg" role="group" aria-label="${esc(f.n)}">${SEG[f.k].map(o => { const selected = String(s[f.k]) === String(o[0]); return `<button type="button" data-seg="${f.k}" data-val="${esc(o[0])}" class="${selected ? 'is-active' : ''}" aria-pressed="${selected}">${esc(o[1])}</button>`; }).join('')}</div>`;
       return `<div class="field ${f.needs && !s[f.needs] ? 'off' : ''}"><div><span class="name">${esc(f.n)}</span><small>${esc(f.d)}</small></div>${ctl}</div>`;
     }).join('');
   }
