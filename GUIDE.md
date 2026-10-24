@@ -11,7 +11,8 @@ Turn on Developer options and USB debugging, use a data cable, unlock the phone 
 - **Mirror** and **Record** are toggles: click once to start, again to stop. Record is disabled while a mirror window is open (and the reverse) because the phone allows one capture at a time.
 - Turn on "Record without a window" in Settings to record in the background; stop it from the dashboard.
 - **Screenshot** saves a PNG. **Screen preview** shows the phone screen in the page.
-- **Phone** page: quick settings (Wi-Fi, Bluetooth, brightness, volume...), apps, files, log and shell.
+- **Remote controls:** Shade, Quick, Screen and Mute stay highlighted while on; click again to turn off. Other keys flash when pressed.
+- **Phone** page: quick settings (Wi-Fi, Bluetooth, brightness, volume...), apps, running apps (what is open and in front, Stop to close), files, log and shell.
 - **Library**: play, rename, delete, bulk delete and clean up by age.
 - Shortcuts: `Ctrl+K` palette, `1`-`5` pages, `M` mirror, `R` record, `S` screenshot.
 

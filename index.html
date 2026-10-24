@@ -83,7 +83,7 @@
     <button class="rail-btn" data-view="settings"><svg class="ic"><use href="#i-sliders"/></svg><span>Settings</span></button>
     <div class="rail-foot" title="Local backend">
       <span class="dot" id="rail-dot"></span>
-      <span id="rail-version">v2.1</span>
+      <span id="rail-version">v2.2</span>
     </div>
   </nav>
 
@@ -133,14 +133,14 @@
                 <button class="key" data-key="back" title="Back"><svg class="ic"><use href="#i-back"/></svg><span>Back</span></button>
                 <button class="key" data-key="home" title="Home"><svg class="ic"><use href="#i-home"/></svg><span>Home</span></button>
                 <button class="key" data-key="recents" title="Recent apps"><svg class="ic"><use href="#i-recents"/></svg><span>Recents</span></button>
-                <button class="key" data-key="notifications" title="Notification shade"><svg class="ic"><use href="#i-bell"/></svg><span>Shade</span></button>
-                <button class="key" data-key="quicksettings" title="Quick settings panel"><svg class="ic"><use href="#i-sliders"/></svg><span>Quick</span></button>
-                <button class="key" data-key="voldown" title="Volume down"><svg class="ic"><use href="#i-voldown"/></svg><span>Vol −</span></button>
+                <button class="key" data-ktoggle="shade" aria-pressed="false" title="Open or close the notification shade"><svg class="ic"><use href="#i-bell"/></svg><span>Shade</span></button>
+                <button class="key" data-ktoggle="quick" aria-pressed="false" title="Open or close the quick settings panel"><svg class="ic"><use href="#i-sliders"/></svg><span>Quick</span></button>
+                <button class="key" data-ktoggle="screen" aria-pressed="true" title="Turn the phone screen on or off"><svg class="ic"><use href="#i-sun-moon"/></svg><span>Screen</span></button>
+                <button class="key" data-key="voldown" title="Volume down"><svg class="ic"><use href="#i-voldown"/></svg><span>Vol &minus;</span></button>
                 <button class="key" data-key="volup" title="Volume up"><svg class="ic"><use href="#i-volup"/></svg><span>Vol +</span></button>
-                <button class="key" data-key="mute" title="Mute"><svg class="ic"><use href="#i-voldown"/></svg><span>Mute</span></button>
-                <button class="key" data-key="wake" title="Wake screen"><svg class="ic"><use href="#i-sun-moon"/></svg><span>Wake</span></button>
-                <button class="key" data-key="sleep" title="Turn the screen off"><svg class="ic"><use href="#i-power"/></svg><span>Sleep</span></button>
+                <button class="key" data-ktoggle="mute" aria-pressed="false" title="Mute or restore the media volume"><svg class="ic"><use href="#i-voldown"/></svg><span>Mute</span></button>
                 <button class="key" data-key="power" title="Power button"><svg class="ic"><use href="#i-power"/></svg><span>Power</span></button>
+                <button class="key" data-key="assistant" title="Voice assistant"><svg class="ic"><use href="#i-sparkle"/></svg><span>Assistant</span></button>
                 <button class="key" data-key="camera" title="Camera key"><svg class="ic"><use href="#i-camera"/></svg><span>Camera</span></button>
               </div>
               <div class="gestures">
@@ -243,6 +243,7 @@
           <div class="tabs" role="tablist" aria-label="Phone tools">
             <button role="tab" class="tab is-active" data-ptab="quick" aria-selected="true"><svg class="ic sm"><use href="#i-sliders"/></svg>Quick settings</button>
             <button role="tab" class="tab" data-ptab="apps" aria-selected="false"><svg class="ic sm"><use href="#i-apps"/></svg>Apps</button>
+            <button role="tab" class="tab" data-ptab="running" aria-selected="false"><svg class="ic sm"><use href="#i-pulse"/></svg>Running</button>
             <button role="tab" class="tab" data-ptab="files" aria-selected="false"><svg class="ic sm"><use href="#i-folder"/></svg>Files</button>
             <button role="tab" class="tab" data-ptab="logcat" aria-selected="false"><svg class="ic sm"><use href="#i-list"/></svg>Log</button>
             <button role="tab" class="tab" data-ptab="shell" aria-selected="false"><svg class="ic sm"><use href="#i-terminal"/></svg>Shell</button>
@@ -251,6 +252,7 @@
         <div id="phone-nodev" class="panel" hidden><div class="empty"><svg class="ic"><use href="#i-plug"/></svg><b>No phone connected</b><p>These tools need a ready phone. Connect one on the Devices page.</p></div></div>
         <div id="ptab-quick" class="ptab"></div>
         <div id="ptab-apps" class="ptab" hidden></div>
+        <div id="ptab-running" class="ptab" hidden></div>
         <div id="ptab-files" class="ptab" hidden></div>
         <div id="ptab-logcat" class="ptab" hidden></div>
         <div id="ptab-shell" class="ptab" hidden></div>

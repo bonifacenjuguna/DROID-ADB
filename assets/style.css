@@ -1,4 +1,4 @@
-/* Scrcpy Toolkit 2.1 - local-only styles. No remote fonts, images or scripts. */
+/* Scrcpy Toolkit 2.2 - local-only styles. No remote fonts, images or scripts. */
 :root {
   --display: "Bahnschrift", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --text: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -491,3 +491,24 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .content, .view, .ptab, .toolbar, .panel { min-width: 0; max-width: 100%; }
 .tabs { flex: 0 1 auto; min-width: 0; }
 .ptab .panel-head { flex-wrap: wrap; gap: 10px; }
+
+/* remote control feedback */
+.key.on { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: var(--accent-soft); color: var(--accent-text); }
+.key.on .ic { color: var(--accent-text); }
+.key.is-pressed { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); transform: scale(.95); }
+.key.is-pressed .ic { color: var(--accent-ink); }
+.key.mini.is-pressed { transform: scale(.92); }
+
+/* running apps */
+.runhead { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 12px; border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: var(--r-m); background: var(--accent-soft); flex-wrap: wrap; }
+.runhead b { overflow-wrap: anywhere; }
+.runhead small { color: var(--ink-2); display: block; overflow-wrap: anywhere; }
+.runrow { display: grid; grid-template-columns: minmax(0, 1fr) 150px auto; gap: 12px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+.runrow:last-child { border: 0; }
+.runrow b { font-weight: 600; overflow-wrap: anywhere; }
+.runrow small { display: block; color: var(--ink-3); overflow-wrap: anywhere; }
+.runrow .mem { display: grid; gap: 4px; font-size: 12px; color: var(--ink-2); }
+.runrow .mem i { display: block; height: 5px; border-radius: 3px; background: var(--panel-3); overflow: hidden; }
+.runrow .mem i::after { content: ""; display: block; height: 100%; width: var(--w, 0%); background: var(--accent); }
+.pill.ok { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
+@media (max-width: 620px) { .runrow { grid-template-columns: minmax(0, 1fr); } }

@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 const { $, $$, esc, icon, bytes, state } = STK;
-const P = { tab: 'quick', toggles: null, apps: null, scope: 'user', appFilter: '', path: '/sdcard/', files: null, log: { level: 'I', filter: '', lines: [], timer: null }, hist: STK.store.get('shell-hist', []), shell: [] };
+const P = { tab: STK.store.get('ptab', 'quick'), running: null, runScope: 'user', runFilter: '', runTimer: null, toggles: null, apps: null, scope: 'user', appFilter: '', path: '/sdcard/', files: null, log: { level: 'I', filter: '', lines: [], timer: null }, hist: STK.store.get('shell-hist', []), shell: [] };
 
 const TOG = [
   ['wifi', 'Wi-Fi', 'wifi'], ['data', 'Mobile data', 'globe'], ['bluetooth', 'Bluetooth', 'link'], ['airplane', 'Airplane mode', 'bolt'],
@@ -18,12 +18,21 @@ function guard() {
   $$('.ptab').forEach(t => t.hidden = !has || t.id !== 'ptab-' + P.tab);
   return has;
 }
+const nice = pkg => {
+  const parts = String(pkg).split('.').filter(Boolean);
+  let w = parts.pop() || pkg;
+  while (['app', 'android', 'mobile', 'main', 'client', 'free', 'lite', 'release'].includes(w.toLowerCase()) && parts.length) w = parts.pop();
+  w = w.replace(/_/g, ' ');
+  return w.charAt(0).toUpperCase() + w.slice(1);
+};
 function setTab(name) {
-  P.tab = name;
+  if (!['quick', 'apps', 'running', 'files', 'logcat', 'shell'].includes(name)) name = 'quick';
+  P.tab = name; STK.store.set('ptab', name);
   $$('[data-ptab]').forEach(b => { const on = b.dataset.ptab === name; b.classList.toggle('is-active', on); b.setAttribute('aria-selected', on); });
   if (name !== 'logcat') stopLog();
+  if (name !== 'running') stopRun();
   if (!guard()) return;
-  ({ quick: loadQuick, apps: loadApps, files: loadFiles, logcat: loadLog, shell: renderShell }[name])();
+  ({ quick: loadQuick, apps: loadApps, running: loadRunning, files: loadFiles, logcat: loadLog, shell: renderShell }[name])();
 }
 
 /* ---------- quick settings ---------- */
@@ -64,8 +73,8 @@ async function loadApps(force) {
   const box = $('#ptab-apps');
   if (!P.apps || force || P.appsFor !== serial() || P.appsScope !== P.scope) {
     STK.setHtml(box, '<div class="panel"><p class="hint">Loading apps...</p></div>');
-    try { const r = await STK.api(`/apps?id=${encodeURIComponent(serial())}&scope=${P.scope}`, { timeout: 60000 }); P.apps = r.apps; P.appsFor = serial(); P.appsScope = P.scope; }
-    catch (e) { STK.setHtml(box, `<div class="panel"><div class="empty">${icon('alert')}<b>Could not list apps</b><p>${esc(e.message)}</p></div></div>`); return; }
+    try { const r = await STK.api(`/apps?id=${encodeURIComponent(serial())}&scope=${P.scope}`, { timeout: 60000 }); P.apps = r.apps; P.appsNote = r.note || ''; P.appsFor = serial(); P.appsScope = P.scope; }
+    catch (e) { STK.setHtml(box, `<div class="panel"><div class="empty">${icon('alert')}<b>Could not list apps</b><p>${esc(e.message)}</p><div class="row"><button class="btn primary" id="app-retry">Try again</button><button class="btn" data-ptab="shell">Open shell</button></div><p class="hint">Tip: unlock the phone and check that USB debugging is still authorized.</p></div></div>`); return; }
   }
   renderApps();
 }
@@ -80,8 +89,8 @@ function renderApps() {
   $$('#app-scope button').forEach(b => b.classList.toggle('is-active', b.dataset.scope === P.scope));
   const f = P.appFilter.toLowerCase();
   const list = P.apps.filter(a => a.package.toLowerCase().includes(f));
-  $('#app-count').textContent = `${list.length} of ${P.apps.length} apps`;
-  STK.setHtml($('#app-list'), list.slice(0, 300).map(a => `<div class="approw"><div><b>${esc(a.package)}${a.disabled ? '<span class="pill warn">Disabled</span>' : ''}</b></div><div class="row tight"><button class="btn sm" data-app="launch" data-pkg="${esc(a.package)}">Open</button><button class="btn sm" data-app="mirrorapp" data-pkg="${esc(a.package)}" title="Mirror only this app in its own window">Mirror app</button><button class="icon-btn" data-app="more" data-pkg="${esc(a.package)}" data-dis="${a.disabled ? 1 : 0}" aria-label="More actions for ${esc(a.package)}">${icon('more')}</button></div></div>`).join('') + (list.length > 300 ? '<p class="hint">Showing the first 300. Narrow the filter to see more.</p>' : '') || '<p class="hint">No apps match.</p>');
+  $('#app-count').textContent = P.appsNote || `${list.length} of ${P.apps.length} apps`;
+  STK.setHtml($('#app-list'), list.slice(0, 300).map(a => `<div class="approw"><div><b>${esc(nice(a.package))}${a.disabled ? '<span class="pill warn">Disabled</span>' : ''}</b><small>${esc(a.package)}</small></div><div class="row tight"><button class="btn sm" data-app="launch" data-pkg="${esc(a.package)}">Open</button><button class="btn sm" data-app="mirrorapp" data-pkg="${esc(a.package)}" title="Mirror only this app in its own window">Mirror app</button><button class="icon-btn" data-app="more" data-pkg="${esc(a.package)}" data-dis="${a.disabled ? 1 : 0}" aria-label="More actions for ${esc(a.package)}">${icon('more')}</button></div></div>`).join('') + (list.length > 300 ? '<p class="hint">Showing the first 300. Narrow the filter to see more.</p>' : '') || '<p class="hint">No apps match.</p>');
 }
 async function appAction(pkg, action, btn, extra) {
   const run = async () => {
@@ -91,7 +100,8 @@ async function appAction(pkg, action, btn, extra) {
   if (!r) return null;
   if (action === 'info') { STK.showText(pkg, Object.entries(r.info || {}).map(([k, v]) => k + ': ' + v).join('\n') || 'No details available.'); return r; }
   STK.toast(r.message || 'Done.');
-  if (['uninstall', 'disable', 'enable'].includes(action)) loadApps(true);
+  if (['uninstall', 'disable', 'enable'].includes(action) && P.tab === 'apps') loadApps(true);
+  if (P.tab === 'running' && ['stop', 'clear', 'uninstall', 'disable', 'launch'].includes(action)) setTimeout(() => loadRunning(true), action === 'launch' ? 900 : 300);
   if (action === 'pullapk' && r.folder) STK.toast('Saved. Open the downloads folder to find it.', 'ok', { label: 'Open', run: () => STK.post('/open-folder', { kind: 'downloads' }).catch(STK.fail) });
   return r;
 }
@@ -99,6 +109,7 @@ function appMenu(btn) {
   const pkg = btn.dataset.pkg, dis = btn.dataset.dis === '1';
   STK.menu(btn, [
     { label: 'Stop app', icon: 'stop', run: () => appAction(pkg, 'stop') },
+    { label: 'Copy package name', icon: 'copy', run: () => navigator.clipboard.writeText(pkg).then(() => STK.toast('Copied ' + pkg), () => STK.toast('Copy was blocked by the browser.', 'bad')) },
     { label: 'App info', icon: 'info', run: () => appAction(pkg, 'info') },
     { label: 'Open its settings on phone', icon: 'sliders', run: () => appAction(pkg, 'settings') },
     { label: 'Save APK to this PC', icon: 'download', run: () => appAction(pkg, 'pullapk') },
@@ -116,6 +127,34 @@ async function installApk(file) {
     const r = await STK.upload(`/install?id=${encodeURIComponent(serial())}&name=${encodeURIComponent(file.name)}`, file, p => { $('i', bar).style.width = (p * 100).toFixed(0) + '%'; });
     STK.toast(r.message || 'Installed.'); loadApps(true);
   } catch (e) { STK.fail(e); } finally { bar.hidden = true; $('i', bar).style.width = '0'; $('#apk-file').value = ''; }
+}
+
+/* ---------- running apps ---------- */
+function stopRun() { clearInterval(P.runTimer); P.runTimer = null; }
+async function loadRunning(force) {
+  const box = $('#ptab-running');
+  if (!$('#run-list', box)) STK.setHtml(box, '<div class="panel"><p class="hint">Reading running apps...</p></div>');
+  try { P.running = await STK.api(`/running?id=${encodeURIComponent(serial())}&scope=${P.runScope}`, { timeout: 40000 }); P.runErr = ''; }
+  catch (e) { P.runErr = e.message; if (!P.running) { STK.setHtml(box, `<div class="panel"><div class="empty">${icon('alert')}<b>Could not read running apps</b><p>${esc(e.message)}</p><button class="btn primary" id="run-retry">Try again</button></div></div>`); return; } }
+  renderRunning();
+  if (!P.runTimer && $('#run-auto') && $('#run-auto').checked) P.runTimer = setInterval(() => { if (state.view === 'phone' && P.tab === 'running' && !document.hidden) loadRunning(); }, 5000);
+}
+function renderRunning() {
+  const box = $('#ptab-running'), r = P.running;
+  if (!$('#run-list', box)) {
+    STK.setHtml(box, `<section class="panel"><header class="panel-head"><h2>Running apps</h2><div class="row tight"><div class="seg mini" id="run-scope"><button data-rscope="user">Apps</button><button data-rscope="all">Include system</button></div><label class="row tight hint" style="gap:8px">Auto refresh <span class="switch sm"><input type="checkbox" id="run-auto" aria-label="Auto refresh" ${STK.store.get('run-auto', true) ? 'checked' : ''}><i></i></span></label><button class="btn sm" id="run-reload">${icon('refresh', 'sm')}<span>Refresh</span></button></div></header>
+    <div id="run-front"></div><div class="row"><div class="search"><svg class="ic sm"><use href="#i-search"/></svg><input id="run-filter" type="search" placeholder="Filter running apps" autocomplete="off" aria-label="Filter running apps"></div></div>
+    <p class="hint" id="run-count"></p><div id="run-list"></div><p class="hint">Memory is what the phone reports for each app's processes. Stop uses force-stop, so the app closes until you open it again.</p></section>`);
+    $('#run-filter').value = P.runFilter;
+  }
+  $$('#run-scope button').forEach(b => b.classList.toggle('is-active', b.dataset.rscope === P.runScope));
+  const fg = r.foreground && r.foreground.package;
+  STK.setHtml($('#run-front'), fg ? `<div class="runhead">${icon('phone')}<div class="grow"><small>In front right now</small><b>${esc(nice(fg))}</b><small>${esc(fg)}${r.foreground.activity ? ' / ' + esc(r.foreground.activity) : ''}</small></div><button class="btn sm" data-app="mirrorapp" data-pkg="${esc(fg)}">Mirror app</button><button class="btn sm danger" data-app="stop" data-pkg="${esc(fg)}">Stop</button></div>` : '');
+  const f = P.runFilter.toLowerCase();
+  const list = r.apps.filter(a => a.package.toLowerCase().includes(f) || nice(a.package).toLowerCase().includes(f));
+  const max = Math.max(1, ...r.apps.map(a => a.rssKb));
+  $('#run-count').textContent = `${list.length} of ${r.total} running`;
+  STK.setHtml($('#run-list'), list.map(a => `<div class="runrow"><div><b>${esc(nice(a.package))}${a.foreground ? '<span class="pill ok">In front</span>' : ''}${a.recent >= 0 && !a.foreground ? `<span class="pill">Recent ${a.recent + 1}</span>` : ''}${a.user ? '' : '<span class="pill">System</span>'}</b><small>${esc(a.package)} · pid ${a.pid}${a.procs > 1 ? ' · ' + a.procs + ' processes' : ''}</small></div><div class="mem"><span>${bytes(a.rssKb * 1024)}</span><i style="--w:${Math.max(3, a.rssKb / max * 100).toFixed(0)}%"></i></div><div class="row tight"><button class="btn sm" data-app="launch" data-pkg="${esc(a.package)}">Open</button><button class="btn sm danger" data-app="stop" data-pkg="${esc(a.package)}">Stop</button><button class="icon-btn" data-app="more" data-pkg="${esc(a.package)}" data-dis="0" aria-label="More actions for ${esc(a.package)}">${icon('more')}</button></div></div>`).join('') || '<p class="hint">Nothing matches.</p>');
 }
 
 /* ---------- files ---------- */
@@ -215,6 +254,10 @@ document.addEventListener('click', e => {
   if (t.dataset.timeout) { const v = Number(t.dataset.timeout); const prev = P.toggles.timeout; P.toggles.timeout = v; renderQuick(); return STK.post('/toggle', { serial: serial(), key: 'timeout', value: v }, { timeout: 30000 }).then(() => STK.toast('Screen timeout set.')).catch(er => { P.toggles.timeout = prev; renderQuick(); STK.fail(er); }); }
   if (t.dataset.scope) { P.scope = t.dataset.scope; return loadApps(true); }
   if (t.id === 'app-reload') return STK.busy(t, () => loadApps(true));
+  if (t.id === 'app-retry') return loadApps(true);
+  if (t.id === 'run-retry' || t.id === 'run-reload') return STK.busy(t, () => loadRunning(true));
+  if (t.dataset.rscope) { P.runScope = t.dataset.rscope; return loadRunning(true); }
+  if (t.dataset.app === 'stop') return appAction(t.dataset.pkg, 'stop', t);
   if (t.dataset.app === 'launch') return appAction(t.dataset.pkg, 'launch', t);
   if (t.dataset.app === 'mirrorapp') return STK.startSession('mirror', t, { app: t.dataset.pkg });
   if (t.dataset.app === 'more') return appMenu(t);
@@ -249,11 +292,13 @@ document.addEventListener('change', e => {
   if (t.dataset && t.dataset.tog) return setToggle(t);
   if (t.id === 'apk-file') return installApk(t.files[0]);
   if (t.id === 'push-file') return pushFiles([...t.files]);
+  if (t.id === 'run-auto') { STK.store.set('run-auto', t.checked); stopRun(); if (t.checked) loadRunning(); return; }
   if (t.id === 'log-auto') { stopLog(); if (t.checked) P.log.timer = setInterval(() => { if (state.view === 'phone' && P.tab === 'logcat' && !document.hidden) fetchLog(); }, 3000); }
 });
 document.addEventListener('input', e => {
   const t = e.target;
   if (t.dataset && t.dataset.slide) { const v = Number(t.value); const out = t.nextElementSibling; out.textContent = t.dataset.slide === 'brightness' ? Math.round(v / 255 * 100) + '%' : v + '/' + t.max; return slideSend(t.dataset.slide, v, t.closest('.sliderrow')); }
+  if (t.id === 'run-filter') { P.runFilter = t.value; if (P.running) renderRunning(); }
   if (t.id === 'app-filter') { P.appFilter = t.value; if (P.apps) renderApps(); }
   if (t.id === 'log-filter') { P.log.filter = t.value; clearTimeout(P.logT); P.logT = setTimeout(fetchLog, 400); }
 });
@@ -269,5 +314,5 @@ document.addEventListener('keydown', e => {
 STK.views.phone = { onShow() { setTab(P.tab); } };
 STK.on('device-changed', () => { P.toggles = null; P.apps = null; P.files = null; P.path = '/sdcard/'; if (state.view === 'phone') setTab(P.tab); });
 STK.on('state', () => { if (state.view === 'phone') { const had = !$('#phone-nodev').hidden; if (had === !!serial()) setTab(P.tab); } });
-STK.on('view', v => { if (v !== 'phone') stopLog(); });
+STK.on('view', v => { if (v !== 'phone') { stopLog(); stopRun(); } });
 })();

@@ -209,7 +209,7 @@ function Get-DeviceInfo {
     return $info
 }
 
-$KeyCodes = @{ back = 4; home = 3; recents = 187; power = 26; volup = 24; voldown = 25; mute = 164; wake = 224; sleep = 223; menu = 82; camera = 27; playpause = 85; next = 87; prev = 88; brightup = 221; brightdown = 220; enter = 66; tab = 61; del = 67; up = 19; down = 20; left = 21; right = 22; search = 84 }
+$KeyCodes = @{ back = 4; home = 3; recents = 187; power = 26; volup = 24; voldown = 25; mute = 164; wake = 224; sleep = 223; menu = 82; assistant = 231; camera = 27; playpause = 85; next = 87; prev = 88; brightup = 221; brightdown = 220; enter = 66; tab = 61; del = 67; up = 19; down = 20; left = 21; right = 22; search = 84 }
 
 function Invoke-Key {
     param([string]$Serial, [string]$Key)
@@ -625,20 +625,100 @@ $Routes['POST /api/toggle'] = { param($Ctx)
     Send-Json $Ctx (@{ ok = $true } + (Get-Toggles $serial))
 }
 
+function Get-PackageLines {
+    param([string]$Text)
+    $names = @()
+    foreach ($line in ($Text -split "`r?`n")) {
+        if ($line -match '^package:(?:.*=)?([A-Za-z0-9._]+)\s*$') { $names += $Matches[1] }
+    }
+    return $names
+}
+
 $Routes['GET /api/apps'] = { param($Ctx)
     $serial = Get-Query $Ctx 'id'
     $scope = Get-Query $Ctx 'scope'
     $flag = '-3'
     if ($scope -eq 'system') { $flag = '-s' } elseif ($scope -eq 'all') { $flag = '' }
-    $r = Invoke-DeviceShell $serial ('pm list packages ' + $flag) 30
-    if ($r.code -ne 0 -and $r.out -eq '') { Fail ('Could not list apps: ' + $r.err.Trim()) }
+    $script = 'pm list packages ' + $flag + ' 2>&1; echo @@DIS; pm list packages -d 2>&1'
+    $r = Invoke-DeviceShell $serial $script 40
+    $parts = ($r.out -split '@@DIS', 2)
+    $names = @(Get-PackageLines $parts[0])
     $dis = @{}
-    $d = Invoke-DeviceShell $serial 'pm list packages -d' 20
-    foreach ($line in ($d.out -split "`r?`n")) { if ($line -match '^package:(.+)$') { $dis[$Matches[1].Trim()] = $true } }
+    if ($parts.Count -gt 1) { foreach ($n in (Get-PackageLines $parts[1])) { $dis[$n] = $true } }
+    if ($names.Count -eq 0) {
+        $r2 = Invoke-DeviceShell $serial ('cmd package list packages ' + $flag + ' 2>&1') 40
+        $names = @(Get-PackageLines $r2.out)
+        if ($names.Count -eq 0) {
+            $why = (($parts[0] + ' ' + $r.err + ' ' + $r2.out + ' ' + $r2.err) -replace '\s+', ' ').Trim()
+            if ($why.Length -gt 240) { $why = $why.Substring(0, 240) }
+            if ($why -eq '') { $why = 'The phone returned an empty list.' }
+            if ($scope -eq '' -or $scope -eq 'user') { Send-Json $Ctx @{ apps = @(); note = 'No installed apps were reported. ' + $why }; return }
+            Fail ('Could not list apps. The phone said: ' + $why)
+        }
+    }
     $apps = @()
-    foreach ($line in ($r.out -split "`r?`n")) { if ($line -match '^package:(.+)$') { $p = $Matches[1].Trim(); $apps += , @{ package = $p; disabled = [bool]$dis.ContainsKey($p) } } }
-    $apps = @($apps | Sort-Object { $_.package })
-    Send-Json $Ctx @{ apps = $apps }
+    foreach ($n in ($names | Sort-Object -Unique)) { $apps += , @{ package = $n; disabled = [bool]$dis.ContainsKey($n) } }
+    Send-Json $Ctx @{ apps = @($apps) }
+}
+
+# Apps with live processes, which one is in front, and the recent-apps order.
+$Routes['GET /api/running'] = { param($Ctx)
+    $serial = Get-Query $Ctx 'id'
+    $scope = Get-Query $Ctx 'scope'
+    $script = 'echo @@FG; dumpsys activity activities 2>/dev/null | grep -E ''ResumedActivity'' | head -n 3; echo @@REC; dumpsys activity recents 2>/dev/null | grep -E ''realActivity='' | head -n 40; echo @@PS; ps -A -o USER,PID,RSS,NAME 2>&1'
+    $r = Invoke-DeviceShell $serial $script 40
+    $sections = @{ FG = ''; REC = ''; PS = '' }
+    $cur = ''
+    foreach ($line in ($r.out -split "`r?`n")) {
+        if ($line -match '^@@(FG|REC|PS)\s*$') { $cur = $Matches[1]; continue }
+        if ($cur) { $sections[$cur] += $line + "`n" }
+    }
+    $fg = @{ package = ''; activity = '' }
+    foreach ($line in ($sections.FG -split "`n")) {
+        if ($line -match '([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)/(\.?[A-Za-z0-9_.$]+)') { $fg.package = $Matches[1]; $fg.activity = $Matches[2]; break }
+    }
+    $recent = @()
+    foreach ($line in ($sections.REC -split "`n")) {
+        if ($line -match 'realActivity=([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)/') { if ($recent -notcontains $Matches[1]) { $recent += $Matches[1] } }
+    }
+    $map = @{}
+    $seenPs = $false
+    foreach ($line in ($sections.PS -split "`n")) {
+        if ($line -match '^\s*(\S+)\s+(\d+)\s+(\d+)\s+(\S+)\s*$') {
+            $seenPs = $true
+            $user = $Matches[1]; $procId = [int]$Matches[2]; $rss = [long]$Matches[3]; $name = $Matches[4]
+            if ($name -notmatch '^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+(:[A-Za-z0-9_.]+)?$') { continue }
+            $isUser = ($user -match '^u\d+_a\d+$')
+            if ($scope -ne 'all' -and -not $isUser) { continue }
+            $base = ($name -split ':')[0]
+            if (-not $map.ContainsKey($base)) { $map[$base] = @{ package = $base; pid = $procId; rssKb = [long]0; procs = 0; user = $isUser } }
+            $map[$base].rssKb += $rss
+            $map[$base].procs += 1
+            if ($name -eq $base) { $map[$base].pid = $procId }
+        }
+    }
+    if (-not $seenPs) { Fail ('The phone did not return a process list. It said: ' + (($r.out + ' ' + $r.err) -replace '\s+', ' ').Trim()) }
+    $list = @()
+    foreach ($k in $map.Keys) {
+        $a = $map[$k]
+        $a.foreground = ($k -eq $fg.package)
+        $idx = [array]::IndexOf($recent, $k)
+        $a.recent = $idx
+        $list += , $a
+    }
+    $list = @($list | Sort-Object @{ Expression = { -not $_.foreground } }, @{ Expression = { if ($_.recent -lt 0) { 999 } else { $_.recent } } }, @{ Expression = { -$_.rssKb } })
+    Send-Json $Ctx @{ foreground = $fg; apps = @($list); total = $list.Count }
+}
+
+# Light state read for remote-control highlights (screen on or off, media volume).
+$Routes['GET /api/keystate'] = { param($Ctx)
+    $serial = Get-Query $Ctx 'id'
+    $r = Invoke-DeviceShell $serial 'echo screen=$(dumpsys power 2>/dev/null | grep -m1 -oE ''mWakefulness=[A-Za-z]+''); echo vol=$(cmd media_session volume --get --stream 3 2>/dev/null | tail -n 1)' 15
+    $kv = ConvertFrom-KeyLines $r.out
+    $out = @{ screenOn = $null; volume = $null; volumeMax = $null }
+    if ($kv.screen -match 'mWakefulness=(\w+)') { $out.screenOn = ($Matches[1] -eq 'Awake') }
+    if ($kv.vol -match 'volume is (\d+) in range \[(\d+)\.\.(\d+)\]') { $out.volume = [int]$Matches[1]; $out.volumeMax = [int]$Matches[3] }
+    Send-Json $Ctx $out
 }
 
 $Routes['POST /api/app'] = { param($Ctx)

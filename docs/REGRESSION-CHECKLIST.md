@@ -61,3 +61,8 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Devices: pairing, Find phones, power actions ask for confirmation, System check is readable.
 - [ ] Change the port in Settings, restart the backend, confirm Launch.bat opens the new port.
 - [ ] Library: rename, bulk delete, cleanup preview, Show in folder.
+
+## Added in 2.2.0 (Windows, real device; mark anything untested)
+- [ ] Phone > Apps lists installed apps; "System" and "All" work; a locked or unauthorized phone shows a readable error.
+- [ ] Phone > Running shows the app in front, recent order and memory; Stop closes an app; Include system adds system apps.
+- [ ] Console keys: Shade, Quick, Screen and Mute highlight and match the phone; Screen reflects the real screen state after a few seconds.

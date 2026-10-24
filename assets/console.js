@@ -76,7 +76,7 @@ function renderActions() {
     rb.title = mir ? 'Close the mirror window first' : (rec ? 'Stop and save the recording' : 'Start recording');
   }
   sb.disabled = !dev;
-  $$('#keys .key, [data-gesture], #text-input, #text-send, #url-input, #url-send, [data-key]').forEach(b => { if (!b.closest('#view-phone')) b.disabled = !dev; });
+  $$('#keys .key, [data-gesture], #text-input, #text-send, #url-input, #url-send, [data-key], [data-ktoggle]').forEach(b => { if (!b.closest('#view-phone')) b.disabled = !dev; });
 }
 
 async function stopSession(s, btn) {
@@ -134,9 +134,45 @@ STK.actions = {
 };
 
 /* ---------- keys, gestures, text ---------- */
+const K = { shade: false, quick: false, screenOn: null, vol: null, volMax: null, prevVol: null, at: 0, loading: false };
+function renderKeys() {
+  const st = { shade: K.shade, quick: K.quick, screen: K.screenOn !== false, mute: K.vol === 0 };
+  $$('#keys [data-ktoggle]').forEach(b => {
+    const on = !!st[b.dataset.ktoggle];
+    b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const sc = $('#keys [data-ktoggle="screen"] span'); if (sc) sc.textContent = K.screenOn === false ? 'Screen off' : 'Screen on';
+  const mu = $('#keys [data-ktoggle="mute"] span'); if (mu) mu.textContent = K.vol === 0 ? 'Muted' : 'Mute';
+}
+async function pollKeystate(force) {
+  if (!STK.sel() || state.view !== 'console' || document.hidden || K.loading) return;
+  if (!force && Date.now() - K.at < 6000) return;
+  K.at = Date.now(); K.loading = true;
+  try { const r = await STK.api('/keystate?id=' + encodeURIComponent(STK.sel()), { timeout: 15000 }); K.screenOn = r.screenOn; K.vol = r.volume; K.volMax = r.volumeMax; renderKeys(); } catch (e) {} finally { K.loading = false; }
+}
+function pulse(btn) { btn.classList.add('is-pressed'); setTimeout(() => btn.classList.remove('is-pressed'), 260); }
+async function keyToggle(btn, kind) {
+  const prev = { shade: K.shade, quick: K.quick, screenOn: K.screenOn, vol: K.vol };
+  let call;
+  if (kind === 'shade') { const on = !K.shade; K.shade = on; K.quick = false; call = () => STK.post('/key', { serial: STK.sel(), key: on ? 'notifications' : 'collapse' }, { timeout: 20000 }); }
+  else if (kind === 'quick') { const on = !K.quick; K.quick = on; K.shade = false; call = () => STK.post('/key', { serial: STK.sel(), key: on ? 'quicksettings' : 'collapse' }, { timeout: 20000 }); }
+  else if (kind === 'screen') { const off = K.screenOn !== false; K.screenOn = !off; call = () => STK.post('/key', { serial: STK.sel(), key: off ? 'sleep' : 'wake' }, { timeout: 20000 }); }
+  else if (kind === 'mute') {
+    if (K.vol === null) { call = () => STK.post('/key', { serial: STK.sel(), key: 'mute' }, { timeout: 20000 }); K.vol = 0; }
+    else if (K.vol === 0) { const back = K.prevVol || Math.max(1, Math.round((K.volMax || 15) / 2)); K.vol = back; call = () => STK.post('/toggle', { serial: STK.sel(), key: 'volume', value: back }, { timeout: 20000 }); }
+    else { K.prevVol = K.vol; K.vol = 0; call = () => STK.post('/toggle', { serial: STK.sel(), key: 'volume', value: 0 }, { timeout: 20000 }); }
+  }
+  renderKeys();
+  try { await call(); STK.flash(btn, true); K.at = Date.now() - 3000; }
+  catch (e) { Object.assign(K, { shade: prev.shade, quick: prev.quick, screenOn: prev.screenOn, vol: prev.vol }); renderKeys(); STK.fail(e); STK.flash(btn, false); }
+}
 async function sendKey(btn) {
+  pulse(btn);
+  if (btn.dataset.ktoggle) return keyToggle(btn, btn.dataset.ktoggle);
+  const key = btn.dataset.key;
+  if (['back', 'home', 'recents'].includes(key)) { K.shade = false; K.quick = false; renderKeys(); }
   await STK.busy(btn, async () => {
-    try { await STK.post('/key', { serial: STK.sel(), key: btn.dataset.key }, { timeout: 20000 }); STK.flash(btn, true); }
+    try { await STK.post('/key', { serial: STK.sel(), key }, { timeout: 20000 }); STK.flash(btn, true); if (key === 'volup' || key === 'voldown') setTimeout(() => pollKeystate(true), 400); if (key === 'power') { K.screenOn = K.screenOn === false; renderKeys(); setTimeout(() => pollKeystate(true), 800); } }
     catch (e) { STK.fail(e); STK.flash(btn, false); }
   });
 }
@@ -277,7 +313,7 @@ document.addEventListener('click', e => {
   const t = e.target.closest('button');
   if (!t) return;
   if (t.dataset.act) { const a = STK.actions[t.dataset.act]; if (a) a(); return; }
-  if (t.dataset.key && !t.closest('#view-phone')) return sendKey(t);
+  if ((t.dataset.key || t.dataset.ktoggle) && !t.closest('#view-phone')) return sendKey(t);
   if (t.dataset.gesture) return sendGesture(t);
   if (t.dataset.sessStop) return stopSession(state.sessions.find(s => s.id === t.dataset.sessStop), t);
   if (t.dataset.sessLog) return showSessionLog(t.dataset.sessLog);
@@ -311,15 +347,15 @@ document.addEventListener('change', async e => {
   renderQuickline();
 });
 
-STK.on('state', () => { renderAll(); });
+STK.on('state', () => { renderAll(); pollKeystate(); });
 STK.on('info', () => { renderStage(); renderPicker(); });
 STK.on('settings', () => { renderQuickline(); });
 STK.on('profiles', () => { renderQuickline(); });
 STK.on('offline', () => { renderStage(); });
 STK.on('library', () => { renderStrip(); renderMeter(); });
 STK.on('library-changed', () => STK.loadLibrary());
-STK.on('device-changed', () => { if ($('#preview-live').checked) previewShot(false); });
-STK.on('view', v => { if (v === 'console') { renderAll(); STK.loadLibrary(); if ($('#preview-live').checked) loopPreview(); } else stopPreview(); });
+STK.on('device-changed', () => { Object.assign(K, { shade: false, quick: false, screenOn: null, vol: null, prevVol: null }); renderKeys(); pollKeystate(true); if ($('#preview-live').checked) previewShot(false); });
+STK.on('view', v => { if (v === 'console') { renderAll(); pollKeystate(true); STK.loadLibrary(); if ($('#preview-live').checked) loopPreview(); } else stopPreview(); });
 STK.views.console = { onShow() { STK.loadLibrary(); } };
 setInterval(tick, 1000);
 renderAll();

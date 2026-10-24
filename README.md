@@ -1,4 +1,4 @@
-# Scrcpy Toolkit 2.1
+# Scrcpy Toolkit 2.2
 
 A portable Windows control center for scrcpy: mirror, record, screenshot, remote-control and manage your Android phone from a local dashboard.
 
@@ -10,6 +10,11 @@ Helper project around scrcpy v5.0.1. The scrcpy binaries in `core/scrcpy/` are u
 3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
+
+## What changed in 2.2
+- **Running apps:** new Phone > Running tab lists apps with live processes, which one is in front, recent-apps order and memory use, with Open, Stop and Mirror app. Auto-refreshes.
+- **Remote controls light up:** Shade, Quick, Screen and Mute are real toggles that show their state (Screen and Mute read the phone); every key gives press feedback.
+- **App list rebuilt:** one phone call with a fallback, friendly names, and the phone's own error message if it refuses.
 
 ## What changed in 2.1
 - **No more "offline" while recording.** The backend is now multi-threaded with a dedicated lane for status calls, so slow adb calls can no longer block the page. A supervisor restarts the backend if it ever dies. The page only reports a problem after three failed checks and never disables its buttons because of it.

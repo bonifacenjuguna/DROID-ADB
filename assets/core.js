@@ -1,4 +1,4 @@
-/* Scrcpy Toolkit 2.1 core: helpers, resilient API client, polling, dialogs, routing. */
+/* Scrcpy Toolkit 2.2 core: helpers, resilient API client, polling, dialogs, routing. */
 (() => {
 'use strict';
 const STK = window.STK = { views: {}, state: {

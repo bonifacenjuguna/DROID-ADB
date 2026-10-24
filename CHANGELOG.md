@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.0
+New
+- Phone > Running: apps with live processes, the app in front, recent-apps order, memory per app, auto refresh, Open / Stop / Mirror app / more.
+- Remote controls: Shade, Quick, Screen and Mute are highlighted toggles (Screen and Mute read the real phone state); all keys show press and result feedback. New Assistant key.
+- Apps: friendly names, copy package name, remembers the last Phone tab.
+
+Fixed
+- App list is more robust: one adb call with a fallback command, and an error that shows what the phone actually said, with a Try again button.
+
 ## 2.1.0
 Reliability rebuild plus a much larger feature set.
 
