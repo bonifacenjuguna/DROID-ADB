@@ -69,7 +69,7 @@ function Read-Body {
 
 function Get-Devices {
     if (-not (Test-Path -LiteralPath $Adb)) { return @{ devices = @(); message = 'adb.exe is missing from core/scrcpy.' } }
-    $r = Invoke-Adb 'devices -l' 6
+    $r = Invoke-Adb 'devices -l' 15
     $items = @()
     foreach ($line in (($r.out + "`n" + $r.err) -split "`r?`n")) {
         if ($line -match '^([^\s]+)\s+(device|unauthorized|offline)(?:\s+(.*))?$') {
@@ -88,7 +88,7 @@ function Get-DeviceInfo {
     $cmd = 'echo model=$(getprop ro.product.model);echo maker=$(getprop ro.product.manufacturer);echo release=$(getprop ro.build.version.release);echo sdk=$(getprop ro.build.version.sdk);echo size=$(wm size | tail -n 1);echo density=$(wm density | tail -n 1);echo df=$(df -k /data | tail -n 1);dumpsys battery'
     $sel = ''
     if ($Serial) { $sel = "-s $Serial " }
-    $r = Invoke-Adb ($sel + 'shell "' + $cmd + '"') 8
+    $r = Invoke-Adb ($sel + 'shell "' + $cmd + '"') 15
     $t = $r.out
     function Grab([string]$pattern) { if ($t -match $pattern) { return $Matches[1].Trim() } else { return '' } }
     $info = @{ id = $Serial }
@@ -109,21 +109,9 @@ function Get-DeviceInfo {
 }
 
 function Get-ToolkitScrcpyProcesses {
-    $expected = [IO.Path]::GetFullPath($Scrcpy)
     return @(Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue |
-        Where-Object {
-            $pathMatch = $false
-            if ($_.ExecutablePath) {
-                try { $pathMatch = ([IO.Path]::GetFullPath($_.ExecutablePath) -eq $expected) } catch {}
-            }
-            # Some Windows configurations return a blank ExecutablePath through CIM.
-            # The full path is still present in the command line for toolkit-launched processes.
-            $commandLine = [string]$_.CommandLine
-            $commandMatch = $commandLine.IndexOf($expected, [StringComparison]::OrdinalIgnoreCase) -ge 0
-            $pathMatch -or $commandMatch
-        })
+        Where-Object { $_.ExecutablePath -and ([IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($Scrcpy)) })
 }
-
 function Get-ToolkitSessions {
     $sessions = @()
     foreach ($proc in (Get-ToolkitScrcpyProcesses)) {
@@ -347,7 +335,7 @@ try {
                             $p = Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue
                             if ($p -and $p.MainWindowHandle -ne 0 -and $p.CloseMainWindow()) { $requested++ }
                         }
-                        $deadline = (Get-Date).AddSeconds(8)
+                        $deadline = (Get-Date).AddSeconds(3)
                         do {
                             Start-Sleep -Milliseconds 250
                             $remaining = @($targets | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue })
