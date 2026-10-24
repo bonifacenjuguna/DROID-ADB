@@ -228,7 +228,7 @@ function renderStageActions() {
   rb.classList.toggle('live', !!rec);
   rb.dataset.act = rec ? 'stop' : 'record';
   rb.innerHTML = rec ? `${icon('stop')}<span>Stop recording <time id="rec-clock">${clock(rec.started)}</time></span>` : `${icon('record')}<span>Record</span>`;
-  $('#keys .key, #text-send, #text-input').forEach(b => b.disabled = !dev || state.busy);
+  $$('#keys .key, #text-send, #text-input').forEach(b => b.disabled = !dev || state.busy);
 }
 function renderSessions() {
   const box = $('#sessions'), list = state.sessions;
