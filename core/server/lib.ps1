@@ -18,13 +18,14 @@ $SettingChoices = @{
     codec     = @('h264', 'h265')
     audioSource = @('output', 'mic')
     preset    = @('battery', 'balanced', 'quality', 'max', 'custom')
+    pollInterval = @(4, 6, 10, 15)
 }
 $Default = @{
     maxSize = 1280; maxFps = 30; bitrate = '8M'; codec = 'h264'
     audio = $true; audioSource = 'output'
     stayAwake = $true; turnScreenOff = $false; showTouches = $false; alwaysOnTop = $false
     fullscreen = $false; borderless = $false; viewOnly = $false; powerOffOnClose = $false
-    preset = 'balanced'
+    preset = 'balanced'; pollInterval = 10
 }
 
 function Get-Prop {
@@ -41,7 +42,7 @@ function ConvertTo-Settings {
     param($Source)
     $s = @{}
     foreach ($key in $Default.Keys) { $s[$key] = Get-Prop $Source $key $Default[$key] }
-    foreach ($key in @('maxSize', 'maxFps')) {
+    foreach ($key in @('maxSize', 'maxFps', 'pollInterval')) {
         $s[$key] = [int]$s[$key]
         if ($s[$key] -notin $SettingChoices[$key]) { throw "Unsupported value for $key." }
     }
