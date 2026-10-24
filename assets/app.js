@@ -609,7 +609,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
   await refreshAll(false);
   setInterval(tickClocks, 1000);
   setInterval(async () => {
-    if (document.hidden || state.polling) return;
+    if (document.hidden || state.polling || state.busy) return;
     state.polling = true;
     try {
       const ok = await loadStatus();
