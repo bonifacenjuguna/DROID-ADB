@@ -8,6 +8,13 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Confirm a missing backend or dashboard file produces a useful error instead of silently failing.
 - [ ] Refresh the dashboard and confirm the status and device information reload.
 
+## Console live preview
+- [ ] With an authorized phone connected, select Update and confirm its screen appears inside the phone frame, clipped to the rounded display.
+- [ ] Confirm the image does not cover the bezel/notch or the device details and controls.
+- [ ] Enable live preview, confirm it refreshes at the configured interval, then disable it and confirm polling stops.
+- [ ] Disconnect the phone or trigger a preview error and confirm the last good image remains visible with a readable status message.
+- [ ] Switch between USB and Wi-Fi devices and confirm the preview follows the selected phone.
+
 ## Device and mirroring
 - [ ] Connect an Android device with USB debugging enabled and accept the debugging prompt.
 - [ ] Confirm the device appears in Overview and Device diagnostics.

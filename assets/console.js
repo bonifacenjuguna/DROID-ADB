@@ -11,7 +11,7 @@ function phoneSvg() {
   const W = 200, H = 400, sx = 16, sy = 16, sw = 168, sh = 368;
   if (!dev) {
     return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="No phone connected"><rect class="ph-dash" x="6" y="6" width="188" height="388" rx="30"/>
-      <g transform="translate(76 150) scale(2.2)" class="ph-ic"><path d="M9 3v5M15 3v5M6 8h12v3.5a6 6 0 01-12 0zM12 17.5V21"/></g>
+      <g transform="translate(76 150) scale(2.2)" class="ph-ic"><path d="M8.5 3v5M15.5 3v5M6 8h12v3.5a6 6 0 01-12 0zM12 17.5V21"/></g>
       <text class="ph-sub" x="100" y="260" text-anchor="middle">No phone connected</text></svg>`;
   }
   const level = info && info.battery >= 0 ? info.battery : null;
@@ -19,7 +19,9 @@ function phoneSvg() {
   const low = level !== null && level <= 15 && !info.charging;
   let inner = `<defs><clipPath id="scr"><rect x="${sx}" y="${sy}" width="${sw}" height="${sh}" rx="22"/></clipPath></defs>`;
   inner += `<rect class="ph-body" x="6" y="6" width="188" height="388" rx="30"/><rect class="ph-screen" x="${sx}" y="${sy}" width="${sw}" height="${sh}" rx="22"/>`;
-  if (level !== null) {
+  if (previewUrl) {
+    inner += `<image class="ph-live-screen" href="${esc(previewUrl)}" x="${sx}" y="${sy}" width="${sw}" height="${sh}" preserveAspectRatio="xMidYMid slice" clip-path="url(#scr)"/>`;
+  } else if (level !== null) {
     inner += `<g clip-path="url(#scr)"><rect class="${low ? 'ph-low' : 'ph-fill'}" x="${sx}" y="${sy + sh - fillH}" width="${sw}" height="${fillH}"/><line class="ph-edge" x1="${sx}" x2="${sx + sw}" y1="${sy + sh - fillH}" y2="${sy + sh - fillH}" ${low ? 'style="stroke:var(--bad)"' : ''}/></g>`;
     inner += `<text class="ph-num" x="100" y="206" text-anchor="middle">${level}<tspan font-size="24" dx="2">%</tspan></text>`;
     inner += `<text class="ph-sub" x="100" y="232" text-anchor="middle">${info.charging ? 'Charging' : (low ? 'Battery low' : 'Battery')}</text>`;
@@ -28,7 +30,7 @@ function phoneSvg() {
   }
   inner += `<rect x="78" y="26" width="44" height="12" rx="6" fill="var(--panel-2)"/>`;
   if (rec) inner += `<circle class="ph-rec" cx="36" cy="34" r="6"/><text class="ph-sub" x="48" y="38">REC</text>`;
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${level === null ? 'Phone' : 'Phone battery ' + level + ' percent'}">${inner}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${previewUrl ? 'Live phone screen preview' : (level === null ? 'Phone' : 'Phone battery ' + level + ' percent')}">${inner}</svg>`;
 }
 
 function renderStage() {
@@ -46,7 +48,7 @@ function renderStage() {
     const name = info && info.model ? [info.manufacturer, info.model].filter(Boolean).join(' ') : dev.id;
     const wifi = dev.transport === 'wifi';
     setHtml(idEl, `<h2>${esc(name)}</h2><p>${info && info.android ? 'Android ' + esc(info.android) + (info.sdk ? ' (API ' + esc(info.sdk) + ')' : '') : 'Reading device details'}</p>
-      <div class="chips"><span class="chip sm ok"><i class="dot"></i><b>Ready</b></span><span class="chip sm">${icon(wifi ? 'wifi' : 'usb', 'sm')}<b>${wifi ? 'Wi-Fi' : 'USB'}</b></span>${info && info.charging ? `<span class="chip sm">${icon('bolt', 'sm')}<b>Charging${info.power ? ' (' + esc(info.power) + ')' : ''}</b></span>` : ''}</div>`);
+      <div class="chips"><span class="chip sm ok"><i class="dot"></i><b>Ready</b></span><span class="chip sm">${icon(wifi ? 'wifi' : 'usb', 'sm')}<b>${wifi ? 'Wi-Fi' : 'USB'}</b></span>${info && info.battery >= 0 ? `<span class="chip sm"><b>Battery ${info.battery}%</b></span>` : ''}${info && info.charging ? `<span class="chip sm">${icon('bolt', 'sm')}<b>Charging${info.power ? ' (' + esc(info.power) + ')' : ''}</b></span>` : ''}<label class="switch sm preview-switch" title="Toggle live screen preview"><input type="checkbox" id="preview-live" aria-label="Live screen preview" ${STK.store.get('preview-live', false) ? 'checked' : ''}><i></i></label><button class="btn sm" id="preview-now" title="Refresh phone screen preview">${icon('refresh', 'sm')}<span>Update</span></button></div><p class="hint preview-note" id="preview-note">${esc(previewStatus)}</p>`);
     const rows = [];
     if (info && info.width) rows.push(['Screen', `${info.width} × ${info.height}` + (info.density ? ` · ${info.density} dpi` : '')]);
     if (info && info.storageTotal) rows.push(['Free storage', `${bytes(info.storageFree)} of ${bytes(info.storageTotal)}`]);
@@ -250,31 +252,33 @@ function renderQuickline() {
 }
 
 /* ---------- live preview ---------- */
-let previewTimer = null, previewBusy = false, previewFails = 0, previewUrl = '';
+let previewTimer = null, previewBusy = false, previewFails = 0, previewUrl = '', previewStatus = 'Use Update to load the phone screen, or enable live preview.';
 async function previewShot(manual) {
   if (previewBusy) return;
   const id = STK.sel();
-  if (!id) { $('#preview-note').textContent = 'Connect a phone to see its screen.'; return; }
+  if (!id) { previewStatus = 'Connect a phone to see its screen.'; renderStage(); return; }
   previewBusy = true;
   const btn = $('#preview-now');
-  if (manual) btn.classList.add('is-busy');
+  if (manual && btn) btn.classList.add('is-busy');
   try {
     const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 30000);
-    const res = await fetch('/api/preview-image?id=' + encodeURIComponent(id) + '&t=' + Date.now(), { cache: 'no-store', signal: ctl.signal });
-    clearTimeout(to);
+    let res;
+    try { res = await fetch('/api/preview-image?id=' + encodeURIComponent(id) + '&t=' + Date.now(), { cache: 'no-store', signal: ctl.signal }); }
+    finally { clearTimeout(to); }
     if (!res.ok) { let m = 'Preview failed.'; try { m = (await res.json()).error || m; } catch (e) {} throw new Error(m); }
     const blob = await res.blob();
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    const previousUrl = previewUrl;
     previewUrl = URL.createObjectURL(blob);
-    $('#preview-frame').innerHTML = `<img alt="Phone screen" src="${previewUrl}">`;
-    $('#preview-frame')._h = null;
-    $('#preview-note').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    previewStatus = 'Updated ' + new Date().toLocaleTimeString();
     previewFails = 0;
+    renderStage();
+    if (previousUrl) URL.revokeObjectURL(previousUrl);
   } catch (e) {
     previewFails++;
-    $('#preview-note').textContent = e.name === 'AbortError' ? 'The phone took too long to answer.' : e.message;
-    if (previewFails >= 3 && $('#preview-live').checked) { $('#preview-live').checked = false; stopPreview(); STK.toast('Live preview was turned off after repeated errors.', 'bad'); }
-  } finally { previewBusy = false; btn.classList.remove('is-busy'); }
+    previewStatus = e.name === 'AbortError' ? 'The phone took too long to answer.' : e.message;
+    renderStage();
+    if (previewFails >= 3 && $('#preview-live') && $('#preview-live').checked) { $('#preview-live').checked = false; STK.store.set('preview-live', false); stopPreview(); STK.toast('Live preview was turned off after repeated errors.', 'bad'); }
+  } finally { previewBusy = false; if (btn) btn.classList.remove('is-busy'); }
 }
 function loopPreview() {
   clearTimeout(previewTimer);
@@ -288,6 +292,12 @@ function loopPreview() {
   run();
 }
 function stopPreview() { clearTimeout(previewTimer); }
+function clearPreview(message) {
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = '';
+  previewStatus = message;
+  renderStage();
+}
 
 /* ---------- rendering and timers ---------- */
 function renderAll() { renderStage(); renderSessions(); renderFeed(); renderStrip(); renderMeter(); renderQuickline(); renderPicker(); }
@@ -327,9 +337,14 @@ $('#text-send').addEventListener('click', sendText);
 $('#text-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendText(); });
 $('#url-send').addEventListener('click', sendUrl);
 $('#url-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendUrl(); });
-$('#preview-now').addEventListener('click', () => previewShot(true));
-$('#preview-live').addEventListener('change', e => { STK.store.set('preview-live', e.target.checked); if (e.target.checked) loopPreview(); else stopPreview(); });
-$('#preview-live').checked = !!STK.store.get('preview-live', false);
+document.addEventListener('click', e => { if (e.target.closest('#preview-now')) previewShot(true); });
+document.addEventListener('change', e => {
+  if (e.target.id !== 'preview-live') return;
+  STK.store.set('preview-live', e.target.checked);
+  previewStatus = e.target.checked ? 'Live preview enabled.' : 'Live preview paused.';
+  const note = $('#preview-note'); if (note) note.textContent = previewStatus;
+  if (e.target.checked) loopPreview(); else stopPreview();
+});
 $('#device-select').addEventListener('change', async e => {
   state.selected = e.target.value; STK.store.set('device', state.selected);
   if (!state.info[state.selected]) await STK.loadInfo(state.selected);
@@ -354,7 +369,7 @@ STK.on('profiles', () => { renderQuickline(); });
 STK.on('offline', () => { renderStage(); });
 STK.on('library', () => { renderStrip(); renderMeter(); });
 STK.on('library-changed', () => STK.loadLibrary());
-STK.on('device-changed', () => { Object.assign(K, { shade: false, quick: false, screenOn: null, vol: null, prevVol: null }); renderKeys(); pollKeystate(true); if ($('#preview-live').checked) previewShot(false); });
+STK.on('device-changed', () => { clearPreview('Selected phone changed. Select Update to load its screen.'); Object.assign(K, { shade: false, quick: false, screenOn: null, vol: null, prevVol: null }); renderKeys(); pollKeystate(true); if ($('#preview-live').checked) previewShot(false); });
 STK.on('view', v => { if (v === 'console') { renderAll(); pollKeystate(true); STK.loadLibrary(); if ($('#preview-live').checked) loopPreview(); } else stopPreview(); });
 STK.views.console = { onShow() { STK.loadLibrary(); } };
 setInterval(tick, 1000);
