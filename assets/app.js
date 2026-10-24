@@ -612,16 +612,20 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
   go((location.hash || '#console').slice(1));
   await refreshAll(false);
   setInterval(tickClocks, 1000);
-  setInterval(async () => {
-    if (document.hidden || state.polling || state.busy) return;
-    state.polling = true;
-    try {
-      const ok = await loadStatus();
-      if (ok) {
-        await Promise.all([loadSessions(), loadDevices(false), loadActivity()]);
-        if (state.view === 'library') await loadLibrary();
-      }
-    } finally { state.polling = false; }
-  }, 6000);
+  const pollLoop = async () => {
+    if (!document.hidden && !state.polling && !state.busy) {
+      state.polling = true;
+      try {
+        const ok = await loadStatus();
+        if (ok) {
+          await Promise.all([loadSessions(), loadDevices(false), loadActivity()]);
+          if (state.view === 'library') await loadLibrary();
+        }
+      } finally { state.polling = false; }
+    }
+    const seconds = Number(state.settings && state.settings.pollInterval) || 10;
+    setTimeout(pollLoop, Math.max(4000, Math.min(15000, seconds * 1000)));
+  };
+  setTimeout(pollLoop, 6000);
 })();
 })();
