@@ -107,6 +107,18 @@ async function loadStatus() {
     $('#rail-version').textContent = 'v' + String(s.version).split('.').slice(0, 2).join('.');
     state.disk = s.disk;
   } catch (e) {
+    // A failed health endpoint alone does not prove the backend is offline.
+    // Probe a second lightweight endpoint before changing the global status.
+    try {
+      await api('/session', { signal: AbortSignal.timeout(5000) });
+      state.online = true;
+      state.healthFailures = 0;
+      $('#conn-chip').className = 'chip warn';
+      $('#conn-chip').innerHTML = '<i class="dot"></i><b>Backend online · retrying status</b>';
+      $('#conn-chip').title = 'The health check failed, but the session API responded. Retrying the health check.';
+      $('#rail-dot').className = 'dot ok';
+      return true;
+    } catch (probeError) {}
     state.healthFailures = (state.healthFailures || 0) + 1;
     if (state.online && state.healthFailures < 3) {
       $('#conn-chip').className = 'chip warn';
