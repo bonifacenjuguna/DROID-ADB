@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+- Moved live screen preview into the phone mockup, clipped to the rounded display area.
+- Moved live-preview toggle and manual Update action beside device connection and battery details.
+- Kept the last successful preview visible after refresh failures and added status feedback.
+
 ## 2.2.0
 New
 - Phone > Running: apps with live processes, the app in front, recent-apps order, memory per app, auto refresh, Open / Stop / Mirror app / more.
