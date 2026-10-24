@@ -292,6 +292,12 @@ function loopPreview() {
   run();
 }
 function stopPreview() { clearTimeout(previewTimer); }
+function clearPreview(message) {
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = '';
+  previewStatus = message;
+  renderStage();
+}
 
 /* ---------- rendering and timers ---------- */
 function renderAll() { renderStage(); renderSessions(); renderFeed(); renderStrip(); renderMeter(); renderQuickline(); renderPicker(); }
@@ -363,7 +369,7 @@ STK.on('profiles', () => { renderQuickline(); });
 STK.on('offline', () => { renderStage(); });
 STK.on('library', () => { renderStrip(); renderMeter(); });
 STK.on('library-changed', () => STK.loadLibrary());
-STK.on('device-changed', () => { Object.assign(K, { shade: false, quick: false, screenOn: null, vol: null, prevVol: null }); renderKeys(); pollKeystate(true); if ($('#preview-live').checked) previewShot(false); });
+STK.on('device-changed', () => { clearPreview('Selected phone changed. Select Update to load its screen.'); Object.assign(K, { shade: false, quick: false, screenOn: null, vol: null, prevVol: null }); renderKeys(); pollKeystate(true); if ($('#preview-live').checked) previewShot(false); });
 STK.on('view', v => { if (v === 'console') { renderAll(); pollKeystate(true); STK.loadLibrary(); if ($('#preview-live').checked) loopPreview(); } else stopPreview(); });
 STK.views.console = { onShow() { STK.loadLibrary(); } };
 setInterval(tick, 1000);
