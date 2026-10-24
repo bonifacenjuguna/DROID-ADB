@@ -442,6 +442,9 @@ const FIELDS = {
     { k: 'audio', t: 'sw', n: 'Capture phone audio', d: 'Depends on Android version and app restrictions.' },
     { k: 'audioSource', t: 'seg', n: 'Audio source', d: 'Use the microphone to record your voice.', needs: 'audio' }
   ],
+  dashboard: [
+    { k: 'pollInterval', t: 'seg', n: 'Refresh interval', d: 'How often the dashboard checks devices and sessions. Slower intervals reduce ADB contention.' }
+  ],
   window: [
     { k: 'stayAwake', t: 'sw', n: 'Keep the phone awake', d: 'Stops the screen from sleeping while connected.' },
     { k: 'turnScreenOff', t: 'sw', n: 'Turn the phone screen off', d: 'Mirror from the PC with the phone display dark.' },
