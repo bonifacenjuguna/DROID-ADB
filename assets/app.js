@@ -7,7 +7,7 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
 const state = {
   view: 'console', online: false, healthFailures: 0, polling: false, version: '', status: null,
-  devices: [], selected: '', info: {}, sessions: [], recs: [], shots: [], disk: null,
+  devices: [], selected: '', info: {}, sessions: [], sessionRequest: 0, recs: [], shots: [], disk: null,
   activity: [], settings: null, tab: 'recordings', filter: '', sort: 'new',
   previewMode: 'mirror', busy: false, pendingKey: '', fileTarget: null
 };
@@ -146,8 +146,25 @@ async function loadInfo(id) {
 }
 async function loadSessions() {
   if (!state.online) return;
-  try { state.sessions = (await api('/session')).sessions || []; } catch (e) { state.sessions = []; }
-  renderSessions(); renderStageActions();
+  const request = ++state.sessionRequest;
+  try {
+    const result = await api('/session', { signal: AbortSignal.timeout(10000) });
+    // Ignore older responses: a slow poll must never overwrite a newer session state.
+    if (request !== state.sessionRequest) return;
+    state.sessions = Array.isArray(result.sessions) ? result.sessions : [];
+    renderSessions();
+    renderStageActions();
+  } catch (e) {
+    // A failed session poll is not proof that the backend or session stopped.
+    // Keep the last confirmed state until a successful poll reconciles it.
+    if (request === state.sessionRequest) {
+      const chip = $('#session-chip');
+      if (chip) {
+        chip.className = 'chip sm warn';
+        chip.title = 'Session status could not be refreshed; retrying.';
+      }
+    }
+  }
 }
 async function loadActivity() {
   if (!state.online) return;
@@ -349,7 +366,19 @@ async function run(act) {
     if (act === 'mirror' || act === 'record') {
       const r = await post('/action', { action: act, serial: dev });
       toast(r.message);
-      setTimeout(async () => { await loadSessions(); if (!state.sessions.length) explainFailure(); loadActivity(); }, 3200);
+      // Reconcile against the backend repeatedly while scrcpy starts; do not
+      // let a guessed frontend state become the source of truth.
+      let checks = 0;
+      const reconcileStart = async () => {
+        await loadSessions();
+        if (state.sessions.length || ++checks >= 8) {
+          if (!state.sessions.length) explainFailure();
+          await loadActivity();
+          return;
+        }
+        setTimeout(reconcileStart, 500);
+      };
+      setTimeout(reconcileStart, 350);
     } else if (act === 'screenshot') {
       const r = await post('/action', { action: 'screenshot', serial: dev });
       toast(r.message + ' ' + r.name);
@@ -357,7 +386,18 @@ async function run(act) {
     } else if (act === 'stop') {
       const r = await post('/action', { action: 'stop' });
       toast(r.message, r.forced ? 'bad' : 'ok');
-      setTimeout(() => { loadSessions(); loadLibrary(); }, 600);
+      // Stop can close windows externally too; keep reconciling until the API
+      // confirms that all toolkit scrcpy processes have exited.
+      let checks = 0;
+      const reconcileStop = async () => {
+        await loadSessions();
+        if (!state.sessions.length || ++checks >= 8) {
+          await loadLibrary();
+          return;
+        }
+        setTimeout(reconcileStop, 350);
+      };
+      setTimeout(reconcileStop, 150);
     }
   } catch (e) { toast(e.message, 'bad'); }
   state.busy = false; state.pendingAction = '';
