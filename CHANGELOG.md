@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.1.0
+Reliability rebuild plus a much larger feature set.
+
+Fixed
+- Dashboard no longer shows the backend as offline while mirroring or recording; the backend is multi-threaded with a fast lane and a supervisor, and the page tolerates failed checks.
+- Buttons now show pressed, busy and result states; Mirror/Record are real toggles.
+- Recording stop is graceful (close window, Ctrl+C, then force after a configurable grace time).
+
+New
+- Schema-driven Settings (about 68 options), profiles, import/export, per-field reset, live command preview.
+- Phone page: quick settings, brightness/volume/timeout, app manager (launch, stop, clear, uninstall, disable, APK install and export, mirror one app), file browser, phone log, adb shell.
+- Wireless pairing and discovery, power actions, screen preview, open URL on phone, gestures, media keys.
+- Library: playback with seeking, rename, bulk select/delete, cleanup preview.
+- Background recording, start countdown, time limit, system check, backend log, restart and quit.
+
+Changed
+- Port, folders, timeouts, tool paths and file name templates moved from code into settings.
+
 ## 2.0.0
 Full redesign of the dashboard and a larger backend.
 

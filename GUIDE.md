@@ -1,30 +1,27 @@
 # Quick Guide
 
 ## First run
-1. Extract the complete ZIP to a writable folder.
-2. Run `Launch.bat`. The dashboard opens at http://127.0.0.1:47821/.
-3. If the page says the backend is offline, run `Launch.bat` again and reload.
+1. Extract the full ZIP, run `Launch.bat`. The dashboard opens at http://127.0.0.1:47821/.
+2. If the banner says the backend is not answering, wait a few seconds (it restarts itself) or run `Launch.bat` again.
 
 ## Connect Android
-- Turn on Developer options and USB debugging.
-- Use a USB data cable, unlock the phone, and accept the debugging prompt.
-- The Console shows the phone with its battery level once it is ready.
+Turn on Developer options and USB debugging, use a data cable, unlock the phone and accept the prompt.
 
 ## Everyday use
-- **Mirror** opens an interactive scrcpy window.
-- **Record** opens one window that mirrors and records to `Recordings/` as MKV. Close the window normally to finish the file.
-- **Screenshot** saves a PNG to `Screenshots/`.
-- **Remote controls** send Back, Home, Recents, volume, power and text to the phone.
-- Press `Ctrl+K` for the command palette. Keys: `1`-`4` switch pages, `M` mirror, `R` record or stop, `S` screenshot.
+- **Mirror** and **Record** are toggles: click once to start, again to stop. Record is disabled while a mirror window is open (and the reverse) because the phone allows one capture at a time.
+- Turn on "Record without a window" in Settings to record in the background; stop it from the dashboard.
+- **Screenshot** saves a PNG. **Screen preview** shows the phone screen in the page.
+- **Phone** page: quick settings (Wi-Fi, Bluetooth, brightness, volume...), apps, files, log and shell.
+- **Library**: play, rename, delete, bulk delete and clean up by age.
+- Shortcuts: `Ctrl+K` palette, `1`-`5` pages, `M` mirror, `R` record, `S` screenshot.
 
 ## Wi-Fi
-Plug the phone in once, open Devices, choose "Switch this phone to Wi-Fi", then unplug. Both devices must share a network. You can also connect to an address like 192.168.1.20:5555.
+Devices page: "Switch this phone to Wi-Fi" with the cable plugged in, or pair with the code from Wireless debugging (Android 11+) and use "Find phones".
 
 ## Settings
-Pick a preset or tune each value. Changes save to `Config/settings.json` and apply to the next session. The command preview shows exactly what scrcpy will run.
+Everything is configurable: quality presets, saved profiles, folders, file name templates ({date}, {time}, {model}), ports and timeouts. Items marked "restart" apply after a backend restart. The command preview shows the exact scrcpy command.
 
 ## Troubleshooting
-- No device: check the cable, USB debugging, unlock, and authorization, then use Restart ADB on Devices.
-- scrcpy closes immediately: a toast shows the last error. Full output is in `Logs/scrcpy-last.log`.
-- Port busy: close another instance, or change 47821 in `core/server/server.ps1`, `Launch.bat` and `assets/app.js`.
-- Missing scrcpy: extract the full ZIP again and keep `core/scrcpy/` intact.
+- No device: check cable, USB debugging, authorization; use Restart ADB on Devices, or run the system check.
+- scrcpy closes immediately: the toast shows the reason; full output is in `Logs/session-<id>.log`.
+- Port busy: change the port in Settings (restart needed) or close the other instance.

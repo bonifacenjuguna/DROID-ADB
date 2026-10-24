@@ -50,4 +50,14 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Deleting a file in progress is refused; deleting a finished file asks first.
 - [ ] Command preview matches the real scrcpy command line for Mirror and Record.
 - [ ] `Mirror.bat` and `Record.bat` run the same command as the dashboard.
-- [ ] Opening `index.html` directly (file://) still connects to the backend.
+- [ ] Opening `index.html` directly (file://) shows the "open through the toolkit" message instead of a broken page.
+
+## Added in 2.1.0 (Windows, real device; mark anything untested)
+- [ ] Mirror, then close the window: the toggle returns to "Mirror" within a few seconds. Backend chip stays "Backend online" the whole time.
+- [ ] Record with a window, stop from the dashboard: the file finalizes and plays in the Library.
+- [ ] Settings, "Record without a window": start, wait, press Stop. Confirm the file is playable (this exercises the Ctrl+C path; untested outside Windows).
+- [ ] Kill the backend process in Task Manager: the banner appears, the supervisor restarts it, the page reconnects, running scrcpy windows are still listed.
+- [ ] Phone page: toggles (Wi-Fi, Bluetooth, dark mode), brightness, apps (open, stop, info, APK install), files (browse, copy, upload, mkdir), log, shell.
+- [ ] Devices: pairing, Find phones, power actions ask for confirmation, System check is readable.
+- [ ] Change the port in Settings, restart the backend, confirm Launch.bat opens the new port.
+- [ ] Library: rename, bulk delete, cleanup preview, Show in folder.

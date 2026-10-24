@@ -1,39 +1,30 @@
-# Scrcpy Toolkit
+# Scrcpy Toolkit 2.1
 
-A portable Windows control center for scrcpy: mirror, record, screenshot, remote-control and manage your Android phone.
+A portable Windows control center for scrcpy: mirror, record, screenshot, remote-control and manage your Android phone from a local dashboard.
 
-This is a helper project around scrcpy v5.0.1. The original upstream binaries are unmodified. See LICENSE.txt for the upstream license.
+Helper project around scrcpy v5.0.1. The scrcpy binaries in `core/scrcpy/` are unmodified (Apache 2.0, see LICENSE.txt).
 
 ## Start
-1. Download the repository ZIP and extract it fully.
-2. Double-click Launch.bat.
-3. The launcher starts the local backend, checks its health, and opens the dashboard at http://127.0.0.1:47821/.
-4. Keep the local backend running while using the dashboard.
+1. Extract the whole ZIP to a writable folder.
+2. Double-click `Launch.bat`. It starts the backend under a supervisor and opens http://127.0.0.1:47821/ (port is a setting).
+3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
-No Node.js, Python, cloud account, or paid API is required. The backend uses Windows PowerShell and .NET components included with Windows.
+Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
 
-## Features
-- Console with a live device stage: model, Android version, battery, screen size and storage.
-- One-click mirror, recording (MKV), and phone screenshots.
-- Remote controls (Back, Home, Recents, volume, power, notifications) and a text sender.
-- Wi-Fi pairing, multi-device picker, and ADB restart.
-- Live session timers, activity feed, and readable errors when scrcpy closes early.
-- Library for recordings and screenshots with filter, sort, delete, and age-based cleanup.
-- Presets, codec and audio options, and a live command preview.
-- Command palette (Ctrl+K), keyboard shortcuts, light and dark themes.
-- Inline SVG icons only. Nothing is loaded from the internet, and the API listens on 127.0.0.1 only.
+## What changed in 2.1
+- **No more "offline" while recording.** The backend is now multi-threaded with a dedicated lane for status calls, so slow adb calls can no longer block the page. A supervisor restarts the backend if it ever dies. The page only reports a problem after three failed checks and never disables its buttons because of it.
+- **Buttons show what happened.** Mirror and Record are real toggle buttons (pressed, busy spinner, live timer). Every action shows a busy state and a success or failure flash.
+- **Nothing hardcoded.** About 68 settings in 8 groups: port, workers, folders, adb/scrcpy paths, timeouts, file name templates, refresh rates, stop grace time, extra scrcpy arguments and more. Settings, presets, named profiles, import/export and reset are all in the Settings page, which is built from the backend schema.
+- **Much more to do.** Quick phone settings, app manager, phone file browser, phone log, adb shell, screen preview, wireless pairing and discovery, power actions, background recording, countdown, mirror a single app, library playback, rename and bulk delete, system check.
 
 ## Layout
-- index.html and assets/ are the dashboard.
-- Launch.bat starts the backend.
-- core/server/ contains the local PowerShell API.
-- core/scripts/ contains standalone Mirror and Record launchers.
-- core/server/lib.ps1 holds shared settings and launch logic.
-- Config/ contains settings.
-- Recordings/, Screenshots/ and Logs/ are local data folders.
+- `index.html`, `assets/`: dashboard.
+- `core/server/`: PowerShell backend (`server.ps1`, `supervisor.ps1`, `lib.ps1`, `handlers.ps1`).
+- `core/scripts/`: `start.ps1`, `launch.ps1` (used by `Mirror.bat` and `Record.bat`).
+- `Config/`: settings and profiles. `Recordings/`, `Screenshots/`, `Logs/`: data.
 
-## Runtime files
-The original scrcpy executables, server, and DLLs are kept together in core/scrcpy/. They have not been modified. Keep this folder in place because scrcpy loads its supporting files from beside the executable.
+## Testing status
+Developed and tested with PowerShell 7 on Linux using fake adb and scrcpy programs and a real browser (backend load tests, toggle flows, reconnect after backend loss, mobile layout). These Windows-only parts could not be run and need a quick check on a real PC: stopping a background (windowless) recording with Ctrl+C, finding the scrcpy child process, and the Open folder / Show in folder actions. See `docs/REGRESSION-CHECKLIST.md`.
 
-## Safety and license
-The backend binds only to localhost and does not expose remote network access. Use this toolkit only from a folder you trust. scrcpy is distributed under Apache License 2.0; see LICENSE.txt.
+## Safety
+The backend binds to 127.0.0.1 only, validates the Host and Origin headers and requires a custom header on every change request. Phone file changes are limited to /sdcard.
