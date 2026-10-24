@@ -428,7 +428,8 @@ const SEG = {
   maxFps: [[15, '15'], [24, '24'], [30, '30'], [45, '45'], [60, '60']],
   bitrate: [['2M', '2'], ['4M', '4'], ['8M', '8'], ['12M', '12'], ['16M', '16']],
   codec: [['h264', 'H.264'], ['h265', 'H.265']],
-  audioSource: [['output', 'Phone sound'], ['mic', 'Microphone']]
+  audioSource: [['output', 'Phone sound'], ['mic', 'Microphone']],
+  pollInterval: [[4, '4 sec'], [6, '6 sec'], [10, '10 sec'], [15, '15 sec']]
 };
 const FIELDS = {
   video: [
