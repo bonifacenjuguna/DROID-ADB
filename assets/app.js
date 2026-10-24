@@ -228,7 +228,7 @@ function renderStageActions() {
   rb.classList.toggle('live', !!rec);
   rb.dataset.act = rec ? 'stop' : 'record';
   rb.innerHTML = rec ? `${icon('stop')}<span>Stop recording <time id="rec-clock">${clock(rec.started)}</time></span>` : `${icon('record')}<span>Record</span>`;
-  $('#keys .key').forEach(b => {
+  $$('#keys .key').forEach(b => {
     const pending = state.pendingKey === b.dataset.key;
     b.disabled = !dev || state.busy || !!state.pendingKey;
     b.classList.toggle('is-pending', pending);
