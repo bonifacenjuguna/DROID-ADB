@@ -39,6 +39,7 @@ function eta(serial, L) {
 const fmtMin = m => m >= 60 ? Math.floor(m / 60) + ' h ' + (Math.round(m % 60) ? Math.round(m % 60) + ' min' : '').trim() : Math.max(1, Math.round(m)) + ' min';
 function spark(serial) {
   const h = HIST[serial] || []; if (h.length < 3) return '';
+  const vs = h.map(p => p.v); if (Math.max(...vs) - Math.min(...vs) < 2) return '';
   const W = 120, H = 28, t0 = h[0].t, span = Math.max(1, h[h.length - 1].t - t0);
   const pts = h.map(p => ((p.t - t0) / span * W).toFixed(1) + ',' + (H - 2 - p.v / 100 * (H - 4)).toFixed(1)).join(' ');
   return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}"/></svg>`;
@@ -54,16 +55,45 @@ function checkAlerts() {
 }
 const lowDisk = () => { const lim = Number(S().lowDiskGb) || 0, d = state.disk; return lim > 0 && d && d.total && d.free < lim * 1073741824; };
 
+/* ---------- battery ring (built once, updated in place so animations never restart) ---------- */
+const WAVE = 'M0 4 C12 -2 38 -2 50 4 S88 10 100 4 S138 -2 150 4 S188 10 200 4 V90 H0 Z';
+function clearBattery() { const b = $('#battery'); if (b._built || b.innerHTML) { b._built = false; b.innerHTML = ''; } }
+function buildBattery(box) {
+  box.innerHTML = `<div class="bat-main"><div class="ring" role="img"><svg class="ring-svg" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="ringgrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--ok)"/><stop offset="1" stop-color="#5ce1e6"/></linearGradient><clipPath id="ringclip"><circle cx="50" cy="50" r="36"/></clipPath></defs>
+    <circle class="r-track" cx="50" cy="50" r="44" pathLength="100"/>
+    <g clip-path="url(#ringclip)"><g class="r-liquid"><path class="wv w1" d="${WAVE}"/><path class="wv w2" d="${WAVE}" transform="translate(-30 2)"/></g><circle class="bub b1" cx="40" cy="80" r="1.8"/><circle class="bub b2" cx="55" cy="84" r="1.4"/><circle class="bub b3" cx="64" cy="78" r="2"/></g>
+    <circle class="r-arc" cx="50" cy="50" r="44" pathLength="100"/><circle class="r-flow" cx="50" cy="50" r="44" pathLength="100"/></svg>
+    <div class="ring-in"><b><span class="bn">0</span><small>%</small></b>${icon('bolt')}</div></div>
+    <div class="bat-side"><div class="bat-line"></div><div class="bat-eta"></div></div><div class="spark-wrap"></div></div>`;
+  box._built = true; box._k = {};
+}
+function updateBattery(serial, L, b) {
+  const box = $('#battery'); if (!box._built) buildBattery(box);
+  const root = box.firstElementChild, ring = $('.ring', box), k = box._k;
+  root.classList.toggle('chg', b.charging); root.classList.toggle('low', b.low);
+  if (k.level !== b.level) {
+    k.level = b.level; $('.bn', box).textContent = b.level;
+    ring.style.setProperty('--y', (86 - 72 * b.level / 100).toFixed(1) + 'px');
+    $('.r-arc', box).style.strokeDasharray = b.level + ' 100';
+    $('.r-flow', box).style.setProperty('--travel', Math.max(8, b.level - 6).toFixed(0));
+    ring.setAttribute('aria-label', 'Battery ' + b.level + ' percent');
+  }
+  const line = `${b.charging ? `<span class="bolt">${icon('bolt', 'sm')}Charging${b.power ? ' · ' + esc(b.power) : ''}</span>` : '<span>On battery</span>'}${b.temp != null ? `<span>${esc(b.temp)} °C</span>` : ''}${L && L.voltage ? `<span>${(L.voltage / 1000).toFixed(2)} V</span>` : ''}`;
+  if (k.line !== line) { k.line = line; $('.bat-line', box).innerHTML = line; }
+  const e = L ? eta(serial, L) : ''; if (k.eta !== e) { k.eta = e; $('.bat-eta', box).textContent = e; }
+  const sp = spark(serial); if (k.sp !== sp) { k.sp = sp; $('.spark-wrap', box).innerHTML = sp; }
+}
+
 /* ---------- hero: identity, battery, specs ---------- */
 function renderStage() {
   const dev = STK.current(), info = STK.info(), L = STK.live(), idEl = $('#stage-id'), specs = $('#stage-specs'), bat = $('#battery');
   const needs = state.devices.find(d => d.state !== 'device');
   if (!state.everOnline && !state.online) {
-    setHtml(idEl, `<h2>Connecting...</h2><p>Waiting for the local backend.</p>`); setHtml(specs, ''); setHtml(bat, '');
+    setHtml(idEl, `<h2>Connecting...</h2><p>Waiting for the local backend.</p>`); setHtml(specs, ''); clearBattery();
   } else if (!dev) {
     const why = needs ? (needs.state === 'unauthorized' ? 'The phone is waiting for you to accept the USB debugging prompt.' : 'The phone shows as ' + needs.state + '. Reconnect the cable or restart ADB.') : (state.deviceMessage || 'Connect a phone with USB debugging turned on.');
     setHtml(idEl, `<h2>No phone connected</h2><p>${esc(why)}</p><div class="chips"><button class="btn sm" data-view="device">${icon('phone', 'sm')}<span>Open device help</span></button></div>`);
-    setHtml(specs, ''); setHtml(bat, '');
+    setHtml(specs, ''); clearBattery();
   } else {
     const name = info && info.model ? [info.manufacturer, info.model].filter(Boolean).join(' ') : dev.id;
     const wifi = dev.transport === 'wifi';
@@ -77,11 +107,8 @@ function renderStage() {
       <div class="chips"><span class="chip sm ok"><i class="dot"></i><b>Ready</b></span><span class="chip sm">${icon(wifi ? 'wifi' : 'usb', 'sm')}<b>${wifi ? 'Wi-Fi' : 'USB'}</b></span>${L && L.screenOn === false ? '<span class="chip sm warn"><i class="dot"></i><b>Screen off</b></span>' : ''}${fg ? `<span class="chip sm" title="App in front">${icon('apps', 'sm')}<b>${esc(fg)}</b></span>` : ''}</div>`);
     if (level >= 0) {
       const low = level <= (Number(S().batteryAlertPct) || 15) && !charging;
-      const e = L ? eta(dev.id, L) : '';
-      setHtml(bat, `<div class="bat-main ${charging ? 'chg' : ''} ${low ? 'low' : ''}"><div class="ring" style="--p:${level}" role="img" aria-label="Battery ${level} percent${charging ? ', charging' : ''}"><div class="ring-arc"><i></i></div><div class="ring-in"><b>${level}<small>%</small></b>${charging ? icon('bolt') : ''}</div></div><div class="bat-side">
-        <div class="bat-line">${charging ? `<span class="bolt">${icon('bolt', 'sm')}Charging${power ? ' · ' + esc(power) : ''}</span>` : '<span>On battery</span>'}${temp != null ? `<span>${esc(temp)} °C</span>` : ''}${L && L.voltage ? `<span>${(L.voltage / 1000).toFixed(2)} V</span>` : ''}</div>
-        ${e ? `<div class="bat-eta">${esc(e)}</div>` : ''}</div>${spark(dev.id)}</div>`);
-    } else setHtml(bat, '');
+      updateBattery(dev.id, L, { level, low, charging, power, temp });
+    } else clearBattery();
     const rows = [];
     if (info && info.width) rows.push(['Screen', `${info.width} × ${info.height}` + (info.density ? ` · ${info.density} dpi` : '')]);
     if (info && info.storageTotal) rows.push(['Free storage', `${bytes(info.storageFree)} of ${bytes(info.storageTotal)}`]);
@@ -282,7 +309,17 @@ function renderMeter() {
 }
 
 /* ---------- media card ---------- */
-const M = { at: 0, loading: false, data: null, serial: '' };
+const M = { at: 0, got: 0, loading: false, data: null, serial: '' };
+const mmss = ms => { const s = Math.max(0, Math.floor(ms / 1000)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), r = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(r).padStart(2, '0'); };
+function mediaPos() { const d = M.data; if (!d || !d.active) return 0; let p = Number(d.position) || 0; if (d.playing) p += (Date.now() - M.got) * (Number(d.speed) || 1); if (d.duration > 0) p = Math.min(p, d.duration); return p; }
+function paintProgress() {
+  const d = M.data, has = d && d.active && STK.sel(), pr = $('#media-prog'); if (!pr) return;
+  const known = !!(has && d.duration > 0); pr.dataset.known = known ? '1' : '0';
+  $('#media-pos').textContent = has ? mmss(mediaPos()) : '0:00';
+  $('#media-dur').textContent = known ? mmss(d.duration) : (has ? 'live' : '--:--');
+  if (known) $('#media-fill').style.width = Math.min(100, mediaPos() / d.duration * 100).toFixed(1) + '%'; else $('#media-fill').style.width = '';
+}
+setInterval(() => { if (state.view === 'console' && !document.hidden) paintProgress(); }, 500);
 function renderMedia() {
   const d = M.data, body = $('#media-body'), chip = $('#media-chip');
   const has = d && d.active && STK.sel();
@@ -294,13 +331,22 @@ function renderMedia() {
   chip.className = 'chip sm' + (playing ? ' ok' : '');
   setHtml(chip, `<i class="dot"></i><b>${playing ? 'Playing' : has ? 'Paused' : 'Idle'}</b>`);
   setHtml($('#media-play'), icon(playing ? 'pause' : 'play'));
+  const bits = [];
+  if (has) {
+    bits.push(`<span>${playing ? 'Playing' : 'Paused'}${d.speed && Math.abs(d.speed - 1) > 0.01 && playing ? ' at ' + Number(d.speed).toFixed(2).replace(/\.?0+$/, '') + 'x' : ''}</span>`);
+    if (d.album) bits.push(`<span>Album <b>${esc(d.album)}</b></span>`);
+    if (d.sessions > 1) bits.push(`<span>${d.sessions} players</span>`);
+  }
+  if (STK.sel() && K.vol !== null && K.volMax) bits.push(`<span class="vol">Volume <i style="--v:${Math.round(K.vol / K.volMax * 100)}%"></i><b>${Math.round(K.vol / K.volMax * 100)}%</b></span>`);
+  setHtml($('#media-meta'), bits.join(''));
+  paintProgress();
   $('#media-play').title = playing ? 'Pause' : 'Play';
 }
 async function pollMedia(force) {
   if (!STK.sel() || state.view !== 'console' || document.hidden || M.loading) return;
   if (!force && Date.now() - M.at < 4000 && M.serial === STK.sel()) return;
   M.at = Date.now(); M.loading = true; const id = STK.sel();
-  try { const r = await STK.api('/media?id=' + encodeURIComponent(id), { timeout: 15000 }); if (id === STK.sel()) { M.data = r; M.serial = id; } } catch (e) { /* keep the last answer */ } finally { M.loading = false; }
+  try { const r = await STK.api('/media?id=' + encodeURIComponent(id), { timeout: 15000 }); if (id === STK.sel()) { M.data = r; M.serial = id; M.got = Date.now(); } } catch (e) { /* keep the last answer */ } finally { M.loading = false; }
   renderMedia();
 }
 
@@ -434,7 +480,7 @@ function renderDeviceState() {
   renderMeta();
 }
 function renderMeta() {
-  const m = $('#frame-meta');
+  const m = $('#frame-meta'); m.classList.toggle('busy', !!P.busy);
   if (!STK.current()) { m.textContent = ''; return; }
   if (!P.w || P.serial !== STK.sel()) { m.textContent = P.busy ? 'Taking a picture...' : 'No picture yet.'; return; }
   const age = Math.max(0, Math.round((Date.now() - P.at) / 1000));

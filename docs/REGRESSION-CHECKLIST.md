@@ -90,3 +90,7 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Charging ring animates only while charging; low battery turns it red.
 - [ ] Pop-out in and out is smooth. Browsers without View Transitions switch instantly (no error).
 - [ ] The coloured arrow cursor appears over the phone picture.
+
+## Added in 2.5.0 (real device)
+- [ ] Media card: elapsed time follows the song. Total length only appears if the app reports it to Android (many do not, then the bar shows "live").
+- [ ] Charging ring runs smoothly for several minutes without restarting its animation.

@@ -676,30 +676,45 @@ $Routes['GET /api/apps'] = { param($Ctx)
 
 # What is playing on the phone (media sessions).
 function Get-MediaInfo {
-    param([string]$Text)
+    param([string]$Text, [long]$UptimeMs = 0)
     $recs = @(); $cur = $null
     foreach ($line in ($Text -split "`r?`n")) {
-        if ($line -match '^\s*package=([A-Za-z0-9._]+)\s*$') { if ($cur) { $recs += , $cur }; $cur = @{ package = $Matches[1]; state = 0; title = ''; artist = ''; album = ''; position = 0 }; continue }
+        if ($line -match '^\s*package=([A-Za-z0-9._]+)\s*$') { if ($cur) { $recs += , $cur }; $cur = @{ package = $Matches[1]; state = 0; title = ''; artist = ''; album = ''; position = [long]0; updated = [long]0; speed = 1.0; duration = [long]0 }; continue }
         if (-not $cur) { continue }
-        if ($line -match 'state=PlaybackState\s*\{state=(\d+)(?:,\s*position=(\d+))?') { $cur.state = [int]$Matches[1]; if ($Matches[2]) { $cur.position = [long]$Matches[2] } }
+        if ($line -match 'state=PlaybackState\s*\{state=(\d+)') {
+            $cur.state = [int]$Matches[1]
+            if ($line -match 'position=(\d+)') { $cur.position = [long]$Matches[1] }
+            if ($line -match 'updated=(\d+)') { $cur.updated = [long]$Matches[1] }
+            if ($line -match 'speed=([0-9.]+)') { $cur.speed = [double]$Matches[1] }
+        }
         elseif ($line -match 'metadata:\s*size=\d+,\s*description=(.*)$') {
             $parts = @($Matches[1].Trim() -split ',\s+' | ForEach-Object { if ($_ -eq 'null') { '' } else { $_ } })
             if ($parts.Count -ge 1) { $cur.title = [string]$parts[0] }
             if ($parts.Count -ge 2) { $cur.artist = [string]$parts[1] }
             if ($parts.Count -ge 3) { $cur.album = (($parts[2..($parts.Count - 1)]) -join ', ') }
         }
+        elseif ($line -match '(?i)\bduration\W{1,3}(\d{4,9})\b') { $cur.duration = [long]$Matches[1] }
     }
     if ($cur) { $recs += , $cur }
     $pick = $recs | Where-Object { $_.state -eq 3 } | Select-Object -First 1
     if (-not $pick) { $pick = $recs | Where-Object { $_.state -eq 2 } | Select-Object -First 1 }
     if (-not $pick) { $pick = $recs | Where-Object { $_.title } | Select-Object -First 1 }
     if (-not $pick) { return @{ active = $false; playing = $false; sessions = $recs.Count } }
-    return @{ active = $true; playing = ($pick.state -eq 3); state = $pick.state; package = $pick.package; title = $pick.title; artist = $pick.artist; album = $pick.album; position = $pick.position; sessions = $recs.Count }
+    $pos = [long]$pick.position
+    if ($pick.state -eq 3 -and $UptimeMs -gt 0 -and $pick.updated -gt 0) {
+        $delta = $UptimeMs - $pick.updated
+        if ($delta -gt 0 -and $delta -lt 21600000) { $pos = [long]($pos + $delta * $pick.speed) }
+    }
+    if ($pick.duration -gt 0 -and $pos -gt $pick.duration) { $pos = $pick.duration }
+    return @{ active = $true; playing = ($pick.state -eq 3); state = $pick.state; package = $pick.package; title = $pick.title; artist = $pick.artist; album = $pick.album; position = $pos; duration = $pick.duration; speed = $pick.speed; sessions = $recs.Count }
 }
 $Routes['GET /api/media'] = { param($Ctx)
     $serial = Get-Query $Ctx 'id'
-    $r = Invoke-DeviceShell $serial 'dumpsys media_session 2>/dev/null | head -n 700' 15
-    Send-Json $Ctx (Get-MediaInfo $r.out)
+    $r = Invoke-DeviceShell $serial 'dumpsys media_session 2>/dev/null | head -n 700; echo @@UP; cat /proc/uptime' 15
+    $parts = ($r.out -split '@@UP', 2)
+    $up = [long]0
+    if ($parts.Count -gt 1 -and $parts[1] -match '(\d+)\.(\d+)') { $up = [long]$Matches[1] * 1000 + [long]($Matches[2].PadRight(3, '0').Substring(0, 3)) }
+    Send-Json $Ctx (Get-MediaInfo $parts[0] $up)
 }
 
 # Apps with live processes, which one is in front, and the recent-apps order.

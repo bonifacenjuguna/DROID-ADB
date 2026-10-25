@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.5.0
+Changed
+- Portrait phone is bigger: it fills the card height and leaves room at the top.
+- The loading sweep on top of the phone is gone. "Updating" now shows as a small spinner next to the picture info line.
+- Charging animation rebuilt: a round-capped ring, a light that travels along the filled arc, a liquid fill that rises to the battery level with gentle waves, rising bubbles and a pulsing bolt. The ring is updated in place, so animations no longer restart every refresh. The battery trend line only shows once the level has actually changed.
+- Media card: elapsed time ticks live, total length when the phone reports it, progress bar, album, number of players and volume.
+- Console cards are balanced left and right: phone and Live sessions, Media beside Activity, Recent captures full width.
+
 ## 2.4.0
 Changed
 - Live indicator moved off the screen to the top corner of the phone card.
