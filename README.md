@@ -12,9 +12,12 @@ Helper project around scrcpy v5.0.1. The scrcpy binaries in `core/scrcpy/` are u
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
 
 ## What changed in 2.3
-- **Phone card:** the preview is now a phone-shaped frame with battery, charging, temperature and connection details beside it. It follows the phone's real orientation and moves to the top when the phone is landscape.
-- **Record while mirroring:** Mirror and Record are independent. A recording started during a mirror runs in the background (no second window).
-- **Tap, swipe and drop on the picture;** battery trend, alerts, nicknames and shortcuts (U, L, C, ?). See CHANGELOG.md.
+- **The phone is the centrepiece.** The Console now shows your phone as a framed, phone-shaped display with its real screen picture inside. The old Screen preview panel is gone; Update and Live live under the phone. The frame always matches the phone's real screen ratio, so the picture is never stretched or cropped.
+- **Battery and status in one place.** Battery level (ring and percentage), charging state and source, temperature, voltage, USB or Wi-Fi, and readiness sit beside the phone and refresh every few seconds while the Console is open.
+- **Follows rotation.** When the phone turns to landscape (for example in a game), the frame turns with it, the card widens to the top of the dashboard and the panels below glide into place. Turning back reverses it. The orientation comes from Android itself, so it works even with Live off. Reduced-motion settings are respected.
+- **Calmer preview.** One request at a time, no flicker or stale flashes, paused while the page is hidden or the phone card is off screen, automatic back-off after errors. Clear states for loading, updating, screen off, unavailable, disconnected and failed.
+- **Safer screenshots.** The preview is read straight from the phone in one adb call, no temporary file is left behind, and overlapping requests share one capture.
+- New settings: *Show the phone screen automatically* and *Phone status interval*. New keys: **U** updates the picture, **L** toggles Live.
 
 ## What changed in 2.2
 - **Running apps:** new Phone > Running tab lists apps with live processes, which one is in front, recent-apps order and memory use, with Open, Stop and Mirror app. Auto-refreshes.

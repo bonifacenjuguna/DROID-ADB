@@ -67,14 +67,19 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Phone > Running shows the app in front, recent order and memory; Stop closes an app; Include system adds system apps.
 - [ ] Console keys: Shade, Quick, Screen and Mute highlight and match the phone; Screen reflects the real screen state after a few seconds.
 
-## Added in 2.3.0 (Windows, real device; the fake-adb tests do NOT cover these)
-- [ ] Mirror, then Record: no second window; both timers run; stop Record leaves the mirror open; stop Mirror leaves the recording running; the saved file plays.
-- [ ] Stopping a hidden (companion) recording: file is finalised and playable (headless Ctrl+C path is untested on Windows). Check Logs/ for the scrcpy output.
-- [ ] Two scrcpy encoders on one phone: confirm your phone allows it. If the recorder fails right away, set Record while mirroring to "Close the mirror first".
-- [ ] Companion audio on Android 11/12 (audio capture may conflict); turn off Companion audio if it does.
-- [ ] Rotation: open a landscape game, rotate. Card should move to the top within ~1 s; back to portrait the same way. Check `dumpsys input` gives SurfaceOrientation on your Android version.
-- [ ] Preview of apps that block screenshots (banking, DRM) shows black: expected, not a fault.
-- [ ] exec-out screenshot is a valid PNG on Windows (binary-safe path); Update gives a sharp picture.
-- [ ] Tap, swipe and long-press on the picture land where expected, in portrait and landscape.
-- [ ] Battery %, charging source and temperature match the phone; low-battery alert fires once.
-- [ ] Drop an APK and a normal file on the phone picture.
+## Added in 2.3.0 (Windows, real device; tested only against a mock backend so far)
+Not yet verified on hardware: everything below. The browser behaviour was tested in Chromium against a simulated backend; the PowerShell changes could not be executed.
+- [ ] Console shows your phone's actual screen inside the frame; the corners match the phone and nothing is stretched or cropped.
+- [ ] Portrait: frame is vertical, battery %, charging state, temperature and USB/Wi-Fi are correct and update within a few seconds of plugging or unplugging.
+- [ ] Open a game (e.g. PUBG Mobile) and rotate the phone: the frame turns, the card widens to the top, panels below move up. Rotate back: it returns. Try both landscape directions (camera dot should switch sides).
+- [ ] Rotation is followed with Live OFF (a single new picture appears), and with Live ON.
+- [ ] If the phone does not report rotation (older Android), orientation still follows the picture size. Check Logs/ for any "device-live" errors.
+- [ ] Update works with and without a scrcpy mirror window open; Record and Mirror still start, stop and show their tags on the frame.
+- [ ] Unplug the cable: the last picture is dimmed with "Disconnected"; replug: it refreshes. Unauthorized phone shows "Waiting for permission".
+- [ ] Two phones: switching clears the old picture and shows the right orientation; no picture of phone A appears for phone B.
+- [ ] Screen off: picture is dimmed and Live stops requesting; turning the screen on refreshes once.
+- [ ] Banking or secure apps return a black picture (Android blocks capture); confirm it looks like a blank screen, not an error.
+- [ ] No leftover stk-preview*.png in the phone's temp folder (/data/local/tmp) after using Update.
+- [ ] Leave Live on for 10 minutes: browser memory stays flat, CPU idle between pictures, no overlapping adb screencap processes.
+- [ ] Windows reduced-motion on: rotation changes instantly with no animation.
+

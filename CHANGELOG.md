@@ -2,16 +2,15 @@
 
 ## 2.3.0
 New
-- **Phone card:** the Screen Preview panel is now a phone-shaped frame at the top of the Console, sized to the phone's real screen shape. Battery %, charging, power source, temperature, voltage, USB/Wi-Fi, the app in front, Update and Live sit beside it.
-- **Orientation-aware layout:** the backend reads the phone's real rotation, so the card moves to the top and widens when the phone goes landscape (for example in a game) and returns smoothly in portrait. Uses the browser's view transitions where available; respects reduced motion.
-- **Record while mirroring:** Record and Mirror are independent. Recording during a mirror runs as a hidden second scrcpy process: no extra window, the mirror stays open, stop either one on its own.
-- **Touch on the picture:** click to tap, drag to swipe, hold to long-press. Drop an APK or file on the phone to install or send it.
-- Battery history sparkline with a rough time estimate, low battery and low disk alerts, phone nicknames, copy picture, phone size (S/M/L), keyboard shortcuts U / L / C / ? and a shortcuts dialog.
-- Settings: record while mirroring, companion audio, status refresh, preview touch, pause preview during sessions, refresh preview after rotation, layout animation, battery and disk alert levels, app display names.
+- Console: the phone is now a phone-shaped frame showing the real screen picture, with battery ring, charging state and source, temperature, voltage, connection type and readiness beside it. Update and Live moved under the phone; the separate Screen preview panel is removed.
+- Orientation-aware layout: the frame, card and surrounding panels animate between portrait and landscape. Orientation is read from Android (new /api/device-live: rotation, current screen size and battery in one light call) and from each picture's real size, so it follows rotation even with Live off.
+- Preview states: loading, updating, screen off, phone not ready, disconnected, backend offline and failed, each without disturbing the rest of the page.
+- Settings: "Show the phone screen automatically" (one picture on connect or rotate) and "Phone status interval". Shortcuts: U (update picture), L (toggle Live) and matching command palette entries.
 
 Improved
-- Preview engine: one request at a time, ETag/304 so unchanged screens cost nothing, picture decoded before it replaces the old one, object URLs released, backoff on errors, pauses when the tab is hidden or the screen is off.
-- Status polling is skipped while the dashboard tab is hidden.
+- Preview requests: strictly one at a time, decoded before display and cross-faded, object URLs always released, paused when the tab is hidden, the Console is closed, the card is scrolled out of view or the screen is off; exponential back-off, Live turns itself off after repeated errors.
+- Backend preview: a single exec-out screencap call (no phone temp file; the old fixed file is no longer left on the phone), concurrent requests for one phone share a capture, PNG is validated, with a fallback to the old method.
+- Battery and charging details are shared by one parser; charging state now distinguishes charging, full, not charging and on battery.
 
 ## 2.2.0
 New
