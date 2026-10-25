@@ -14,12 +14,13 @@ function Set-CommonHeaders {
 }
 
 function Send-Bytes {
-    param($Ctx, [byte[]]$Bytes, [string]$Type, [int]$Status = 200, [string]$Cache = 'no-store')
+    param($Ctx, [byte[]]$Bytes, [string]$Type, [int]$Status = 200, [string]$Cache = 'no-store', $Extra = $null)
     $res = $Ctx.Response
     try {
         $res.StatusCode = $Status
         $res.ContentType = $Type
         $res.Headers['Cache-Control'] = $Cache
+        if ($Extra) { foreach ($k in $Extra.Keys) { $res.Headers[[string]$k] = [string]$Extra[$k] } }
         Set-CommonHeaders $Ctx
         $res.ContentLength64 = $Bytes.Length
         if ($Ctx.Request.HttpMethod -ne 'HEAD') { $res.OutputStream.Write($Bytes, 0, $Bytes.Length) }
@@ -382,6 +383,9 @@ $Routes['GET /api/state'] = { param($Ctx)
     $since = 0
     [void][int]::TryParse((Get-Query $Ctx 'since'), [ref]$since)
     $sessions = @(Get-LiveSessions | ForEach-Object { Get-SessionView $_ })
+    if ((Get-Query $Ctx 'hidden') -ne '1') { $Shared.lastClientMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
+    $liveOut = @{}
+    foreach ($dv in @($Shared.devices | Where-Object { $null -ne $_ -and $_.state -eq 'device' })) { $lv = $Shared.live[[string]$dv.id]; if ($lv) { $liveOut[[string]$dv.id] = $lv } }
     $evCopy = Use-Lock { $Shared.events.ToArray() }
     $events = @($evCopy | Where-Object { [int]$_.id -gt $since })
     $activity = @((Use-Lock { $Shared.activity.ToArray() }) | Select-Object -First 40)
@@ -392,7 +396,7 @@ $Routes['GET /api/state'] = { param($Ctx)
     Send-Json $Ctx @{
         ok = $true; t = (Get-UtcNow); version = $ToolkitVersion; uptime = [int]((Get-Date) - $Shared.started).TotalSeconds
         sessions = $sessions; devices = @($Shared.devices | Where-Object { $null -ne $_ }); deviceMessage = [string]$Shared.deviceMessage; devicesAge = $age; adbLatencyMs = [int]$Shared.adbLatencyMs
-        events = @($events); eventSeq = [int]$Shared.eventSeq; activity = $activity
+        live = $liveOut; events = @($events); eventSeq = [int]$Shared.eventSeq; activity = $activity
         disk = (Get-DiskInfo (Get-Dir 'recordings')); pollSeconds = [int]$s.pollSeconds
     }
 }
@@ -521,9 +525,9 @@ $Routes['POST /api/action'] = { param($Ctx)
             $live = @(Get-LiveSessions)
             $alive = @($live | Where-Object { $_.id -eq $started.id }).Count -gt 0
             if ($alive) {
-                if ($action -eq 'record') { Add-Activity 'record' ('Recording started: ' + $started.fileName); $msg = 'Recording to ' + $started.fileName + '.' } else { Add-Activity 'mirror' 'Mirror window opened.'; $msg = 'Mirror window opened.' }
+                if ($action -eq 'record') { Add-Activity 'record' ('Recording started: ' + $started.fileName + $(if ($started.companion) { ' (alongside the mirror window)' } else { '' })); $msg = 'Recording to ' + $started.fileName + '.' } else { Add-Activity 'mirror' 'Mirror window opened.'; $msg = 'Mirror window opened.' }
             } else { $msg = ''; $reason = Get-LogReason $started.log }
-            Send-Json $Ctx @{ ok = $true; started = $alive; message = $msg; reason = [string]$reason; session = $started.id; file = $started.fileName; sessions = @($live | ForEach-Object { Get-SessionView $_ }) }
+            Send-Json $Ctx @{ ok = $true; started = $alive; companion = [bool]$started.companion; message = $msg; reason = [string]$reason; session = $started.id; file = $started.fileName; sessions = @($live | ForEach-Object { Get-SessionView $_ }) }
         }
         'screenshot' {
             $path = Save-Screenshot $serial
@@ -916,18 +920,103 @@ $Routes['POST /api/power'] = { param($Ctx)
     Send-Json $Ctx @{ ok = $true; message = $msg }
 }
 
+function Get-PngSize {
+    param([byte[]]$B)
+    if ($B.Length -lt 24 -or $B[0] -ne 137 -or $B[1] -ne 80 -or $B[2] -ne 78 -or $B[3] -ne 71) { return $null }
+    $w = ([int]$B[16] * 16777216) + ([int]$B[17] * 65536) + ([int]$B[18] * 256) + [int]$B[19]
+    $h = ([int]$B[20] * 16777216) + ([int]$B[21] * 65536) + ([int]$B[22] * 256) + [int]$B[23]
+    if ($w -lt 1 -or $h -lt 1 -or $w -gt 20000 -or $h -gt 20000) { return $null }
+    return @{ w = $w; h = $h }
+}
+
+# One screenshot at a time per phone. Concurrent callers share the newest frame.
+function Get-ScreenFrame {
+    param([string]$Serial, [int]$MaxAgeMs)
+    $key = $(if ($Serial) { $Serial } else { '_' })
+    $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    $fr = $Shared.frames[$key]
+    if ($fr -and $MaxAgeMs -gt 0 -and ($nowMs - [long]$fr.at) -lt $MaxAgeMs) { return $fr }
+    if (-not $Shared.frameBusy.TryAdd($key, $nowMs)) {
+        $waited = 0
+        $slot = [long]0
+        while ($Shared.frameBusy.TryGetValue($key, [ref]$slot) -and $waited -lt 25000) { Start-Sleep -Milliseconds 100; $waited += 100 }
+        $fr = $Shared.frames[$key]
+        if ($fr) { return $fr }
+        Fail 'The phone screenshot did not finish in time.'
+    }
+    $tmp = Join-Path $LogDir ('frame-' + [guid]::NewGuid().ToString('N') + '.png')
+    try {
+        $sel = Resolve-Target $Serial
+        $bytes = $null
+        $size = $null
+        $why = ''
+        try {
+            $r = Invoke-AdbBytes ($sel + 'exec-out screencap -p') 20
+            $bytes = $r.bytes
+            $size = Get-PngSize $bytes
+            if (-not $size) { $why = ($r.err).Trim() }
+        } catch { if ($_.Exception -is [InvalidOperationException]) { throw }; $why = $_.Exception.Message }
+        if (-not $size) {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+            $remote = ([string](Get-Settings).remoteTmpDir).TrimEnd('/') + '/stk-preview.png'
+            $a = Invoke-Adb ($sel + 'shell screencap -p ' + $remote) 20
+            if ($a.code -ne 0) { Fail ('Preview failed: ' + ($a.err + $a.out + ' ' + $why).Trim()) }
+            $b = Invoke-Adb ($sel + 'pull ' + $remote + ' "' + $tmp + '"') 30
+            if (-not (Test-Path -LiteralPath $tmp)) { Fail ('Preview failed: ' + ($b.err + $b.out).Trim()) }
+            $bytes = [IO.File]::ReadAllBytes($tmp)
+            $size = Get-PngSize $bytes
+            if (-not $size) { Fail 'The phone returned a picture that could not be read. It may be blocking screenshots.' }
+        }
+        $sha = [Security.Cryptography.SHA1]::Create()
+        $etag = '"' + (([BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').Substring(0, 16).ToLower()) + '"'
+        $fr = @{ at = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); bytes = $bytes; etag = $etag; w = [int]$size.w; h = [int]$size.h }
+        $Shared.frames[$key] = $fr
+        return $fr
+    } finally {
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        $gone = [long]0
+        [void]$Shared.frameBusy.TryRemove($key, [ref]$gone)
+    }
+}
+
 $Routes['GET /api/preview-image'] = { param($Ctx)
     $serial = Get-Query $Ctx 'id'
-    $tmp = Join-Path $LogDir ('preview-' + [guid]::NewGuid().ToString('N') + '.png')
-    try {
-        $sel = Resolve-Target $serial
-        $remote = ([string](Get-Settings).remoteTmpDir).TrimEnd('/') + '/stk-preview.png'
-        $a = Invoke-Adb ($sel + 'shell screencap -p ' + $remote) 20
-        if ($a.code -ne 0) { Fail ('Preview failed: ' + ($a.err + $a.out).Trim()) }
-        $b = Invoke-Adb ($sel + 'pull ' + $remote + ' "' + $tmp + '"') 30
-        if (-not (Test-Path -LiteralPath $tmp)) { Fail ('Preview failed: ' + ($b.err + $b.out).Trim()) }
-        Send-Bytes $Ctx ([IO.File]::ReadAllBytes($tmp)) 'image/png'
-    } finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+    $maxAge = 0
+    [void][int]::TryParse((Get-Query $Ctx 'maxAge'), [ref]$maxAge)
+    $fr = Get-ScreenFrame $serial $maxAge
+    $inm = [string]$Ctx.Request.Headers['If-None-Match']
+    $extra = @{ 'ETag' = $fr.etag; 'X-Frame-W' = [string]$fr.w; 'X-Frame-H' = [string]$fr.h; 'X-Frame-At' = [string]$fr.at }
+    if ($inm -ne '' -and $inm -eq $fr.etag) { Send-Bytes $Ctx ([byte[]]@()) 'image/png' 304 'no-store' $extra }
+    else { Send-Bytes $Ctx $fr.bytes 'image/png' 200 'no-store' $extra }
+}
+
+function Test-ScreenPoint {
+    param($Value, [string]$Name)
+    $n = 0
+    if (-not [int]::TryParse(([string]$Value), [ref]$n) -or $n -lt 0 -or $n -gt 20000) { Fail ($Name + ' is not a valid screen position.') }
+    return $n
+}
+$Routes['POST /api/tap'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $x = Test-ScreenPoint (Get-Prop $body 'x' -1) 'x'
+    $y = Test-ScreenPoint (Get-Prop $body 'y' -1) 'y'
+    $hold = [int](Get-Prop $body 'holdMs' 0)
+    if ($hold -gt 0) { if ($hold -lt 300) { $hold = 300 }; if ($hold -gt 3000) { $hold = 3000 }; $c = "input swipe $x $y $x $y $hold" } else { $c = "input tap $x $y" }
+    $r = Invoke-DeviceShell ([string](Get-Prop $body 'serial' '')) $c 10
+    if ($r.code -ne 0) { Fail ('The phone did not accept the tap: ' + ($r.err + $r.out).Trim()) }
+    Send-Json $Ctx @{ ok = $true }
+}
+$Routes['POST /api/swipe'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $x1 = Test-ScreenPoint (Get-Prop $body 'x1' -1) 'x1'
+    $y1 = Test-ScreenPoint (Get-Prop $body 'y1' -1) 'y1'
+    $x2 = Test-ScreenPoint (Get-Prop $body 'x2' -1) 'x2'
+    $y2 = Test-ScreenPoint (Get-Prop $body 'y2' -1) 'y2'
+    $ms = [int](Get-Prop $body 'ms' 250)
+    if ($ms -lt 50) { $ms = 50 }; if ($ms -gt 3000) { $ms = 3000 }
+    $r = Invoke-DeviceShell ([string](Get-Prop $body 'serial' '')) "input swipe $x1 $y1 $x2 $y2 $ms" 10
+    if ($r.code -ne 0) { Fail ('The phone did not accept the swipe: ' + ($r.err + $r.out).Trim()) }
+    Send-Json $Ctx @{ ok = $true }
 }
 
 # ---- library ----

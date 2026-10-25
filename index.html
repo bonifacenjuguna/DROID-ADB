@@ -69,6 +69,9 @@
 <symbol id="i-left" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
 <symbol id="i-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
 <symbol id="i-tap" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="6.5"/></symbol>
+<symbol id="i-rotate" viewBox="0 0 24 24"><rect x="7" y="3.5" width="10" height="17" rx="2.4" transform="rotate(20 12 12)"/><path d="M19.5 6.5a8.5 8.5 0 011 4M4.5 17.5a8.5 8.5 0 01-1-4"/></symbol>
+<symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+<symbol id="i-keys" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.4"/><path d="M7 9h.01M11 9h.01M15 9h.01M7 13h10"/></symbol>
 <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></symbol>
 </defs>
 </svg>
@@ -83,7 +86,7 @@
     <button class="rail-btn" data-view="settings"><svg class="ic"><use href="#i-sliders"/></svg><span>Settings</span></button>
     <div class="rail-foot" title="Local backend">
       <span class="dot" id="rail-dot"></span>
-      <span id="rail-version">v2.2</span>
+      <span id="rail-version">v2.3</span>
     </div>
   </nav>
 
@@ -111,23 +114,45 @@
     <main class="content">
       <!-- CONSOLE -->
       <section class="view" id="view-console">
-        <div class="console-grid">
-          <div class="col">
-            <section class="panel stage" id="stage" aria-label="Active device">
-              <div class="stage-phone" id="phone"></div>
-              <div class="stage-body">
-                <div class="stage-id" id="stage-id"></div>
-                <dl class="specs" id="stage-specs"></dl>
-                <div class="stage-actions" id="stage-actions">
-                  <button class="btn primary lg toggle" id="mirror-btn" data-act="mirror" aria-pressed="false"></button>
-                  <button class="btn rec lg toggle" id="rec-btn" data-act="record" aria-pressed="false"></button>
-                  <button class="btn lg" id="shot-btn" data-act="screenshot"><svg class="ic"><use href="#i-camera"/></svg><span>Screenshot</span></button>
+        <div class="console-grid" id="console-grid" data-orient="portrait">
+          <section class="panel hero area-hero" id="hero" data-orient="portrait" aria-label="Active device">
+            <div class="hero-in">
+            <div class="hero-phone" id="hero-phone">
+              <div class="device" id="device" data-state="idle">
+                <i class="side s1"></i><i class="side s2"></i><i class="side s3"></i>
+                <div class="device-screen" id="screen" tabindex="0" role="img" aria-label="Phone screen. Click to tap, drag to swipe.">
+                  <img id="screen-img" alt="Live picture of the phone screen" draggable="false" hidden>
+                  <div class="screen-ghost" id="screen-ghost"></div>
+                  <div class="screen-badges" id="screen-badges"></div>
+                  <div class="screen-state" id="screen-state" role="status" aria-live="polite"></div>
+                  <div class="screen-fx" id="screen-fx"></div>
+                  <div class="screen-drop" id="screen-drop" hidden><svg class="ic"><use href="#i-upload"/></svg><b>Drop to send</b><span>APK files install, other files go to Download</span></div>
                 </div>
-                <div class="quickline" id="quickline"></div>
+                <i class="punch"></i>
               </div>
-            </section>
+              <div class="frame-tools" id="frame-tools">
+                <button class="btn sm" id="preview-now" title="Take a new picture (U)"><svg class="ic sm"><use href="#i-refresh"/></svg><span>Update</span></button>
+                <label class="live-toggle" title="Keep the picture fresh (L)"><span class="switch sm"><input type="checkbox" id="preview-live" aria-label="Live preview"><i></i></span><span>Live</span></label>
+                <button class="icon-btn" id="frame-copy" title="Copy the picture (C)" aria-label="Copy the picture"><svg class="ic"><use href="#i-copy"/></svg></button>
+                <button class="icon-btn" id="frame-size" title="Change the phone size" aria-label="Change the phone size"><svg class="ic"><use href="#i-expand"/></svg></button>
+              </div>
+              <p class="hint frame-meta" id="frame-meta"></p>
+            </div>
+            <div class="hero-body">
+              <div class="stage-id" id="stage-id"></div>
+              <div class="battery" id="battery"></div>
+              <dl class="specs" id="stage-specs"></dl>
+              <div class="stage-actions" id="stage-actions">
+                <button class="btn primary lg toggle" id="mirror-btn" data-act="mirror" aria-pressed="false"></button>
+                <button class="btn rec lg toggle" id="rec-btn" data-act="record" aria-pressed="false"></button>
+                <button class="btn lg" id="shot-btn" data-act="screenshot"><svg class="ic"><use href="#i-camera"/></svg><span>Screenshot</span></button>
+              </div>
+              <div class="quickline" id="quickline"></div>
+            </div>
+            </div>
+          </section>
 
-            <section class="panel remote" aria-label="Remote controls">
+          <section class="panel remote area-remote" aria-label="Remote controls">
               <header class="panel-head"><h2>Remote controls</h2><span class="hint">Works while the phone is connected, with or without a mirror window.</span></header>
               <div class="keys" id="keys">
                 <button class="key" data-key="back" title="Back"><svg class="ic"><use href="#i-back"/></svg><span>Back</span></button>
@@ -167,7 +192,12 @@
               </div>
             </section>
 
-            <section class="panel captures" aria-label="Recent captures">
+          <section class="panel area-sessions" aria-label="Sessions">
+              <header class="panel-head"><h2>Live sessions</h2><span class="chip sm" id="session-chip"><i class="dot"></i><b>None</b></span></header>
+              <div id="sessions"></div>
+            </section>
+
+          <section class="panel captures area-captures" aria-label="Recent captures">
               <header class="panel-head">
                 <h2>Recent captures</h2>
                 <button class="link" data-view="library">Open library</button>
@@ -178,18 +208,11 @@
                 <p id="meter-text" class="hint"></p>
               </div>
             </section>
-          </div>
 
-          <aside class="col">
-            <section class="panel" aria-label="Sessions">
-              <header class="panel-head"><h2>Live sessions</h2><span class="chip sm" id="session-chip"><i class="dot"></i><b>None</b></span></header>
-              <div id="sessions"></div>
-            </section>
-            <section class="panel" aria-label="Activity">
+          <section class="panel area-activity" aria-label="Activity">
               <header class="panel-head"><h2>Activity</h2><span class="hint">This run</span></header>
               <ol class="feed" id="feed"></ol>
             </section>
-          </aside>
         </div>
       </section>
 
@@ -385,6 +408,24 @@
     <header class="panel-head"><h2 id="text-title"></h2><button class="icon-btn" id="text-close" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></header>
     <pre class="code tall" id="text-body" tabindex="0"></pre>
     <div class="dlg-actions"><button class="btn" id="text-copy"><svg class="ic sm"><use href="#i-copy"/></svg><span>Copy</span></button></div>
+  </div>
+</dialog>
+
+<dialog id="dlg-help" class="dlg">
+  <div class="dlg-body">
+    <header class="panel-head"><h2>Keyboard shortcuts</h2><button class="icon-btn" id="help-close" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></header>
+    <dl class="keylist">
+      <div><dt><kbd>Ctrl</kbd> <kbd>K</kbd></dt><dd>Command palette</dd></div>
+      <div><dt><kbd>1</kbd> to <kbd>5</kbd></dt><dd>Console, Library, Phone, Devices, Settings</dd></div>
+      <div><dt><kbd>M</kbd></dt><dd>Start or stop mirroring</dd></div>
+      <div><dt><kbd>R</kbd></dt><dd>Start or stop recording</dd></div>
+      <div><dt><kbd>S</kbd></dt><dd>Take a screenshot</dd></div>
+      <div><dt><kbd>U</kbd></dt><dd>Update the phone picture</dd></div>
+      <div><dt><kbd>L</kbd></dt><dd>Turn live preview on or off</dd></div>
+      <div><dt><kbd>C</kbd></dt><dd>Copy the phone picture</dd></div>
+      <div><dt><kbd>?</kbd></dt><dd>This list</dd></div>
+    </dl>
+    <p class="hint">On the phone picture: click to tap, drag to swipe, hold to long-press.</p>
   </div>
 </dialog>
 

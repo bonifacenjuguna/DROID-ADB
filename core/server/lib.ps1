@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '2.2.0'
+$ToolkitVersion = '2.3.0'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -197,6 +197,8 @@ $Schema = @(
     (F 'recordTemplate' 'recording' 'text' 'Phone-{date}_{time}' 'Recording file name' 'Tokens: {date} {time} {serial} {model}.' -Pattern '^[A-Za-z0-9 ._\-{}]{1,80}$'),
     (F 'recordTimeLimit' 'recording' 'int' 0 'Automatic stop' 'Stop recording after this many seconds. 0 means never.' -Min 0 -Max 86400 -Picks @(0, 60, 300, 600, 1800, 3600) -Unit 'sec'),
     (F 'recordWindowless' 'recording' 'bool' $false 'Record without a window' 'Records in the background. Use Stop in the dashboard to finish.'),
+    (F 'recordWhileMirroring' 'recording' 'choice' 'companion' 'Record while mirroring' 'Companion starts a hidden second scrcpy recorder so the mirror window stays open. Block keeps one session per phone.' -Choices @((C 'companion' 'Hidden companion recorder'), (C 'block' 'Block (stop mirror first)'))),
+    (F 'companionAudio' 'recording' 'bool' $true 'Sound in companion recordings' 'Turn off if the phone is Android 11 or 12 and the mirror sound stops when recording starts.' -Show @{ audio = $true }),
     (F 'recordCountdown' 'recording' 'int' 0 'Start countdown' 'Seconds to count down in the dashboard before recording begins.' -Min 0 -Max 10 -Picks @(0, 3, 5) -Unit 'sec'),
     (F 'screenshotTemplate' 'recording' 'text' 'Shot-{date}_{time}' 'Screenshot file name' 'Tokens: {date} {time} {serial} {model}.' -Pattern '^[A-Za-z0-9 ._\-{}]{1,80}$'),
     # files
@@ -212,6 +214,14 @@ $Schema = @(
     (F 'openBrowser' 'toolkit' 'bool' $true 'Open the dashboard on launch' 'Open your browser when Launch.bat finishes.' -Restart $true),
     (F 'pollSeconds' 'toolkit' 'int' 3 'Refresh interval' 'How often the dashboard checks the backend.' -Min 1 -Max 30 -Picks @(1, 2, 3, 5, 10) -Unit 'sec'),
     (F 'previewSeconds' 'toolkit' 'int' 3 'Live preview interval' 'How often the Console preview takes a new picture.' -Min 1 -Max 60 -Picks @(2, 3, 5, 10) -Unit 'sec'),
+    (F 'liveSeconds' 'toolkit' 'int' 2 'Phone status refresh' 'How often battery, rotation and screen state are read while the dashboard is open.' -Min 1 -Max 30 -Picks @(1, 2, 3, 5, 10) -Unit 'sec'),
+    (F 'previewTouch' 'toolkit' 'bool' $true 'Tap and swipe on the preview' 'Click the phone picture to tap it, drag to swipe, hold to long-press.'),
+    (F 'previewPauseOnSession' 'toolkit' 'bool' $false 'Pause live preview during sessions' 'Stops automatic preview updates while a mirror or recording runs. Manual Update still works.'),
+    (F 'previewOnRotate' 'toolkit' 'bool' $true 'Refresh preview after rotation' 'Takes one new picture when the phone rotates, even if live preview is off.'),
+    (F 'layoutAnimation' 'toolkit' 'choice' 'auto' 'Layout animation' 'Auto follows your system reduced-motion setting.' -Choices @((C 'auto' 'Automatic'), (C 'on' 'Always animate'), (C 'off' 'Never animate'))),
+    (F 'batteryAlertPct' 'toolkit' 'int' 15 'Low battery alert' 'Show an alert when the phone falls to this level and is not charging. 0 turns it off.' -Min 0 -Max 50 -Picks @(0, 10, 15, 20, 30) -Unit '%'),
+    (F 'lowDiskGb' 'toolkit' 'int' 2 'Low disk alert' 'Warn when free space on the recordings drive falls below this. 0 turns it off.' -Min 0 -Max 500 -Picks @(0, 1, 2, 5, 10) -Unit 'GB'),
+    (F 'appNames' 'toolkit' 'text' '' 'App display names' 'Friendly names for package names, like com.tencent.ig=PUBG Mobile;com.whatsapp=WhatsApp' -Pattern '^[A-Za-z0-9._=; \-]{0,240}$' -Placeholder 'com.tencent.ig=PUBG Mobile'),
     (F 'theme' 'toolkit' 'choice' 'auto' 'Theme' 'Auto follows Windows.' -Choices @((C 'auto' 'Auto'), (C 'dark' 'Dark'), (C 'light' 'Light'))),
     (F 'confirmDeletes' 'toolkit' 'bool' $true 'Ask before deleting' 'Confirm before removing files and apps.'),
     (F 'adbTimeoutSec' 'toolkit' 'int' 15 'ADB timeout' 'How long to wait for the phone before giving up.' -Min 3 -Max 300 -Picks @(8, 15, 30, 60) -Unit 'sec'),
@@ -470,7 +480,8 @@ function New-ScrcpyArgs {
     param($S, [string]$Mode, [string]$Serial, [string]$OutFile, [hashtable]$Once)
     Test-Serial $Serial
     if (-not $Once) { $Once = @{} }
-    $headless = ($Mode -eq 'record' -and [bool]$S.recordWindowless)
+    $companion = [bool]$Once.companion
+    $headless = ($Mode -eq 'record' -and ([bool]$S.recordWindowless -or $companion))
     $a = New-Object System.Collections.ArrayList
     if ($Serial) { [void]$a.Add('-s ' + $Serial) }
     # video
@@ -479,12 +490,12 @@ function New-ScrcpyArgs {
         if ($S.cameraId -ne '') { [void]$a.Add('--camera-id=' + $S.cameraId) } elseif ($S.cameraFacing -ne '') { [void]$a.Add('--camera-facing=' + $S.cameraFacing) }
         if ($S.cameraSize -ne '') { [void]$a.Add('--camera-size=' + $S.cameraSize) }
     } else {
-        if ($S.virtualDisplay) {
+        if ($S.virtualDisplay -and -not $companion) {
             if ($S.virtualDisplaySize -ne '') { [void]$a.Add('--new-display=' + $S.virtualDisplaySize) } else { [void]$a.Add('--new-display') }
             if ($Once.startApp) { [void]$a.Add('--start-app=' + $Once.startApp) }
         } else {
             if ($S.displayId -gt 0) { [void]$a.Add('--display-id=' + $S.displayId) }
-            if ($Once.startApp) { [void]$a.Add('--start-app=' + $Once.startApp) }
+            if ($Once.startApp -and -not $companion) { [void]$a.Add('--start-app=' + $Once.startApp) }
         }
         if ($S.crop -ne '') { [void]$a.Add('--crop=' + $S.crop) }
     }
@@ -496,7 +507,7 @@ function New-ScrcpyArgs {
     if ($S.captureOrientation -ne '') { [void]$a.Add('--capture-orientation=' + $S.captureOrientation) }
     if ($S.videoBuffer -gt 0) { [void]$a.Add('--video-buffer=' + $S.videoBuffer) }
     # audio
-    if (-not $S.audio) { [void]$a.Add('--no-audio') } else {
+    if (-not $S.audio -or ($companion -and -not $S.companionAudio)) { [void]$a.Add('--no-audio') } else {
         if ($S.audioSource -ne 'output') { [void]$a.Add('--audio-source=' + $S.audioSource) }
         if ($S.audioDup -and $S.audioSource -eq 'playback') { [void]$a.Add('--audio-dup') }
         $codec = $S.audioCodec
@@ -506,19 +517,21 @@ function New-ScrcpyArgs {
         if ($S.audioBuffer -gt 0) { [void]$a.Add('--audio-buffer=' + $S.audioBuffer) }
     }
     # control
-    if ($S.viewOnly) { [void]$a.Add('--no-control') } else {
+    if ($S.viewOnly -or $companion) { [void]$a.Add('--no-control') } else {
         if ($S.keyboard -ne '') { [void]$a.Add('--keyboard=' + $S.keyboard) }
         if ($S.mouse -ne '') { [void]$a.Add('--mouse=' + $S.mouse) }
         if ($S.noClipboardAutosync) { [void]$a.Add('--no-clipboard-autosync') }
         if ($S.legacyPaste) { [void]$a.Add('--legacy-paste') }
         if ($S.preferText) { [void]$a.Add('--prefer-text') }
     }
-    if ($S.stayAwake) { [void]$a.Add('--stay-awake') }
-    if ($S.turnScreenOff) { [void]$a.Add('--turn-screen-off') }
-    if ($S.showTouches) { [void]$a.Add('--show-touches') }
-    if ($S.powerOffOnClose) { [void]$a.Add('--power-off-on-close') }
-    if ($S.noPowerOn) { [void]$a.Add('--no-power-on') }
-    if ($S.screenOffTimeout -gt 0) { [void]$a.Add('--screen-off-timeout=' + $S.screenOffTimeout) }
+    if (-not $companion) {
+        if ($S.stayAwake) { [void]$a.Add('--stay-awake') }
+        if ($S.turnScreenOff) { [void]$a.Add('--turn-screen-off') }
+        if ($S.showTouches) { [void]$a.Add('--show-touches') }
+        if ($S.powerOffOnClose) { [void]$a.Add('--power-off-on-close') }
+        if ($S.noPowerOn) { [void]$a.Add('--no-power-on') }
+        if ($S.screenOffTimeout -gt 0) { [void]$a.Add('--screen-off-timeout=' + $S.screenOffTimeout) }
+    }
     # window
     if ($headless) { [void]$a.Add('--no-playback') } else {
         $title = $S.windowTitle
@@ -636,7 +649,7 @@ function Get-SessionView {
     param($S)
     $size = [long]0
     if ($S.mode -eq 'record' -and $S.path -and (Test-Path -LiteralPath $S.path)) { try { $size = [long](Get-Item -LiteralPath $S.path).Length } catch {} }
-    return @{ id = $S.id; pid = [int]$S.pid; mode = $S.mode; recording = ($S.mode -eq 'record'); type = $(if ($S.mode -eq 'record') { 'Recording' } else { 'Mirroring' }); serial = [string]$S.serial; started = ([DateTimeOffset]::FromUnixTimeMilliseconds([long]$S.startedMs).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')); file = [string]$S.fileName; fileSize = $size; headless = [bool]$S.headless; app = [string]$S.app }
+    return @{ id = $S.id; pid = [int]$S.pid; mode = $S.mode; recording = ($S.mode -eq 'record'); type = $(if ($S.mode -eq 'record') { 'Recording' } else { 'Mirroring' }); serial = [string]$S.serial; started = ([DateTimeOffset]::FromUnixTimeMilliseconds([long]$S.startedMs).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')); file = [string]$S.fileName; fileSize = $size; headless = [bool]$S.headless; companion = [bool]$S.companion; app = [string]$S.app }
 }
 
 function Get-ChildPid {
@@ -692,8 +705,19 @@ function Start-ToolkitScrcpy {
     $scr = Get-ScrcpyPath
     if ($OnWindows -and -not (Test-Tool $scr)) { Fail 'scrcpy.exe was not found. Check the scrcpy executable setting or extract the full ZIP again.' }
     $settings = Get-Settings
-    foreach ($s in (Get-LiveSessions)) {
-        if (-not $Serial -or -not $s.serial -or $s.serial -eq $Serial) { Fail ('A scrcpy window is already open for this phone (' + $(if ($s.mode -eq 'record') { 'recording' } else { 'mirroring' }) + '). Stop it first.') }
+    $companion = $false
+    $mine = @(Get-LiveSessions | Where-Object { (-not $Serial) -or (-not $_.serial) -or ($_.serial -eq $Serial) })
+    $viewer = @($mine | Where-Object { -not $_.headless })
+    $recorder = @($mine | Where-Object { $_.mode -eq 'record' })
+    if ($Mode -eq 'record') {
+        if ($recorder.Count -gt 0) { Fail 'This phone is already being recorded. Stop that recording first.' }
+        if ($viewer.Count -gt 0) {
+            if ([string]$settings.recordWhileMirroring -eq 'block') { Fail 'A mirror window is open. Close it first, or set Record while mirroring to companion in Settings.' }
+            $companion = $true
+            $Once.companion = $true
+        }
+    } else {
+        if ($viewer.Count -gt 0) { Fail 'A scrcpy window is already open for this phone. Stop it first.' }
     }
     $id = [guid]::NewGuid().ToString('N').Substring(0, 8)
     $out = ''
@@ -720,7 +744,7 @@ function Start-ToolkitScrcpy {
     $proc = [Diagnostics.Process]::Start($psi)
     $startTicks = [long]0
     try { $startTicks = $proc.StartTime.ToUniversalTime().Ticks } catch {}
-    $session = @{ id = $id; pid = [int]$proc.Id; procStart = $startTicks; mode = $Mode; serial = $Serial; startedMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); path = $out; fileName = $fileName; headless = ($Mode -eq 'record' -and [bool]$settings.recordWindowless); log = $log; app = [string]$Once.startApp }
+    $session = @{ id = $id; pid = [int]$proc.Id; procStart = $startTicks; mode = $Mode; serial = $Serial; startedMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); path = $out; fileName = $fileName; headless = ($Mode -eq 'record' -and ([bool]$settings.recordWindowless -or $companion)); companion = $companion; log = $log; app = [string]$Once.startApp }
     Use-SessionFile { $list = @(Read-Sessions); $list += , $session; Write-Sessions $list }
     # keep only the newest session logs
     try {
@@ -773,4 +797,66 @@ function Get-OldFiles {
     $cutoff = (Get-Date).AddDays(-$Days)
     if ($Kind -eq 'screenshots') { $dir = Get-Dir 'screenshots'; $ext = @('.png') } else { $dir = Get-Dir 'recordings'; $ext = @('.mp4', '.mkv') }
     return @(Get-ChildItem -LiteralPath $dir -File | Where-Object { $_.Extension.ToLower() -in $ext -and $_.LastWriteTime -lt $cutoff -and -not (Test-InProgress $_.Name) })
+}
+
+
+# ---------------------------------------------------------------------------
+# Live phone readings (rotation, screen, battery, foreground app)
+# ---------------------------------------------------------------------------
+function Update-LiveTelemetry {
+    param([string]$Serial, [bool]$WithForeground)
+    $script = 'o=$(dumpsys input 2>/dev/null | grep -m3 -E ''SurfaceOrientation|orientation=''); echo @@R; echo $o; if [ -z "$o" ]; then echo @@D; dumpsys window displays 2>/dev/null | grep -m2 -oE ''mCurrentRotation=[A-Z_0-9]+|rotation=[0-9]''; fi; echo @@W; dumpsys power 2>/dev/null | grep -m1 -oE ''mWakefulness=[A-Za-z]+''; echo @@B; dumpsys battery 2>/dev/null'
+    if ($WithForeground) { $script += '; echo @@F; dumpsys activity activities 2>/dev/null | grep -m2 -E ''ResumedActivity''' }
+    $r = Invoke-DeviceShell $Serial $script 12
+    $sections = @{ R = ''; D = ''; W = ''; B = ''; F = '' }
+    $cur = ''
+    foreach ($line in ($r.out -split "`r?`n")) {
+        if ($line -match '^@@([RDWBF])\s*$') { $cur = $Matches[1]; continue }
+        if ($cur) { $sections[$cur] += $line + "`n" }
+    }
+    $prev = $Shared.live[$Serial]
+    $d = @{ at = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); rotation = -1; screenOn = $null; battery = -1; charging = $false; full = $false; tempC = $null; voltage = $null; power = ''; fgPackage = ''; fgActivity = '' }
+    if ($prev) { $d.fgPackage = [string]$prev.fgPackage; $d.fgActivity = [string]$prev.fgActivity; if ([int]$prev.rotation -ge 0) { $d.rotation = [int]$prev.rotation } }
+    if ($sections.R -match 'SurfaceOrientation:\s*(\d)') { $d.rotation = [int]$Matches[1] }
+    elseif ($sections.R -match 'orientation=(\d)') { $d.rotation = [int]$Matches[1] }
+    elseif ($sections.D -match 'mCurrentRotation=ROTATION_(\d+)') { $d.rotation = [int]([int]$Matches[1] / 90) }
+    elseif ($sections.D -match 'rotation=(\d)') { $d.rotation = [int]$Matches[1] }
+    if ($sections.W -match 'mWakefulness=(\w+)') { $d.screenOn = ($Matches[1] -eq 'Awake') }
+    $t = $sections.B
+    if ($t -match '(?m)^\s*level:\s*(\d+)') { $d.battery = [int]$Matches[1] }
+    if ($t -match '(?m)^\s*status:\s*(\d+)') { $st = [int]$Matches[1]; $d.charging = ($st -eq 2); $d.full = ($st -eq 5) }
+    if ($t -match '(?m)^\s*temperature:\s*(\d+)') { $d.tempC = [math]::Round([int]$Matches[1] / 10, 1) }
+    if ($t -match '(?m)^\s*voltage:\s*(\d+)') { $d.voltage = [int]$Matches[1] }
+    if ($t -match '(?m)^\s*AC powered:\s*true') { $d.power = 'AC' } elseif ($t -match '(?m)^\s*USB powered:\s*true') { $d.power = 'USB' } elseif ($t -match '(?m)^\s*Wireless powered:\s*true') { $d.power = 'Wireless' }
+    if ($WithForeground) {
+        $d.fgPackage = ''; $d.fgActivity = ''
+        foreach ($line in ($sections.F -split "`n")) {
+            if ($line -match '([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)/(\.?[A-Za-z0-9_.$]+)') { $d.fgPackage = $Matches[1]; $d.fgActivity = $Matches[2]; break }
+        }
+    }
+    $Shared.live[$Serial] = $d
+}
+
+# Runs adb and returns its raw standard output bytes (binary safe, no temp file).
+function Invoke-AdbBytes {
+    param([string]$ArgLine, [int]$TimeoutSec = 20)
+    $adb = Get-AdbPath
+    if ($OnWindows -and -not (Test-Tool $adb)) { Fail 'adb.exe was not found. Check the ADB executable setting or extract the full ZIP again.' }
+    $psi = New-Object Diagnostics.ProcessStartInfo
+    $psi.FileName = $adb
+    $psi.Arguments = $ArgLine
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.CreateNoWindow = $true
+    if (Test-Path -LiteralPath $BundledDir) { $psi.WorkingDirectory = $BundledDir }
+    $p = [Diagnostics.Process]::Start($psi)
+    $ms = New-Object IO.MemoryStream
+    $copy = $p.StandardOutput.BaseStream.CopyToAsync($ms)
+    $errTask = $p.StandardError.ReadToEndAsync()
+    if (-not $p.WaitForExit($TimeoutSec * 1000)) { try { $p.Kill() } catch {}; Fail 'The phone did not answer in time. Check the cable, unlock the phone and try again.' }
+    [void]$copy.Wait(8000)
+    $e = ''
+    try { if ($errTask.Wait(2000)) { $e = [string]$errTask.Result } } catch {}
+    return @{ code = [int]$p.ExitCode; bytes = $ms.ToArray(); err = $e }
 }

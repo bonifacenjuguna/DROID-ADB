@@ -1,4 +1,4 @@
-/* Scrcpy Toolkit 2.2 core: helpers, resilient API client, polling, dialogs, routing. */
+/* Scrcpy Toolkit 2.3 core: helpers, resilient API client, polling, dialogs, routing. */
 (() => {
 'use strict';
 const STK = window.STK = { views: {}, state: {
@@ -201,9 +201,11 @@ STK.readyDevices = () => state.devices.filter(d => d.state === 'device');
 STK.current = () => { const r = STK.readyDevices(); return r.find(d => d.id === state.selected) || r[0] || null; };
 STK.sel = () => { const d = STK.current(); return d ? d.id : ''; };
 STK.info = () => { const d = STK.current(); return d ? state.info[d.id] : null; };
-STK.recording = () => state.sessions.find(s => s.recording);
-STK.mirroring = () => state.sessions.find(s => !s.recording);
 STK.sessionFor = serial => state.sessions.filter(s => !serial || !s.serial || s.serial === serial);
+STK.recording = () => STK.sessionFor(STK.sel()).find(s => s.recording);
+STK.viewer = () => STK.sessionFor(STK.sel()).find(s => !s.headless);
+STK.mirroring = () => { const v = STK.viewer(); return v && !v.recording ? v : undefined; };
+STK.live = () => { const id = STK.sel(); return id && state.live ? state.live[id] || null : null; };
 
 let infoLoading = false;
 STK.loadInfo = async function (id, fresh) {
@@ -297,6 +299,7 @@ function applyState(d) {
   state.devicesAge = d.devicesAge;
   state.activity = d.activity || [];
   state.disk = d.disk;
+  const prevLive = state.live; state.live = d.live || {};
   state.pollSeconds = d.pollSeconds || state.pollSeconds;
   const ready = STK.readyDevices();
   const saved = STK.store.get('device', '');
@@ -306,6 +309,8 @@ function applyState(d) {
   const cur = STK.current();
   if (cur && (!state.infoAt[cur.id] || Date.now() - state.infoAt[cur.id] > 45000)) STK.loadInfo(cur.id);
   STK.emit('state', d);
+  const L = STK.live(), P0 = prevLive && prevLive[STK.sel()];
+  if (L && (!P0 || P0.at !== L.at)) STK.emit('live', { L, prev: P0 || null });
 }
 
 let pollTimer = null, polling = false;
@@ -313,7 +318,7 @@ async function pollOnce() {
   if (polling) return;
   polling = true;
   try {
-    const d = await STK.api('/state?since=' + (state.eventSeq || 0), { timeout: 8000 });
+    const d = await STK.api('/state?since=' + (state.eventSeq || 0) + (document.hidden ? '&hidden=1' : ''), { timeout: 8000 });
     const was = state.online;
     state.failures = 0; state.online = true;
     if (!was && state.everOnline) STK.toast('Reconnected to the backend.');

@@ -8,13 +8,6 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Confirm a missing backend or dashboard file produces a useful error instead of silently failing.
 - [ ] Refresh the dashboard and confirm the status and device information reload.
 
-## Console live preview
-- [ ] With an authorized phone connected, select Update and confirm its screen appears inside the phone frame, clipped to the rounded display.
-- [ ] Confirm the image does not cover the bezel/notch or the device details and controls.
-- [ ] Enable live preview, confirm it refreshes at the configured interval, then disable it and confirm polling stops.
-- [ ] Disconnect the phone or trigger a preview error and confirm the last good image remains visible with a readable status message.
-- [ ] Switch between USB and Wi-Fi devices and confirm the preview follows the selected phone.
-
 ## Device and mirroring
 - [ ] Connect an Android device with USB debugging enabled and accept the debugging prompt.
 - [ ] Confirm the device appears in Overview and Device diagnostics.
@@ -73,3 +66,15 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Phone > Apps lists installed apps; "System" and "All" work; a locked or unauthorized phone shows a readable error.
 - [ ] Phone > Running shows the app in front, recent order and memory; Stop closes an app; Include system adds system apps.
 - [ ] Console keys: Shade, Quick, Screen and Mute highlight and match the phone; Screen reflects the real screen state after a few seconds.
+
+## Added in 2.3.0 (Windows, real device; the fake-adb tests do NOT cover these)
+- [ ] Mirror, then Record: no second window; both timers run; stop Record leaves the mirror open; stop Mirror leaves the recording running; the saved file plays.
+- [ ] Stopping a hidden (companion) recording: file is finalised and playable (headless Ctrl+C path is untested on Windows). Check Logs/ for the scrcpy output.
+- [ ] Two scrcpy encoders on one phone: confirm your phone allows it. If the recorder fails right away, set Record while mirroring to "Close the mirror first".
+- [ ] Companion audio on Android 11/12 (audio capture may conflict); turn off Companion audio if it does.
+- [ ] Rotation: open a landscape game, rotate. Card should move to the top within ~1 s; back to portrait the same way. Check `dumpsys input` gives SurfaceOrientation on your Android version.
+- [ ] Preview of apps that block screenshots (banking, DRM) shows black: expected, not a fault.
+- [ ] exec-out screenshot is a valid PNG on Windows (binary-safe path); Update gives a sharp picture.
+- [ ] Tap, swipe and long-press on the picture land where expected, in portrait and landscape.
+- [ ] Battery %, charging source and temperature match the phone; low-battery alert fires once.
+- [ ] Drop an APK and a normal file on the phone picture.
