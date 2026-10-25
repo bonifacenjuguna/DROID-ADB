@@ -78,7 +78,7 @@ function renderStage() {
     if (level >= 0) {
       const low = level <= (Number(S().batteryAlertPct) || 15) && !charging;
       const e = L ? eta(dev.id, L) : '';
-      setHtml(bat, `<div class="bat-main"><div class="bat-num ${low ? 'low' : ''}"><b>${level}</b><span>%</span></div><div class="bat-side"><div class="bat-bar ${low ? 'low' : ''} ${charging ? 'chg' : ''}" role="img" aria-label="Battery ${level} percent"><i style="width:${level}%"></i></div>
+      setHtml(bat, `<div class="bat-main ${charging ? 'chg' : ''} ${low ? 'low' : ''}"><div class="ring" style="--p:${level}" role="img" aria-label="Battery ${level} percent${charging ? ', charging' : ''}"><div class="ring-arc"><i></i></div><div class="ring-in"><b>${level}<small>%</small></b>${charging ? icon('bolt') : ''}</div></div><div class="bat-side">
         <div class="bat-line">${charging ? `<span class="bolt">${icon('bolt', 'sm')}Charging${power ? ' · ' + esc(power) : ''}</span>` : '<span>On battery</span>'}${temp != null ? `<span>${esc(temp)} °C</span>` : ''}${L && L.voltage ? `<span>${(L.voltage / 1000).toFixed(2)} V</span>` : ''}</div>
         ${e ? `<div class="bat-eta">${esc(e)}</div>` : ''}</div>${spark(dev.id)}</div>`);
     } else setHtml(bat, '');
@@ -340,20 +340,33 @@ function targetDims() {
 function applyLayout(orient, d) {
   const grid = $('#console-grid'), hero = $('#hero'), dev = $('#device');
   grid.dataset.orient = hero.dataset.orient = dev.dataset.orient = orient;
-  setAspect(d);
+  setAspect(d); fitBody();
 }
+const RO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => fitBody()) : null;
+function fitBody() {
+  const sc = $('#screen'), dv = $('#device'), w = sc.clientWidth, h = sc.clientHeight; if (!w || !h) return;
+  const short = Math.min(w, h), set = (k, v) => { if (dv.style.getPropertyValue(k) !== v) dv.style.setProperty(k, v); };
+  set('--r', Math.max(10, Math.min(52, short * 0.1)).toFixed(1) + 'px');
+  const bz = Math.max(4, Math.min(14, short * 0.03)); set('--bz', bz.toFixed(1) + 'px');
+  const cam = Math.max(7, Math.min(16, short * 0.04)); set('--cam', cam.toFixed(1) + 'px');
+  set('--camtop', (3 + bz + short * 0.026).toFixed(1) + 'px');
+  const L = STK.live(), rot = L && L.rotation >= 0 ? String(L.rotation) : '0'; if (dv.dataset.rot !== rot) dv.dataset.rot = rot;
+}
+if (RO) RO.observe($('#screen'));
 function setAspect(d) {
   const ar = Math.max(0.3, Math.min(3.4, d.w / d.h));
   const v = ar.toFixed(4);
   if ($('#screen').style.getPropertyValue('--ar') !== v) $('#screen').style.setProperty('--ar', v);
 }
-function animateLayout(fn) {
+function animateLayout(fn, opts = {}) {
   const mode = S().layoutAnimation || 'auto';
   const motion = mode === 'on' || (mode === 'auto' && !reduceMotion());
   if (!motion || !document.startViewTransition || state.view !== 'console') return fn();
-  const grid = $('#console-grid'); grid.classList.add('vt');
-  try { const vt = document.startViewTransition(fn); const done = () => grid.classList.remove('vt'); vt.finished.then(done, done); }
-  catch (e) { grid.classList.remove('vt'); fn(); }
+  const root = document.documentElement, grid = $('#console-grid');
+  if (O.vt) return fn();
+  root.classList.add('vt-phone'); if (opts.grid) grid.classList.add('vt'); if (opts.rot) root.dataset.vtRot = opts.rot;
+  const clean = () => { O.vt = null; root.classList.remove('vt-phone'); grid.classList.remove('vt'); delete root.dataset.vtRot; };
+  try { O.vt = document.startViewTransition(fn); O.vt.finished.then(clean, clean); } catch (e) { clean(); fn(); }
 }
 function syncOrientation() {
   const d = targetDims(), want = orientOf(d.w, d.h);
@@ -366,7 +379,9 @@ function syncOrientation() {
     O.timer = null; const dd = targetDims(), w2 = orientOf(dd.w, dd.h);
     if (w2 === O.cur) return;
     O.cur = w2; O.lastFlip = Date.now();
-    animateLayout(() => { applyLayout(w2, dd); renderDeviceState(); });
+    const L0 = STK.live(); let rot = '';
+    if (w2 === 'landscape') { rot = L0 && L0.rotation === 3 ? 'cw' : 'ccw'; O.lastDir = rot; } else rot = O.lastDir === 'ccw' ? 'cw' : 'ccw';
+    animateLayout(() => { applyLayout(w2, dd); renderDeviceState(); }, { grid: true, rot });
   };
   if (!wait) { O.cur = want; applyLayout(want, d); renderDeviceState(); return; }
   O.timer = setTimeout(go, wait);
@@ -379,7 +394,7 @@ function onLive({ L, prev }) {
     if (S().previewOnRotate !== false) { clearTimeout(P.followUp); P.followUp = setTimeout(() => shoot({ reason: 'rotate' }), 650); }
   }
   if (prev && prev.screenOn === false && L.screenOn) { clearTimeout(P.followUp); P.followUp = setTimeout(() => shoot({ reason: 'wake' }), 500); }
-  syncOrientation(); renderStage(); renderDeviceState(); checkAlerts();
+  syncOrientation(); fitBody(); renderStage(); renderDeviceState(); checkAlerts();
 }
 
 /* ---------- phone frame: states ---------- */
@@ -414,7 +429,7 @@ function renderDeviceState() {
   const rec = STK.recording(), L = STK.live(), id = STK.sel();
   if (rec && S().showRecBadge !== false) badges.push(`<span class="sb rec"><i></i>REC <time data-since="${esc(rec.started)}">${clock(rec.started)}</time>${rec.fileSize ? ' · ' + bytes(rec.fileSize) : ''}</span>`);
   if (L && L.battery >= 0 && L.battery <= (Number(S().batteryAlertPct) || 0) && !L.charging) badges.push('<span class="sb low">Low battery</span>');
-  if ($('#preview-live').checked && P.hasImage && !P.paused) badges.push('<span class="sb live"><i></i>Live</span>');
+  $('#live-pill').hidden = !($('#preview-live').checked && P.hasImage && !P.paused && STK.sel());
   setHtml($('#screen-badges'), badges.join(''));
   renderMeta();
 }
@@ -514,22 +529,18 @@ function fx(kind, nx, ny, nx2, ny2) {
   box.appendChild(el); setTimeout(() => el.remove(), 600);
 }
 function touchReady() { return S().previewTouch !== false && STK.sel() && P.hasImage && P.imgOrient === O.cur && !$('#device').classList.contains('is-dim'); }
-const cur = document.createElement('i'); cur.className = 'finger'; cur.hidden = true; $('#screen-fx').appendChild(cur);
-function moveFinger(e) {
-  const r = $('#screen').getBoundingClientRect();
-  cur.style.transform = `translate(${(e.clientX - r.left).toFixed(1)}px, ${(e.clientY - r.top).toFixed(1)}px)`;
-}
-$('#screen').addEventListener('pointerenter', e => { if (touchReady()) { cur.hidden = false; moveFinger(e); $('#screen').classList.add('touch'); } });
-$('#screen').addEventListener('pointermove', e => { if (!touchReady()) { cur.hidden = true; $('#screen').classList.remove('touch'); return; } if (cur.hidden) { cur.hidden = false; $('#screen').classList.add('touch'); } moveFinger(e); if (T.id === e.pointerId && T.p) { const m = Math.hypot(e.clientX - T.x, e.clientY - T.y); cur.classList.toggle('drag', m > 9); } });
-$('#screen').addEventListener('pointerleave', () => { if (T.id === null) cur.hidden = true; });
+const scr = $('#screen');
+scr.addEventListener('pointerenter', () => { if (touchReady()) scr.classList.add('touch'); });
+scr.addEventListener('pointermove', () => { const on = touchReady(); if (scr.classList.contains('touch') !== on) scr.classList.toggle('touch', on); });
+scr.addEventListener('pointerleave', () => { if (T.id === null) scr.classList.remove('touch', 'down'); });
 $('#screen').addEventListener('pointerdown', e => {
   if (e.button !== 0 || !touchReady()) return;
   const p = toDevice(e); if (!p) return;
-  T.id = e.pointerId; T.p = p; T.x = e.clientX; T.y = e.clientY; T.t = performance.now(); cur.classList.add('down'); cur.classList.remove('drag'); clearTimeout(T.hold); T.hold = setTimeout(() => cur.classList.add('hold'), 450);
+  T.id = e.pointerId; T.p = p; T.x = e.clientX; T.y = e.clientY; T.t = performance.now(); scr.classList.add('down');
   try { $('#screen').setPointerCapture(e.pointerId); } catch (er) {}
 });
 $('#screen').addEventListener('pointerup', async e => {
-  if (e.pointerId !== T.id) return; T.id = null; clearTimeout(T.hold); cur.classList.remove('down', 'hold', 'drag');
+  if (e.pointerId !== T.id) return; T.id = null; scr.classList.remove('down');
   const p = toDevice(e); if (!p || !T.p || T.inflight > 2) return;
   const ms = Math.round(performance.now() - T.t), moved = Math.hypot(e.clientX - T.x, e.clientY - T.y);
   const serial = STK.sel(); T.inflight++;
@@ -539,7 +550,7 @@ $('#screen').addEventListener('pointerup', async e => {
     clearTimeout(P.followUp); P.followUp = setTimeout(() => shoot({ reason: 'touch' }), 450);
   } catch (er) { STK.fail(er); } finally { T.inflight--; }
 });
-$('#screen').addEventListener('pointercancel', () => { T.id = null; clearTimeout(T.hold); cur.classList.remove('down', 'hold', 'drag'); });
+$('#screen').addEventListener('pointercancel', () => { T.id = null; scr.classList.remove('down'); });
 
 /* drop an APK or file on the frame */
 (() => {
@@ -575,7 +586,7 @@ function applySize() {
   $('#frame-close').hidden = z !== 'l'; $('#frame-size').setAttribute('aria-pressed', z === 'l' ? 'true' : 'false');
   $('#frame-size').title = z === 'l' ? 'Back to normal size (Esc)' : 'Pop the phone out to a big screen';
 }
-function setSize(z) { STK.store.set('frame-size', z); applySize(); }
+function setSize(z) { STK.store.set('frame-size', z); animateLayout(applySize); }
 
 
 /* ---------- rendering and timers ---------- */

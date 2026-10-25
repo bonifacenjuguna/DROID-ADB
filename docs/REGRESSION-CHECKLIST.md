@@ -84,3 +84,9 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Apps list shows apps on Installed, System and All. If it is empty, the message says what the phone returned.
 - [ ] Unplug and replug the cable: the picture keeps the last frame for a few seconds, then shows "No phone connected".
 - [ ] Pop-out view in landscape game and portrait; Esc closes it.
+
+## Added in 2.4.0 (real device, Chrome/Edge)
+- [ ] Rotate a landscape game: the card turns and morphs; rotating the other way (rotation 3) puts the camera hole on the right.
+- [ ] Charging ring animates only while charging; low battery turns it red.
+- [ ] Pop-out in and out is smooth. Browsers without View Transitions switch instantly (no error).
+- [ ] The coloured arrow cursor appears over the phone picture.

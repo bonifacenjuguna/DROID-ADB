@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.4.0
+Changed
+- Live indicator moved off the screen to the top corner of the phone card.
+- Real transforms: the phone grows into the pop-out, shrinks back, and turns when the phone rotates (the card rotates and morphs to the new shape while the page reflows). Respects reduced motion and the layout animation setting.
+- Cursor on the phone picture is now the normal arrow in colour (amber, orange while pressed).
+- Phone body redrawn to look like a real device: metal frame with highlights, thin bezel, corner radius that follows the screen size, camera hole (left in landscape, right when turned the other way), side buttons that move to the top in landscape, antenna lines and a glass reflection.
+- Battery percentage is now a ring. While charging the ring glows and a light sweeps around it, with a pulsing bolt.
+
 ## 2.3.1
 Fixed
 - The phone picture no longer flashes "loading" or "no phone". A slow or empty answer from adb used to wipe the device list for a moment; the backend now keeps the last list for a few cycles and the page ignores short dips.

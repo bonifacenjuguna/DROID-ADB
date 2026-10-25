@@ -1,4 +1,4 @@
-# Scrcpy Toolkit 2.3
+# Scrcpy Toolkit 2.4
 
 A portable Windows control center for scrcpy: mirror, record, screenshot, remote-control and manage your Android phone from a local dashboard.
 
@@ -10,6 +10,9 @@ Helper project around scrcpy v5.0.1. The scrcpy binaries in `core/scrcpy/` are u
 3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
+
+## What changed in 2.4
+- Real phone-body look, charging ring, animated rotate / pop-out transitions, coloured arrow cursor, Live indicator on the card. See CHANGELOG.md.
 
 ## What changed in 2.3
 - **Phone card:** the preview is now a phone-shaped frame with battery, charging, temperature and connection details beside it. It follows the phone's real orientation and moves to the top when the phone is landscape.
