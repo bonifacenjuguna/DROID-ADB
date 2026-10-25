@@ -43,8 +43,10 @@ const COMMANDS = [
   { name: 'Start or stop mirroring', hint: 'M', run: need(() => STK.actions.mirror()) },
   { name: 'Start or stop recording', hint: 'R', run: need(() => STK.actions.record()) },
   { name: 'Take a screenshot', hint: 'S', run: need(() => STK.actions.screenshot()) },
-  { name: 'Update the phone picture', hint: 'U', run: need(() => { STK.go('console'); STK.preview.update(); }) },
-  { name: 'Turn Live preview on or off', hint: 'L', run: need(() => { STK.go('console'); STK.preview.toggleLive(); }) },
+  { name: 'Update the phone picture', hint: 'U', run: need(() => STK.preview.update()) },
+  { name: 'Turn live preview on or off', hint: 'L', run: need(() => STK.preview.toggleLive()) },
+  { name: 'Copy the phone picture', hint: 'C', run: need(() => STK.preview.copy()) },
+  { name: 'Keyboard shortcuts', hint: '?', run: () => $('#dlg-help').showModal() },
   { name: 'Stop all sessions', run: () => STK.actions.stopAll() },
   { name: 'Press Home on the phone', run: need(() => STK.sendKey('home')) },
   { name: 'Press Back on the phone', run: need(() => STK.sendKey('back')) },
@@ -92,10 +94,13 @@ document.addEventListener('keydown', e => {
   if (k === 'm') need(() => STK.actions.mirror())();
   else if (k === 'r') need(() => STK.actions.record())();
   else if (k === 's') need(() => STK.actions.screenshot())();
-  else if (k === 'u' && state.view === 'console') need(() => STK.preview.update())();
-  else if (k === 'l' && state.view === 'console') need(() => STK.preview.toggleLive())();
-  else if (e.key === '?' ) palOpen();
+  else if (k === 'u') need(() => STK.preview.update())();
+  else if (k === 'l') need(() => STK.preview.toggleLive())();
+  else if (k === 'c') need(() => STK.preview.copy())();
+  else if (e.key === '?') $('#dlg-help').showModal();
 });
+
+$('#help-close').addEventListener('click', () => $('#dlg-help').close());
 
 /* start */
 STK.go((location.hash || '#console').slice(1));

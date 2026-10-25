@@ -14,9 +14,10 @@ $Shared.activity = New-Object System.Collections.ArrayList
 $Shared.events = New-Object System.Collections.ArrayList
 $Shared.info = [hashtable]::Synchronized(@{})
 $Shared.live = [hashtable]::Synchronized(@{})
-$Shared.liveMode = [hashtable]::Synchronized(@{})
-$Shared.preview = [hashtable]::Synchronized(@{})
-$Shared.previewBusy = [hashtable]::Synchronized(@{})
+$Shared.frames = [hashtable]::Synchronized(@{})
+$Shared.appsCache = $null
+$Shared.frameBusy = New-Object 'System.Collections.Concurrent.ConcurrentDictionary[string,long]'
+$Shared.lastClientMs = [long]0
 $Shared.eventSeq = 0
 $Shared.inflight = 0
 $Shared.stop = $false
@@ -79,6 +80,28 @@ while (-not $Shared.stop) {
 }
 '@
 
+# Reads rotation, screen state, battery and foreground app while a dashboard tab is watching.
+$LiveLoop = @'
+
+$cycle = 0
+while (-not $Shared.stop) {
+    $wait = 2000
+    try {
+        $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+        $s = Get-Settings
+        $wait = [int]$s.liveSeconds * 1000
+        if (($nowMs - [long]$Shared.lastClientMs) -lt 15000) {
+            $cycle++
+            foreach ($d in @($Shared.devices | Where-Object { $null -ne $_ -and $_.state -eq 'device' })) {
+                try { Update-LiveTelemetry ([string]$d.id) (($cycle % 3) -eq 1) } catch { Write-BackendLog ('Live: ' + $_.Exception.Message) }
+            }
+        } else { $wait = 1000 }
+    } catch { Write-BackendLog ('Live loop: ' + $_.Exception.Message) }
+    $slept = 0
+    while ($slept -lt $wait -and -not $Shared.stop) { Start-Sleep -Milliseconds 100; $slept += 100 }
+}
+'@
+
 $Runners = New-Object System.Collections.ArrayList
 function Start-Runner {
     param([string]$Name, [string]$LoopText)
@@ -121,6 +144,7 @@ try {
     Set-Content -LiteralPath $PidFile -Value $PID
     Add-Activity 'system' ('Backend started on port ' + $Port + '.')
     [void]$Runners.Add((Start-Runner 'ticker' $TickerLoop))
+    [void]$Runners.Add((Start-Runner 'live' $LiveLoop))
     for ($i = 1; $i -le $WorkerCount; $i++) { [void]$Runners.Add((Start-Runner ('worker-' + $i) $WorkerLoop)) }
     for ($i = 1; $i -le 3; $i++) { [void]$Runners.Add((Start-Runner ('fast-' + $i) $FastLoop)) }
 

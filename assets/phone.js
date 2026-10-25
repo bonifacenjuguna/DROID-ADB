@@ -73,7 +73,10 @@ async function loadApps(force) {
   const box = $('#ptab-apps');
   if (!P.apps || force || P.appsFor !== serial() || P.appsScope !== P.scope) {
     STK.setHtml(box, '<div class="panel"><p class="hint">Loading apps...</p></div>');
-    try { const r = await STK.api(`/apps?id=${encodeURIComponent(serial())}&scope=${P.scope}`, { timeout: 60000 }); P.apps = r.apps; P.appsNote = r.note || ''; P.appsFor = serial(); P.appsScope = P.scope; }
+    try {
+      const url = `/apps?id=${encodeURIComponent(serial())}&scope=${P.scope}`; let r;
+      try { r = await STK.api(url, { timeout: 60000 }); } catch (e1) { await STK.sleep(900); r = await STK.api(url, { timeout: 60000 }); }
+      P.apps = r.apps; P.appsNote = r.note || ''; P.appsFor = serial(); P.appsScope = P.scope; }
     catch (e) { STK.setHtml(box, `<div class="panel"><div class="empty">${icon('alert')}<b>Could not list apps</b><p>${esc(e.message)}</p><div class="row"><button class="btn primary" id="app-retry">Try again</button><button class="btn" data-ptab="shell">Open shell</button></div><p class="hint">Tip: unlock the phone and check that USB debugging is still authorized.</p></div></div>`); return; }
   }
   renderApps();
@@ -90,6 +93,10 @@ function renderApps() {
   const f = P.appFilter.toLowerCase();
   const list = P.apps.filter(a => a.package.toLowerCase().includes(f));
   $('#app-count').textContent = P.appsNote || `${list.length} of ${P.apps.length} apps`;
+  if (!P.apps.length) {
+    STK.setHtml($('#app-list'), `<div class="empty">${icon('alert')}<b>The phone returned no apps</b><p>${esc(P.appsNote || 'Try the All tab, unlock the phone, and check that USB debugging is still authorized.')}</p><button class="btn primary" id="app-retry">Try again</button></div>`);
+    return;
+  }
   STK.setHtml($('#app-list'), list.slice(0, 300).map(a => `<div class="approw"><div><b>${esc(nice(a.package))}${a.disabled ? '<span class="pill warn">Disabled</span>' : ''}</b><small>${esc(a.package)}</small></div><div class="row tight"><button class="btn sm" data-app="launch" data-pkg="${esc(a.package)}">Open</button><button class="btn sm" data-app="mirrorapp" data-pkg="${esc(a.package)}" title="Mirror only this app in its own window">Mirror app</button><button class="icon-btn" data-app="more" data-pkg="${esc(a.package)}" data-dis="${a.disabled ? 1 : 0}" aria-label="More actions for ${esc(a.package)}">${icon('more')}</button></div></div>`).join('') + (list.length > 300 ? '<p class="hint">Showing the first 300. Narrow the filter to see more.</p>' : '') || '<p class="hint">No apps match.</p>');
 }
 async function appAction(pkg, action, btn, extra) {

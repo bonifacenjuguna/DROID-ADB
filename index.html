@@ -69,10 +69,13 @@
 <symbol id="i-left" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
 <symbol id="i-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
 <symbol id="i-tap" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="6.5"/></symbol>
-<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 019.5 4a8.5 8.5 0 1010.5 10.5z"/></symbol>
-<symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.4"/><path d="M8.5 10.5V8a3.5 3.5 0 017 0v2.5"/></symbol>
-<symbol id="i-rotate" viewBox="0 0 24 24"><rect x="8.5" y="6.5" width="7" height="11" rx="1.8"/><path d="M4 9.5V6.5A2.5 2.5 0 016.5 4H9M20 14.5v3a2.5 2.5 0 01-2.5 2.5H15"/></symbol>
-<symbol id="i-thermo" viewBox="0 0 24 24"><path d="M10 14.5V5.5a2 2 0 014 0v9a4 4 0 11-4 0z"/></symbol>
+<symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" stroke-width="3"/></symbol>
+<symbol id="i-skipback" viewBox="0 0 24 24"><path d="M18 5.5v13L8.5 12zM6 5.5v13"/></symbol>
+<symbol id="i-skipfwd" viewBox="0 0 24 24"><path d="M6 5.5v13L15.5 12zM18 5.5v13"/></symbol>
+<symbol id="i-rotate" viewBox="0 0 24 24"><rect x="7" y="3.5" width="10" height="17" rx="2.4" transform="rotate(20 12 12)"/><path d="M19.5 6.5a8.5 8.5 0 011 4M4.5 17.5a8.5 8.5 0 01-1-4"/></symbol>
+<symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+<symbol id="i-keys" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.4"/><path d="M7 9h.01M11 9h.01M15 9h.01M7 13h10"/></symbol>
 <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></symbol>
 </defs>
 </svg>
@@ -116,42 +119,33 @@
       <!-- CONSOLE -->
       <section class="view" id="view-console">
         <div class="console-grid" id="console-grid" data-orient="portrait">
-          <!-- The phone is the centrepiece: framed screen picture, live status, details and the main actions. -->
-          <section class="panel devcard" id="devcard" data-orient="portrait" data-pv="connecting" aria-label="Active device">
-            <i class="dc-bg" id="dc-bg" aria-hidden="true"></i>
-            <div class="dc-left">
-              <div class="dc-stage" id="dc-stage">
-                <div class="phone" id="phone" data-rot="0" role="img" aria-label="Phone screen">
-                  <i class="ph-btn pwr" aria-hidden="true"></i><i class="ph-btn vol" aria-hidden="true"></i>
-                  <div class="screen" id="screen">
-                    <img class="scr-img" id="scr-a" alt="" draggable="false" hidden>
-                    <img class="scr-img" id="scr-b" alt="" draggable="false" hidden>
-                    <div class="scr-ovl" id="scr-ovl" aria-hidden="true"><div class="ovl-in"><span class="ovl-ic" id="ovl-ic"></span><b id="ovl-title"></b><p id="ovl-text"></p></div></div>
-                    <i class="scr-bar" id="scr-bar" aria-hidden="true"></i>
-                    <i class="ph-cam" aria-hidden="true"></i>
-                  </div>
+          <section class="panel hero area-hero" id="hero" data-orient="portrait" aria-label="Active device">
+            <div class="hero-in">
+            <div class="hero-phone" id="hero-phone">
+              <div class="device" id="device" data-state="idle" data-orient="portrait">
+                <i class="side s1"></i><i class="side s2"></i><i class="side s3"></i>
+                <div class="device-screen" id="screen" tabindex="0" role="img" aria-label="Phone screen. Click to tap, drag to swipe.">
+                  <img id="screen-img" alt="Live picture of the phone screen" draggable="false" hidden>
+                  <div class="screen-ghost" id="screen-ghost"></div>
+                  <div class="screen-badges" id="screen-badges"></div>
+                  <div class="screen-state" id="screen-state" role="status" aria-live="polite"></div>
+                  <div class="screen-fx" id="screen-fx"></div>
+                  <div class="screen-drop" id="screen-drop" hidden><svg class="ic"><use href="#i-upload"/></svg><b>Drop to send</b><span>APK files install, other files go to Download</span></div>
                 </div>
+                <i class="punch"></i>
               </div>
-              <div class="dc-ctl" id="dc-ctl">
-                <div class="dc-tags" id="dc-tags"></div>
-                <div class="dc-ctl-row">
-                  <label class="live-toggle" title="Refresh the picture automatically while this page is open"><span class="switch sm"><input type="checkbox" id="preview-live" aria-label="Live preview"><i></i></span><span>Live</span></label>
-                  <button class="btn sm" id="preview-now" type="button" title="Take a new picture of the phone screen"><svg class="ic sm"><use href="#i-refresh"/></svg><span>Update</span></button>
-                </div>
-                <p class="hint dc-note" id="preview-note"></p>
+              <div class="frame-tools" id="frame-tools">
+                <button class="btn sm" id="preview-now" title="Take a new picture (U)"><svg class="ic sm"><use href="#i-refresh"/></svg><span>Update</span></button>
+                <label class="live-toggle" title="Keep the picture fresh (L)"><span class="switch sm"><input type="checkbox" id="preview-live" aria-label="Live preview"><i></i></span><span>Live</span></label>
+                <button class="icon-btn" id="frame-copy" title="Copy the picture (C)" aria-label="Copy the picture"><svg class="ic"><use href="#i-copy"/></svg></button>
+                <button class="icon-btn" id="frame-size" title="Change the phone size" aria-label="Change the phone size"><svg class="ic"><use href="#i-expand"/></svg></button>
               </div>
+              <p class="hint frame-meta" id="frame-meta"></p>
+              <button class="btn theater-close" id="frame-close" type="button" hidden><svg class="ic sm"><use href="#i-x"/></svg><span>Close (Esc)</span></button>
             </div>
-
-            <div class="dc-body" id="dc-body">
-              <div class="dc-id" id="stage-id"></div>
-              <div class="dc-batt" id="dc-batt" data-tone="ok" hidden>
-                <div class="ring-wrap">
-                  <svg class="ring" viewBox="0 0 64 64" aria-hidden="true"><circle class="ring-bg" cx="32" cy="32" r="27" pathLength="100"/><circle class="ring-fg" id="ring-fg" cx="32" cy="32" r="27" pathLength="100" transform="rotate(-90 32 32)"/></svg>
-                  <svg class="ic ring-bolt" id="ring-bolt" aria-hidden="true" hidden><use href="#i-bolt"/></svg>
-                </div>
-                <div class="batt-txt"><b><span id="batt-val">--</span><small>%</small></b><span id="batt-state">Reading battery</span></div>
-                <div class="batt-meta" id="batt-meta"></div>
-              </div>
+            <div class="hero-body">
+              <div class="stage-id" id="stage-id"></div>
+              <div class="battery" id="battery"></div>
               <dl class="specs" id="stage-specs"></dl>
               <div class="stage-actions" id="stage-actions">
                 <button class="btn primary lg toggle" id="mirror-btn" data-act="mirror" aria-pressed="false"></button>
@@ -160,10 +154,10 @@
               </div>
               <div class="quickline" id="quickline"></div>
             </div>
-            <p class="sr-only" id="dc-sr" role="status" aria-live="polite"></p>
+            </div>
           </section>
 
-            <section class="panel remote" id="remote" aria-label="Remote controls">
+          <section class="panel remote area-remote" aria-label="Remote controls">
               <header class="panel-head"><h2>Remote controls</h2><span class="hint">Works while the phone is connected, with or without a mirror window.</span></header>
               <div class="keys" id="keys">
                 <button class="key" data-key="back" title="Back"><svg class="ic"><use href="#i-back"/></svg><span>Back</span></button>
@@ -186,10 +180,6 @@
                 <button class="key mini" data-gesture="left" title="Swipe left"><svg class="ic sm"><use href="#i-left"/></svg></button>
                 <button class="key mini" data-gesture="right" title="Swipe right"><svg class="ic sm"><use href="#i-right"/></svg></button>
                 <button class="key mini" data-gesture="tap" title="Tap the middle of the screen"><svg class="ic sm"><use href="#i-tap"/></svg></button>
-                <span class="hint grow">Media</span>
-                <button class="key mini" data-key="prev" title="Previous track"><svg class="ic sm"><use href="#i-left"/></svg></button>
-                <button class="key mini" data-key="playpause" title="Play or pause"><svg class="ic sm"><use href="#i-play"/></svg></button>
-                <button class="key mini" data-key="next" title="Next track"><svg class="ic sm"><use href="#i-right"/></svg></button>
               </div>
               <div class="typebar">
                 <svg class="ic sm"><use href="#i-keyboard"/></svg>
@@ -203,8 +193,28 @@
               </div>
             </section>
 
+          <section class="panel media area-media" id="media-card" aria-label="Now playing">
+            <header class="panel-head"><h2>Media</h2><span class="chip sm" id="media-chip"><i class="dot"></i><b>Idle</b></span></header>
+            <div class="media-body" id="media-body" data-state="idle">
+              <div class="media-art" id="media-art" aria-hidden="true"><svg class="ic"><use href="#i-music"/></svg><span class="eq"><i></i><i></i><i></i><i></i></span></div>
+              <div class="media-text"><b id="media-title">Nothing playing</b><span id="media-artist">Start music or a video on the phone and it shows up here.</span><small id="media-app"></small></div>
+            </div>
+            <div class="media-ctl">
+              <button class="key mini" data-key="prev" title="Previous track" aria-label="Previous track"><svg class="ic"><use href="#i-skipback"/></svg></button>
+              <button class="key mini big" data-key="playpause" id="media-play" title="Play or pause" aria-label="Play or pause"><svg class="ic"><use href="#i-play"/></svg></button>
+              <button class="key mini" data-key="next" title="Next track" aria-label="Next track"><svg class="ic"><use href="#i-skipfwd"/></svg></button>
+              <span class="grow"></span>
+              <button class="key mini" data-key="voldown" title="Volume down" aria-label="Volume down"><svg class="ic"><use href="#i-voldown"/></svg></button>
+              <button class="key mini" data-key="volup" title="Volume up" aria-label="Volume up"><svg class="ic"><use href="#i-volup"/></svg></button>
+            </div>
+          </section>
 
-            <section class="panel captures" id="captures" aria-label="Recent captures">
+          <section class="panel area-sessions" aria-label="Sessions">
+              <header class="panel-head"><h2>Live sessions</h2><span class="chip sm" id="session-chip"><i class="dot"></i><b>None</b></span></header>
+              <div id="sessions"></div>
+            </section>
+
+          <section class="panel captures area-captures" aria-label="Recent captures">
               <header class="panel-head">
                 <h2>Recent captures</h2>
                 <button class="link" data-view="library">Open library</button>
@@ -216,16 +226,10 @@
               </div>
             </section>
 
-          <aside class="col side" id="side">
-            <section class="panel" aria-label="Sessions">
-              <header class="panel-head"><h2>Live sessions</h2><span class="chip sm" id="session-chip"><i class="dot"></i><b>None</b></span></header>
-              <div id="sessions"></div>
-            </section>
-            <section class="panel" aria-label="Activity">
+          <section class="panel area-activity" aria-label="Activity">
               <header class="panel-head"><h2>Activity</h2><span class="hint">This run</span></header>
               <ol class="feed" id="feed"></ol>
             </section>
-          </aside>
         </div>
       </section>
 
@@ -424,6 +428,24 @@
   </div>
 </dialog>
 
+<dialog id="dlg-help" class="dlg">
+  <div class="dlg-body">
+    <header class="panel-head"><h2>Keyboard shortcuts</h2><button class="icon-btn" id="help-close" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></header>
+    <dl class="keylist">
+      <div><dt><kbd>Ctrl</kbd> <kbd>K</kbd></dt><dd>Command palette</dd></div>
+      <div><dt><kbd>1</kbd> to <kbd>5</kbd></dt><dd>Console, Library, Phone, Devices, Settings</dd></div>
+      <div><dt><kbd>M</kbd></dt><dd>Start or stop mirroring</dd></div>
+      <div><dt><kbd>R</kbd></dt><dd>Start or stop recording</dd></div>
+      <div><dt><kbd>S</kbd></dt><dd>Take a screenshot</dd></div>
+      <div><dt><kbd>U</kbd></dt><dd>Update the phone picture</dd></div>
+      <div><dt><kbd>L</kbd></dt><dd>Turn live preview on or off</dd></div>
+      <div><dt><kbd>C</kbd></dt><dd>Copy the phone picture</dd></div>
+      <div><dt><kbd>?</kbd></dt><dd>This list</dd></div>
+    </dl>
+    <p class="hint">On the phone picture: click to tap, drag to swipe, hold to long-press.</p>
+  </div>
+</dialog>
+
 <dialog id="dlg-palette" class="dlg palette">
   <div class="dlg-body">
     <div class="pal-input"><svg class="ic"><use href="#i-search"/></svg><input id="pal-input" type="text" placeholder="Type a command" autocomplete="off" spellcheck="false" aria-label="Command"></div>
@@ -433,7 +455,6 @@
 </dialog>
 
 <script src="assets/core.js"></script>
-<script src="assets/device.js"></script>
 <script src="assets/console.js"></script>
 <script src="assets/library.js"></script>
 <script src="assets/phone.js"></script>
