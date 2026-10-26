@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '3.1.0'
+$ToolkitVersion = '3.2.0'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -398,6 +398,26 @@ function Resolve-Target {
     return ''
 }
 
+# Reads a text file even when another process (Defender, the adb helper) still has it open. Retries for about 4 seconds.
+function Read-TextShared {
+    param([string]$Path)
+    $last = $null
+    for ($i = 0; $i -lt 40; $i++) {
+        $fs = $null
+        try {
+            $fs = New-Object IO.FileStream($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+            $sr = New-Object IO.StreamReader($fs, (New-Object Text.UTF8Encoding($false)))
+            return [string]$sr.ReadToEnd()
+        } catch [IO.IOException] {
+            $last = $_
+            Start-Sleep -Milliseconds 100
+        } finally {
+            if ($fs) { $fs.Dispose() }
+        }
+    }
+    throw $last
+}
+
 function Invoke-Native {
     param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 15, [string]$WorkDir = '')
     $tmp = [IO.Path]::GetTempPath()
@@ -415,8 +435,8 @@ function Invoke-Native {
         $p.WaitForExit()
         $o = ''
         $e = ''
-        if (Test-Path -LiteralPath $stdoutFile) { $o = [string][IO.File]::ReadAllText($stdoutFile) }
-        if (Test-Path -LiteralPath $stderrFile) { $e = [string][IO.File]::ReadAllText($stderrFile) }
+        if (Test-Path -LiteralPath $stdoutFile) { $o = Read-TextShared $stdoutFile }
+        if (Test-Path -LiteralPath $stderrFile) { $e = Read-TextShared $stderrFile }
         return @{ code = [int]$p.ExitCode; out = $o; err = $e }
     } finally {
         Remove-Item -LiteralPath $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue

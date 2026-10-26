@@ -56,13 +56,18 @@ function checkAlerts() {
 const lowDisk = () => { const lim = Number(S().lowDiskGb) || 0, d = state.disk; return lim > 0 && d && d.total && d.free < lim * 1073741824; };
 
 /* ---------- battery ring (built once, updated in place so animations never restart) ---------- */
+/* Battery colour: full = green, sliding through lime, amber and orange to red when low. Two close hues make a soft gradient. */
+STK.batColors = function (level) {
+  const t = Math.min(1, Math.max(0, level / 100)), h = Math.pow(t, 1.1) * 142, shift = 6 + 20 * Math.min(1, t * 1.6);
+  return ['hsl(' + h.toFixed(0) + ' 80% 45%)', 'hsl(' + Math.min(168, h + shift).toFixed(0) + ' 88% 56%)'];
+};
 const WAVE = 'M0 4 C12 -2 38 -2 50 4 S88 10 100 4 S138 -2 150 4 S188 10 200 4 V90 H0 Z';
 function clearBattery() { const b = $('#battery'); if (b._built || b.innerHTML) { b._built = false; b.innerHTML = ''; } }
 function buildBattery(box) {
-  box.innerHTML = `<div class="bat-main"><div class="ring" role="img"><svg class="ring-svg" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="ringgrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--ok)"/><stop offset="1" stop-color="#5ce1e6"/></linearGradient><clipPath id="ringclip"><circle cx="50" cy="50" r="36"/></clipPath></defs>
+  box.innerHTML = `<div class="bat-main"><div class="ring" role="img"><svg class="ring-svg" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="ringgrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--bc1)"/><stop offset="1" style="stop-color:var(--bc2)"/></linearGradient><clipPath id="ringclip"><circle cx="50" cy="50" r="36"/></clipPath></defs>
     <circle class="r-track" cx="50" cy="50" r="44" pathLength="100"/>
-    <g clip-path="url(#ringclip)"><g class="r-liquid"><path class="wv w1" d="${WAVE}"/><path class="wv w2" d="${WAVE}" transform="translate(-30 2)"/></g><circle class="bub b1" cx="40" cy="80" r="1.8"/><circle class="bub b2" cx="55" cy="84" r="1.4"/><circle class="bub b3" cx="64" cy="78" r="2"/></g>
-    <circle class="r-arc" cx="50" cy="50" r="44" pathLength="100"/><circle class="r-flow" cx="50" cy="50" r="44" pathLength="100"/></svg>
+    <g clip-path="url(#ringclip)"><g class="r-liquid"><path class="wv w1" d="${WAVE}"/><path class="wv w2" d="${WAVE}" transform="translate(-30 2)"/></g></g>
+    <circle class="r-arc" cx="50" cy="50" r="44" pathLength="100"/></svg>
     <div class="ring-in"><b><span class="bn">0</span><small>%</small></b>${icon('bolt')}</div></div>
     <div class="bat-side"><div class="bat-line"></div><div class="bat-eta"></div></div><div class="spark-wrap"></div></div>`;
   box._built = true; box._k = {};
@@ -73,9 +78,9 @@ function updateBattery(serial, L, b) {
   root.classList.toggle('chg', b.charging); root.classList.toggle('low', b.low);
   if (k.level !== b.level) {
     k.level = b.level; $('.bn', box).textContent = b.level;
+    const col = STK.batColors(b.level); root.style.setProperty('--bc1', col[0]); root.style.setProperty('--bc2', col[1]);
     ring.style.setProperty('--y', (86 - 72 * b.level / 100).toFixed(1) + 'px');
     $('.r-arc', box).style.strokeDasharray = b.level + ' 100';
-    $('.r-flow', box).style.setProperty('--travel', Math.max(8, b.level - 6).toFixed(0));
     ring.setAttribute('aria-label', 'Battery ' + b.level + ' percent');
   }
   const line = `${b.charging ? `<span class="bolt">${icon('bolt', 'sm')}Charging${b.power ? ' · ' + esc(b.power) : ''}</span>` : '<span>On battery</span>'}${b.temp != null ? `<span>${esc(b.temp)} °C</span>` : ''}${L && L.voltage ? `<span>${(L.voltage / 1000).toFixed(2)} V</span>` : ''}`;

@@ -174,6 +174,7 @@ function paintHdr() {
   const cls = 'hdr-batt' + (L.charging ? ' chg' : '') + (L.battery <= 15 && !L.charging ? ' low' : '');
   const html = `<i style="--p:${L.battery}"></i><b>${L.battery}%</b>${L.charging ? icon('bolt', 'sm') : ''}`;
   el.className = cls; STK.setHtml(el, html);
+  if (STK.batColors) { const c = STK.batColors(L.battery); el.style.setProperty('--bc1', c[0]); el.style.setProperty('--bc2', c[1]); }
 }
 let lastReady = null;
 STK.on('state', () => {

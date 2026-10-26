@@ -136,13 +136,18 @@ $Routes['GET /api/notifications'] = { param($Ctx)
         if ($b -match 'flags=0x[0-9a-fA-F]*[2-9a-fA-F][0-9a-fA-F]?\b.*ONGOING|FLAG_ONGOING_EVENT|FOREGROUND_SERVICE') { $ongoing = $true }
         $key = ''
         if ($b -match 'key=([^\s)]+)') { $key = $Matches[1] }
+        # A group summary row is the phone's own "5 new messages" line. The page uses it as a count, not as a message.
+        $summary = $false
+        if ($b -match 'flags=0x([0-9a-fA-F]{1,8})') { try { if (([Convert]::ToInt32($Matches[1], 16) -band 0x200) -ne 0) { $summary = $true } } catch {} }
+        $conv = ''
+        if ($b -match '(?m)android\.conversationTitle=(.*)$') { $conv = Get-NotifText $Matches[1]; if ($conv -eq 'null') { $conv = '' } }
         if ($title -eq '' -and $body -eq '' -and $big -eq '') { continue }
-        $items += , @{ key = $key; package = $pkg; title = $title; text = $(if ($big -ne '' -and $big.Length -gt $body.Length) { $big } else { $body }); when = $when; ongoing = $ongoing }
+        $items += , @{ key = $key; package = $pkg; title = $title; text = $(if ($big -ne '' -and $big.Length -gt $body.Length) { $big } else { $body }); when = $when; ongoing = $ongoing; summary = $summary; conversation = $conv }
     }
     $seen = @{}
     $uniq = @()
     foreach ($it in $items) { $k = $it.package + '|' + $it.title + '|' + $it.text; if (-not $seen.ContainsKey($k)) { $seen[$k] = $true; $uniq += , $it } }
-    Send-Json $Ctx @{ items = @($uniq | Select-Object -First 80); count = $uniq.Count; note = $(if ($uniq.Count -eq 0 -and $r.out.Length -lt 50) { 'The phone did not return a notification list.' } else { '' }) }
+    Send-Json $Ctx @{ items = @($uniq | Select-Object -First 150); count = $uniq.Count; note = $(if ($uniq.Count -eq 0 -and $r.out.Length -lt 50) { 'The phone did not return a notification list.' } else { '' }) }
 }
 
 # ---------------------------------------------------------------------------
@@ -400,50 +405,83 @@ $Routes['POST /api/intent'] = { param($Ctx)
 # ---------------------------------------------------------------------------
 $Routes['GET /api/insights/usage'] = { param($Ctx)
     $serial = Get-Query $Ctx 'id'
-    $r = Invoke-DeviceShell $serial 'dumpsys usagestats 2>/dev/null | sed -n ''/daily stats/,/weekly stats/p'' | grep -E ''package=.*(totalTimeUsed|totalTimeInForeground)'' | head -n 400' 40
-    $totals = @{}
-    foreach ($line in ($r.out -split "`r?`n")) {
-        if ($line -match 'package=([A-Za-z0-9._]+)' ) {
-            $pkg = $Matches[1]
-            $ms = [long]0
-            if ($line -match 'totalTimeUsed="?([^"]*?)"?(?:\s+lastTime|\s+appLaunchCount|$)') { $ms = ConvertFrom-DurationText $Matches[1] }
-            elseif ($line -match 'totalTimeInForeground="?([^"\s]+)') { $ms = ConvertFrom-DurationText $Matches[1] }
-            if ($ms -gt 0) { if (-not $totals.ContainsKey($pkg) -or $totals[$pkg] -lt $ms) { $totals[$pkg] = $ms } }
+    # Whole "daily stats" part, so each day can be told apart. [[:space:]] is used because the phone's grep has no \s.
+    $r = Invoke-DeviceShell $serial 'dumpsys usagestats 2>/dev/null | sed -n ''/daily stats/,/weekly stats/p'' | head -n 6000' 45
+    $lines = @($r.out -split "`r?`n")
+    $buckets = New-Object System.Collections.ArrayList
+    $cur = $null
+    $seenHeader = $false
+    foreach ($line in $lines) {
+        if ($line -notmatch 'package=([A-Za-z0-9._]+)') {
+            # A heading line between two lists of apps means a new day starts.
+            if ($line.Trim() -ne '' -and $null -ne $cur -and $cur.Count -gt 0) { $cur = $null }
+            continue
         }
+        $pkg = $Matches[1]
+        $ms = [long]0
+        if ($line -match 'totalTimeUsed="?([^"]*?)"?(?:\s+lastTime|\s+appLaunchCount|\s+totalTimeVisible|$)') { $ms = ConvertFrom-DurationText $Matches[1] }
+        elseif ($line -match 'totalTimeInForeground="?([^"\s]+)') { $ms = ConvertFrom-DurationText $Matches[1] }
+        # The same app twice in one list means the next day has started.
+        if ($null -ne $cur -and $cur.ContainsKey($pkg)) { $cur = $null }
+        if ($null -eq $cur) { $cur = @{}; [void]$buckets.Add($cur) }
+        if ($ms -gt 0) { if (-not $cur.ContainsKey($pkg) -or $cur[$pkg] -lt $ms) { $cur[$pkg] = $ms } } elseif (-not $cur.ContainsKey($pkg)) { $cur[$pkg] = [long]0 }
     }
-    $apps = @($totals.Keys | ForEach-Object { @{ package = $_; ms = [long]$totals[$_] } } | Sort-Object { $_.ms } -Descending | Select-Object -First 25)
-    Send-Json $Ctx @{ apps = $apps; note = $(if ($apps.Count -eq 0) { 'This phone did not share usage times. Some makers hide them from adb.' } else { '' }) }
+    # Today is the newest day that has real numbers in it.
+    $today = $null
+    for ($i = $buckets.Count - 1; $i -ge 0; $i--) {
+        $nz = 0
+        foreach ($k in $buckets[$i].Keys) { if ($buckets[$i][$k] -gt 0) { $nz++ } }
+        if ($nz -ge 1) { $today = $buckets[$i]; break }
+    }
+    $apps = @()
+    if ($today) { $apps = @($today.Keys | Where-Object { $today[$_] -gt 0 } | ForEach-Object { @{ package = $_; ms = [long]$today[$_] } } | Sort-Object { $_.ms } -Descending | Select-Object -First 25) }
+    $note = ''
+    if ($apps.Count -eq 0) {
+        if ($r.code -ne 0 -and ($r.err + $r.out).Trim() -ne '') { $note = 'The phone refused: ' + (($r.err + $r.out).Trim() -split "`n" | Select-Object -First 1) }
+        elseif ($lines.Count -lt 5) { $note = 'This phone did not share usage times. Some makers hide them from adb.' }
+        else { $note = 'The phone sent ' + $lines.Count + ' lines but no app times in them. Use the Devices page copy report button and send it so the format can be added.' }
+    }
+    Send-Json $Ctx @{ apps = $apps; days = $buckets.Count; note = $note }
 }
 
 $Routes['GET /api/insights/battery'] = { param($Ctx)
     $serial = Get-Query $Ctx 'id'
-    $r = Invoke-DeviceShell $serial 'dumpsys batterystats 2>/dev/null | grep -E ''^\s+Uid [a-z0-9]+: [0-9.]+'' | head -n 60; echo @@UID; pm list packages -U 2>/dev/null' 40
+    $r = Invoke-DeviceShell $serial 'dumpsys batterystats 2>/dev/null | grep -E ''^[[:space:]]+Uid [a-z0-9]+: [0-9.]+'' | head -n 80; echo @@UID; pm list packages -U 2>/dev/null; echo @@BAT; dumpsys battery 2>/dev/null | grep -E ''level|powered|status''' 45
     $uidMap = @{}
-    $inUid = $false
+    $mode = 'uid'
     $raw = @()
+    $batt = @{ level = -1; plugged = $false }
     foreach ($line in ($r.out -split "`r?`n")) {
-        if ($line -match '^@@UID') { $inUid = $true; continue }
-        if ($inUid) { if ($line -match 'package:([A-Za-z0-9._]+)\s+uid:(\d+)') { $uidMap[$Matches[2]] = $Matches[1] }; continue }
-        if ($line -match '^\s+Uid ([a-z0-9]+): ([0-9.]+)') {
-            $raw += , @($Matches[1], $Matches[2])
+        if ($line -match '^@@UID') { $mode = 'pm'; continue }
+        if ($line -match '^@@BAT') { $mode = 'bat'; continue }
+        if ($mode -eq 'pm') { if ($line -match 'package:([A-Za-z0-9._]+)\s+uid:(\d+)') { $uidMap[$Matches[2]] = $Matches[1] }; continue }
+        if ($mode -eq 'bat') {
+            if ($line -match 'level:\s*(\d+)') { $batt.level = [int]$Matches[1] }
+            if ($line -match '(AC|USB|Wireless|Dock) powered:\s*true') { $batt.plugged = $true }
+            continue
         }
+        if ($line -match '^\s+Uid ([a-z0-9]+): ([0-9.]+)') { $raw += , @($Matches[1], $Matches[2]) }
     }
     $rows = @()
     foreach ($pair in $raw) {
         $u = $pair[0]
-        if ($true) {
-            $mah = [double]::Parse($pair[1], [Globalization.CultureInfo]::InvariantCulture)
-            $uidNum = ''
-            if ($u -match '^u0a(\d+)$') { $uidNum = [string](10000 + [int]$Matches[1]) } elseif ($u -match '^\d+$') { $uidNum = $u }
-            $name = $u
-            if ($uidNum -ne '' -and $uidMap.ContainsKey($uidNum)) { $name = $uidMap[$uidNum] } elseif ($u -eq '1000') { $name = 'Android system' }
-            $rows += , @{ uid = $u; package = $name; mah = [math]::Round($mah, 1) }
-        }
+        $mah = [double]::Parse($pair[1], [Globalization.CultureInfo]::InvariantCulture)
+        $uidNum = ''
+        if ($u -match '^u0a(\d+)$') { $uidNum = [string](10000 + [int]$Matches[1]) } elseif ($u -match '^\d+$') { $uidNum = $u }
+        $name = $u
+        if ($uidNum -ne '' -and $uidMap.ContainsKey($uidNum)) { $name = $uidMap[$uidNum] } elseif ($u -eq '1000') { $name = 'Android system' }
+        $rows += , @{ uid = $u; package = $name; mah = [math]::Round($mah, 1) }
     }
-    $rows = @($rows | Sort-Object { $_.mah } -Descending | Select-Object -First 15)
+    $rows = @($rows | Where-Object { $_.mah -gt 0 } | Sort-Object { $_.mah } -Descending | Select-Object -First 15)
     $sum = 0.0
     foreach ($x in $rows) { $sum += $x.mah }
-    Send-Json $Ctx @{ apps = $rows; totalMah = [math]::Round($sum, 1); note = $(if ($rows.Count -eq 0) { 'This phone did not share battery use by app.' } else { '' }) }
+    $note = ''
+    if ($rows.Count -eq 0) {
+        if ($batt.plugged -and $batt.level -ge 95) { $note = 'Android wipes its battery history while the phone is charged to full, so there is nothing to show yet. Unplug the phone, use it for a while, then press Reload.' }
+        elseif ($batt.plugged) { $note = 'Android keeps battery use only while the phone is on battery. Unplug it for a while and press Reload.' }
+        else { $note = 'This phone did not share battery use by app.' }
+    }
+    Send-Json $Ctx @{ apps = $rows; totalMah = [math]::Round($sum, 1); charging = $batt.plugged; level = $batt.level; note = $note }
 }
 
 $Routes['GET /api/insights/access'] = { param($Ctx)

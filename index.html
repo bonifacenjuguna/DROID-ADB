@@ -123,7 +123,7 @@
     <button class="rail-btn rail-more" id="rail-more" aria-haspopup="dialog"><svg class="ic"><use href="#i-grid"/></svg><span>More</span></button>
     <div class="rail-foot" title="Local backend">
       <span class="dot" id="rail-dot"></span>
-      <span id="rail-version">v3.1</span>
+      <span id="rail-version">v3.2</span>
     </div>
   </nav>
 
@@ -489,6 +489,15 @@
   <div class="dlg-body">
     <header class="panel-head"><h2>All sections</h2><button class="icon-btn" id="more-close" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></header>
     <div class="more-grid" id="more-grid"></div>
+  </div>
+</dialog>
+
+<dialog id="dlg-chart" class="dlg xwide">
+  <div class="dlg-body">
+    <header class="panel-head zc-head"><h2 id="zc-title"></h2><div class="zc-ranges" id="zc-ranges" role="group" aria-label="Time range"></div><button class="icon-btn" id="zc-close" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></header>
+    <div class="zc-read" id="zc-read" aria-live="off"></div>
+    <div class="zc-plot" id="zc-plot"></div>
+    <p class="hint" id="zc-note"></p>
   </div>
 </dialog>
 
