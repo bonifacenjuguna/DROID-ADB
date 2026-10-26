@@ -1,0 +1,543 @@
+# Scrcpy Toolkit 3.0: phone-side routes (monitor, notifications, demo mode, gallery, inspector, intents, insights). ASCII only.
+
+function ConvertFrom-DurationText {
+    param([string]$Text)
+    $t = $Text.Trim().Trim('"').TrimStart('+')
+    if ($t -match '^\d+$') { return [long]$t }
+    $ms = [long]0
+    if ($t -match '(\d+)d') { $ms += [long]$Matches[1] * 86400000 }
+    if ($t -match '(\d+)h') { $ms += [long]$Matches[1] * 3600000 }
+    if ($t -match '(\d+)m(?!s)') { $ms += [long]$Matches[1] * 60000 }
+    if ($t -match '(\d+)s') { $ms += [long]$Matches[1] * 1000 }
+    if ($t -match '(\d+)ms') { $ms += [long]$Matches[1] }
+    return $ms
+}
+
+# ---------------------------------------------------------------------------
+# Monitor: CPU, memory, network and top apps (one sample per call; the page keeps the history)
+# ---------------------------------------------------------------------------
+if (-not $Shared.monPrev) { $Shared.monPrev = [hashtable]::Synchronized(@{}) }
+
+$Routes['GET /api/monitor'] = { param($Ctx)
+    $serial = Get-Query $Ctx 'id'
+    $script = 'head -n 1 /proc/stat; echo @@MEM; head -n 5 /proc/meminfo; echo @@NET; cat /proc/net/dev; echo @@TOP; top -b -n 1 -m 10 2>/dev/null | head -n 30; echo @@TH; for f in /sys/class/thermal/thermal_zone*/temp; do echo $(cat $f 2>/dev/null); done 2>/dev/null | head -n 16; echo @@BAT; dumpsys battery 2>/dev/null | grep -E ''level|temperature|status|powered'''
+    $r = Invoke-DeviceShell $serial $script 20
+    $sec = @{ P = ''; MEM = ''; NET = ''; TOP = ''; TH = ''; BAT = '' }
+    $cur = 'P'
+    foreach ($line in ($r.out -split "`r?`n")) {
+        if ($line -match '^@@(MEM|NET|TOP|TH|BAT)\s*$') { $cur = $Matches[1]; continue }
+        $sec[$cur] += $line + "`n"
+    }
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    $out = @{ at = $now; cpu = $null; memPct = $null; memTotalMb = $null; memUsedMb = $null; rxBps = $null; txBps = $null; tempC = $null; battery = $null; batteryTempC = $null; charging = $false; top = @() }
+    $prev = $Shared.monPrev[$serial]
+    $cpuTotal = [long]0; $cpuIdle = [long]0
+    if ($sec.P -match '(?m)^cpu\s+(.+)$') {
+        $v = @($Matches[1].Trim() -split '\s+' | ForEach-Object { [long]$_ })
+        foreach ($x in $v) { $cpuTotal += $x }
+        if ($v.Count -ge 5) { $cpuIdle = $v[3] + $v[4] } elseif ($v.Count -ge 4) { $cpuIdle = $v[3] }
+    }
+    $rx = [long]0; $tx = [long]0
+    foreach ($line in ($sec.NET -split "`n")) {
+        if ($line -match '^\s*([A-Za-z0-9_.\-]+):\s*(.+)$' -and $Matches[1] -ne 'lo') {
+            $f = @($Matches[2].Trim() -split '\s+')
+            if ($f.Count -ge 9) { $rx += [long]$f[0]; $tx += [long]$f[8] }
+        }
+    }
+    if ($prev -and $cpuTotal -gt 0 -and $cpuTotal -gt [long]$prev.cpuTotal) {
+        $dt = $cpuTotal - [long]$prev.cpuTotal
+        $di = $cpuIdle - [long]$prev.cpuIdle
+        $out.cpu = [math]::Round([math]::Max(0, [math]::Min(100, 100 * (1 - $di / $dt))), 1)
+    }
+    if ($prev -and $now -gt [long]$prev.at) {
+        $secs = ($now - [long]$prev.at) / 1000.0
+        if ($rx -ge [long]$prev.rx) { $out.rxBps = [long]([long]($rx - [long]$prev.rx) / $secs) }
+        if ($tx -ge [long]$prev.tx) { $out.txBps = [long]([long]($tx - [long]$prev.tx) / $secs) }
+    }
+    $Shared.monPrev[$serial] = @{ at = $now; cpuTotal = $cpuTotal; cpuIdle = $cpuIdle; rx = $rx; tx = $tx }
+    $mt = 0; $ma = 0
+    if ($sec.MEM -match 'MemTotal:\s+(\d+)') { $mt = [long]$Matches[1] }
+    if ($sec.MEM -match 'MemAvailable:\s+(\d+)') { $ma = [long]$Matches[1] }
+    if ($mt -gt 0) { $out.memTotalMb = [int]($mt / 1024); $out.memUsedMb = [int](($mt - $ma) / 1024); $out.memPct = [math]::Round(100 * ($mt - $ma) / $mt, 1) }
+    $best = $null
+    foreach ($line in ($sec.TH -split "`n")) {
+        if ($line -match '^\s*(-?\d+)\s*$') {
+            $d = [double]$Matches[1]
+            if ($d -gt 1000) { $d = $d / 1000 }
+            if ($d -ge 15 -and $d -le 110 -and ($null -eq $best -or $d -gt $best)) { $best = $d }
+        }
+    }
+    if ($null -ne $best) { $out.tempC = [math]::Round($best, 1) }
+    if ($sec.BAT -match '(?m)^\s*level:\s*(\d+)') { $out.battery = [int]$Matches[1] }
+    if ($sec.BAT -match '(?m)^\s*temperature:\s*(\d+)') { $out.batteryTempC = [math]::Round([int]$Matches[1] / 10, 1) }
+    if ($sec.BAT -match '(?m)^\s*status:\s*2') { $out.charging = $true }
+    # top: find the header row, then read the CPU, RES and name columns
+    $hdr = $null; $rows = @()
+    foreach ($line in ($sec.TOP -split "`n")) {
+        $tline = $line.Trim()
+        if ($tline -eq '') { continue }
+        if (-not $hdr -and $tline -match '^PID\s' -and $tline -match 'CPU') { $hdr = @($tline -split '\s+'); continue }
+        if ($hdr -and $tline -match '^\d+\s') { $rows += $tline }
+    }
+    if ($hdr) {
+        $ci = -1; $ri = -1; $ni = $hdr.Count - 1; $shift = 0
+        for ($i = 0; $i -lt $hdr.Count; $i++) {
+            if ($hdr[$i] -match '%CPU' -and $ci -lt 0) { $ci = $i; if ($hdr[$i] -match '^S\[') { $ci = $i + 0 } }
+            if ($hdr[$i] -eq 'RES' -and $ri -lt 0) { $ri = $i }
+            if ($hdr[$i] -in @('ARGS', 'NAME', 'COMMAND') ) { $ni = $i }
+        }
+        $merged = ($ci -ge 0 -and $hdr[$ci] -match '^S\[')
+        if ($merged) { $ni = $ni + 1 }
+        $top = @()
+        foreach ($row in $rows) {
+            $f = @($row -split '\s+')
+            if ($f.Count -le $ni) { continue }
+            $cpuIx = $ci; if ($merged) { $cpuIx = $ci + 1 }
+            if ($cpuIx -lt 0 -or $cpuIx -ge $f.Count) { continue }
+            $cv = 0.0
+            if (-not [double]::TryParse(($f[$cpuIx] -replace '%', ''), [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$cv)) { continue }
+            $nm = ($f[$ni..($f.Count - 1)] -join ' ')
+            if ($nm -match '^top\b') { continue }
+            $res = ''
+            if ($ri -ge 0 -and $ri -lt $f.Count) { $res = $f[$ri] }
+            $top += , @{ name = $nm; cpu = $cv; res = $res }
+        }
+        $out.top = @($top | Sort-Object { $_.cpu } -Descending | Select-Object -First 6)
+    }
+    Send-Json $Ctx $out
+}
+
+# ---------------------------------------------------------------------------
+# Notifications: read-only list of what the phone is showing
+# ---------------------------------------------------------------------------
+function Get-NotifText {
+    param([string]$Line)
+    $v = $Line.Trim()
+    $v = $v -replace '^(String|SpannableString|SpannableStringBuilder|CharSequence)\s*\((.*)\)\s*$', '$2'
+    return $v
+}
+
+$Routes['GET /api/notifications'] = { param($Ctx)
+    $serial = Get-Query $Ctx 'id'
+    $r = Invoke-DeviceShell $serial 'dumpsys notification --noredact 2>/dev/null | head -n 3000' 25
+    $text = $r.out
+    $items = @()
+    $parts = [regex]::Split($text, '(?m)^\s*NotificationRecord\(')
+    for ($i = 1; $i -lt $parts.Count; $i++) {
+        $b = $parts[$i]
+        $pkg = ''
+        if ($b -match 'pkg=([A-Za-z0-9._]+)') { $pkg = $Matches[1] }
+        if ($pkg -eq '') { continue }
+        $title = ''; $body = ''; $big = ''; $when = 0; $ongoing = $false
+        if ($b -match '(?m)android\.title=(.*)$') { $title = Get-NotifText $Matches[1] }
+        if ($b -match '(?m)android\.text=(.*)$') { $body = Get-NotifText $Matches[1] }
+        if ($b -match '(?m)android\.bigText=(.*)$') { $big = Get-NotifText $Matches[1] }
+        if ($b -match '(?m)\bwhen=(\d{10,})') { $when = [long]$Matches[1] }
+        if ($b -match 'flags=0x[0-9a-fA-F]*[2-9a-fA-F][0-9a-fA-F]?\b.*ONGOING|FLAG_ONGOING_EVENT|FOREGROUND_SERVICE') { $ongoing = $true }
+        $key = ''
+        if ($b -match 'key=([^\s)]+)') { $key = $Matches[1] }
+        if ($title -eq '' -and $body -eq '' -and $big -eq '') { continue }
+        $items += , @{ key = $key; package = $pkg; title = $title; text = $(if ($big -ne '' -and $big.Length -gt $body.Length) { $big } else { $body }); when = $when; ongoing = $ongoing }
+    }
+    $seen = @{}
+    $uniq = @()
+    foreach ($it in $items) { $k = $it.package + '|' + $it.title + '|' + $it.text; if (-not $seen.ContainsKey($k)) { $seen[$k] = $true; $uniq += , $it } }
+    Send-Json $Ctx @{ items = @($uniq | Select-Object -First 80); count = $uniq.Count; note = $(if ($uniq.Count -eq 0 -and $r.out.Length -lt 50) { 'The phone did not return a notification list.' } else { '' }) }
+}
+
+# ---------------------------------------------------------------------------
+# Demo mode (clean status bar for screenshots and presentations)
+# ---------------------------------------------------------------------------
+if (-not $Shared.demo) { $Shared.demo = [hashtable]::Synchronized(@{}) }
+function Invoke-DemoBroadcast { param([string]$Serial, [string]$Extra) return (Invoke-DeviceShell $Serial ('am broadcast -a com.android.systemui.demo ' + $Extra) 12) }
+
+$Routes['POST /api/demo'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $serial = [string](Get-Prop $body 'serial' '')
+    Test-Serial $serial
+    $on = [bool](Get-Prop $body 'on' $true)
+    $key = $(if ($serial) { $serial } else { 'default' })
+    if ($on) {
+        $hhmm = [string](Get-Prop $body 'clock' '1200'); if ($hhmm -notmatch '^\d{4}$') { $hhmm = '1200' }
+        $bat = [int](Get-Prop $body 'battery' 100); if ($bat -lt 1 -or $bat -gt 100) { $bat = 100 }
+        $r = Invoke-DeviceShell $serial 'settings put global sysui_demo_allowed 1' 12
+        if ($r.code -ne 0) { Fail ('The phone refused demo mode: ' + ($r.err + $r.out).Trim()) }
+        [void](Invoke-DemoBroadcast $serial '-e command enter')
+        [void](Invoke-DemoBroadcast $serial ('-e command clock -e hhmm ' + $hhmm))
+        [void](Invoke-DemoBroadcast $serial ('-e command battery -e level ' + $bat + ' -e plugged false'))
+        [void](Invoke-DemoBroadcast $serial '-e command network -e wifi show -e level 4 -e fully true')
+        [void](Invoke-DemoBroadcast $serial '-e command network -e mobile show -e datatype none -e level 4 -e fully true -e roam false')
+        if ([bool](Get-Prop $body 'hideNotifications' $true)) { [void](Invoke-DemoBroadcast $serial '-e command notifications -e visible false') }
+        if ([bool](Get-Prop $body 'dnd' $false)) { [void](Invoke-DeviceShell $serial 'cmd notification set_dnd priority' 12) }
+        if ([bool](Get-Prop $body 'touches' $false)) { [void](Invoke-DeviceShell $serial 'settings put system show_touches 1' 12) }
+        $Shared.demo[$key] = $true
+        Add-Activity 'system' 'Demo mode turned on.'
+        Send-Json $Ctx @{ ok = $true; on = $true; message = 'Demo mode is on. The status bar is clean.' }
+    } else {
+        [void](Invoke-DemoBroadcast $serial '-e command exit')
+        [void](Invoke-DeviceShell $serial 'settings put global sysui_demo_allowed 0' 12)
+        if ([bool](Get-Prop $body 'touches' $false)) { [void](Invoke-DeviceShell $serial 'settings put system show_touches 0' 12) }
+        if ([bool](Get-Prop $body 'dnd' $false)) { [void](Invoke-DeviceShell $serial 'cmd notification set_dnd off' 12) }
+        [void]$Shared.demo.Remove($key)
+        Add-Activity 'system' 'Demo mode turned off.'
+        Send-Json $Ctx @{ ok = $true; on = $false; message = 'Demo mode is off.' }
+    }
+}
+$Routes['GET /api/demo'] = { param($Ctx)
+    $serial = Get-Query $Ctx 'id'
+    $key = $(if ($serial) { $serial } else { 'default' })
+    Send-Json $Ctx @{ on = [bool]$Shared.demo.ContainsKey($key) }
+}
+
+# ---------------------------------------------------------------------------
+# Gallery (photos and videos on the phone)
+# ---------------------------------------------------------------------------
+$GalleryDirs = @{
+    all         = @('/sdcard/DCIM', '/sdcard/Pictures', '/sdcard/Movies')
+    camera      = @('/sdcard/DCIM/Camera')
+    screenshots = @('/sdcard/Pictures/Screenshots', '/sdcard/DCIM/Screenshots', '/sdcard/Pictures/Screenshot')
+    downloads   = @('/sdcard/Download')
+    whatsapp    = @('/sdcard/Android/media/com.whatsapp/WhatsApp/Media', '/sdcard/WhatsApp/Media')
+}
+$GalleryImage = '(?i)\.(jpe?g|png|gif|webp|bmp)$'
+$GalleryVideo = '(?i)\.(mp4|mkv|3gp|webm|mov)$'
+
+function Test-GalleryPath {
+    param([string]$Path)
+    Test-PhonePath $Path
+    if ($Path -notmatch '^/(sdcard|storage/emulated/0)/.+') { Fail 'The gallery only reads the shared storage folder.' }
+}
+
+$Routes['GET /api/gallery'] = { param($Ctx)
+    $serial = Get-Query $Ctx 'id'
+    $set = Get-Query $Ctx 'set'
+    if (-not $GalleryDirs.ContainsKey($set)) { $set = 'all' }
+    $dirs = ($GalleryDirs[$set] | ForEach-Object { '''' + $_ + '''' }) -join ' '
+    $r = Invoke-DeviceShell $serial ('find ' + $dirs + ' -type f -exec stat -c ''%s %Y %n'' {} + 2>/dev/null') 90
+    $items = @()
+    foreach ($line in ($r.out -split "`r?`n")) {
+        if ($line -match '^(\d+) (\d+) (/.+)$') {
+            $fsize = [long]$Matches[1]; $fmtime = [long]$Matches[2]; $path = $Matches[3]
+            if ($path -match '/\.(thumbnails|trashed|pending|nomedia)' -or $path -match '/\.[^/]*$') { continue }
+            $kind = ''
+            if ($path -match $GalleryImage) { $kind = 'image' } elseif ($path -match $GalleryVideo) { $kind = 'video' } else { continue }
+            $items += , @{ path = $path; name = ($path -replace '^.*/', ''); size = $fsize; mtime = $fmtime; kind = $kind }
+        }
+    }
+    $sorted = @($items | Sort-Object { $_.mtime } -Descending)
+    Send-Json $Ctx @{ set = $set; total = $sorted.Count; items = @($sorted | Select-Object -First 400) }
+}
+
+# Resizes a picture to a small JPEG with System.Drawing. Only called on Windows.
+function Convert-ToThumb {
+    param([byte[]]$Bytes, [string]$File, [bool]$Large)
+    Add-Type -AssemblyName System.Drawing
+    $ms = New-Object IO.MemoryStream (, $Bytes)
+    $img = [Drawing.Image]::FromStream($ms)
+    try {
+        $max = $(if ($Large) { 1920 } else { 360 })
+        $scale = [math]::Min(1.0, $max / [double][math]::Max($img.Width, $img.Height))
+        $w = [math]::Max(1, [int]($img.Width * $scale)); $h = [math]::Max(1, [int]($img.Height * $scale))
+        $bmp = New-Object Drawing.Bitmap $w, $h
+        $g = [Drawing.Graphics]::FromImage($bmp)
+        $g.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $g.DrawImage($img, 0, 0, $w, $h)
+        $g.Dispose()
+        $codec = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' } | Select-Object -First 1
+        $ep = New-Object Drawing.Imaging.EncoderParameters 1
+        $ep.Param[0] = New-Object Drawing.Imaging.EncoderParameter ([Drawing.Imaging.Encoder]::Quality), 82L
+        $bmp.Save($File, $codec, $ep)
+        $bmp.Dispose()
+        return $true
+    } finally { $img.Dispose(); $ms.Dispose() }
+}
+
+function Get-ShortHash {
+    param([string]$Text)
+    $h1 = [long]2166136261; $h2 = [long]5381
+    foreach ($c in $Text.ToCharArray()) {
+        $h1 = (($h1 -bxor [long][int]$c) * 16777619) -band 4294967295
+        $h2 = (($h2 * 33) + [long][int]$c) -band 4294967295
+    }
+    return ($h1.ToString('x8') + $h2.ToString('x8'))
+}
+
+$Routes['GET /api/gallery/thumb'] = { param($Ctx)
+    $serial = Get-Query $Ctx 'id'
+    $path = Get-Query $Ctx 'path'
+    Test-GalleryPath $path
+    $full = ((Get-Query $Ctx 'full') -eq '1')
+    if ($path -notmatch $GalleryImage) { Fail 'No picture preview for that file.' }
+    $size = [long]0
+    [void][long]::TryParse((Get-Query $Ctx 'size'), [ref]$size)
+    if ($size -gt 40MB) { Fail 'That picture is too large to preview here.' }
+    $dir = Join-Path $LogDir 'thumbs'
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $hash = Get-ShortHash ($serial + '|' + $path + '|' + $size + '|' + $(if ($full) { 'f' } else { 't' }))
+    $file = Join-Path $dir ($hash + '.jpg')
+    $raw = Join-Path $dir ($hash + '.raw')
+    if (-not (Test-Path -LiteralPath $file)) {
+        $got = Invoke-AdbBytes ((Resolve-Target $serial) + 'exec-out cat "' + $path + '"') 60
+        $bytes = $got.bytes
+        if ($got.code -ne 0 -or -not $bytes -or $bytes.Length -lt 16) { Fail 'The phone did not send that picture.' }
+        $done = $false
+        if ($OnWindows) { try { $done = Convert-ToThumb $bytes $file $full } catch { $done = $false } }
+        if (-not $done) { [IO.File]::WriteAllBytes($file, $bytes) }
+    }
+    $type = 'image/jpeg'
+    $head = New-Object byte[] 4
+    $fs = [IO.File]::OpenRead($file); try { [void]$fs.Read($head, 0, 4) } finally { $fs.Dispose() }
+    if ($head[0] -eq 0x89 -and $head[1] -eq 0x50) { $type = 'image/png' } elseif ($head[0] -eq 0x47 -and $head[1] -eq 0x49) { $type = 'image/gif' } elseif ($head[0] -eq 0x52 -and $head[1] -eq 0x49) { $type = 'image/webp' } elseif ($head[0] -eq 0x42 -and $head[1] -eq 0x4D) { $type = 'image/bmp' }
+    Send-File $Ctx $file $type '' 'private, max-age=3600'
+}
+
+$Routes['POST /api/gallery/pull'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $serial = [string](Get-Prop $body 'serial' '')
+    Test-Serial $serial
+    $paths = @()
+    foreach ($p in @(Get-Prop $body 'paths' @())) { Test-GalleryPath ([string]$p); $paths += [string]$p }
+    if ($paths.Count -eq 0) { Fail 'Choose at least one photo or video.' }
+    if ($paths.Count -gt 500) { Fail 'Choose up to 500 files at a time.' }
+    $id = New-Job 'pull' ('Copy ' + $paths.Count + ' file(s) to the PC') @{ serial = $serial; paths = $paths }
+    Send-Json $Ctx @{ ok = $true; job = $id }
+}
+
+$Routes['POST /api/gallery/delete'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $serial = [string](Get-Prop $body 'serial' '')
+    $n = 0
+    foreach ($p in @(Get-Prop $body 'paths' @())) {
+        Test-GalleryPath ([string]$p)
+        $r = Invoke-DeviceShell $serial ('rm -f ''' + $p + '''') 15
+        if ($r.code -eq 0) { $n++ }
+    }
+    Add-Activity 'files' ('Deleted ' + $n + ' file(s) from the phone gallery.')
+    Send-Json $Ctx @{ ok = $true; deleted = $n }
+}
+
+# ---------------------------------------------------------------------------
+# Inspector: UI tree of the current screen
+# ---------------------------------------------------------------------------
+function Add-UiNodes {
+    param($Node, [int]$Parent, [int]$Depth, [System.Collections.ArrayList]$List)
+    foreach ($c in $Node.ChildNodes) {
+        if ($c.NodeType -ne 'Element' -or $c.Name -ne 'node') { continue }
+        if ($List.Count -ge 900) { return }
+        $b = [string]$c.GetAttribute('bounds')
+        $idx = -1
+        if ($b -match '^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$') {
+            $l = [int]$Matches[1]; $t = [int]$Matches[2]; $rr = [int]$Matches[3]; $bb = [int]$Matches[4]
+            if (($rr - $l) -gt 0 -and ($bb - $t) -gt 0) {
+                $idx = $List.Count
+                $cls = ([string]$c.GetAttribute('class')) -replace '^.*\.', ''
+                [void]$List.Add(@{ i = $idx; p = $Parent; d = $Depth; cls = $cls; id = (([string]$c.GetAttribute('resource-id')) -replace '^[^:]*:id/', ''); pkg = [string]$c.GetAttribute('package'); text = [string]$c.GetAttribute('text'); desc = [string]$c.GetAttribute('content-desc'); b = @($l, $t, $rr, $bb); click = ([string]$c.GetAttribute('clickable') -eq 'true'); scroll = ([string]$c.GetAttribute('scrollable') -eq 'true'); edit = ([string]$c.GetAttribute('class') -match 'EditText') })
+            }
+        }
+        $next = $(if ($idx -ge 0) { $idx } else { $Parent })
+        Add-UiNodes $c $next ($Depth + 1) $List
+    }
+}
+
+$Routes['GET /api/inspect'] = { param($Ctx)
+    $serial = Get-Query $Ctx 'id'
+    $r = Invoke-DeviceShell $serial 'uiautomator dump /sdcard/stk-ui.xml >/dev/null 2>&1; cat /sdcard/stk-ui.xml; rm -f /sdcard/stk-ui.xml' 40
+    $xmlText = $r.out
+    $i = $xmlText.IndexOf('<?xml')
+    if ($i -lt 0) { $i = $xmlText.IndexOf('<hierarchy') }
+    if ($i -lt 0) { Fail 'The phone could not read the screen layout. Unlock the phone and leave an app open, then try again. Some screens (banking, secure apps) block it.' }
+    $xmlText = $xmlText.Substring($i)
+    try { $doc = New-Object Xml.XmlDocument; $doc.LoadXml($xmlText) } catch { Fail 'The screen layout from the phone could not be read.' }
+    $list = New-Object System.Collections.ArrayList
+    Add-UiNodes $doc.DocumentElement -1 0 $list
+    $w = 0; $h = 0
+    foreach ($n in $list) { if ($n.b[2] -gt $w) { $w = $n.b[2] }; if ($n.b[3] -gt $h) { $h = $n.b[3] } }
+    Send-Json $Ctx @{ nodes = @($list); width = $w; height = $h; count = $list.Count }
+}
+
+# ---------------------------------------------------------------------------
+# Intent launcher
+# ---------------------------------------------------------------------------
+$Routes['POST /api/intent'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $serial = [string](Get-Prop $body 'serial' '')
+    $parts = @('am start')
+    $action = ([string](Get-Prop $body 'action' '')).Trim()
+    $data = ([string](Get-Prop $body 'data' '')).Trim()
+    $comp = ([string](Get-Prop $body 'component' '')).Trim()
+    $pkg = ([string](Get-Prop $body 'package' '')).Trim()
+    $cat = ([string](Get-Prop $body 'category' '')).Trim()
+    if ($action -ne '') { if ($action -notmatch '^[A-Za-z0-9._]{1,120}$') { Fail 'The action can use letters, numbers, dots and underscores.' }; $parts += '-a ' + $action }
+    if ($data -ne '') { if ($data -notmatch '^[A-Za-z0-9._~:/?#@=&%+,;\-]{1,300}$') { Fail 'The data address has characters that are not allowed.' }; $parts += '-d ''' + $data + '''' }
+    if ($comp -ne '') { if ($comp -notmatch '^[A-Za-z0-9._]+/[A-Za-z0-9._$]+$') { Fail 'The component looks like com.example.app/.MainActivity.' }; $parts += '-n ''' + $comp + '''' }
+    if ($pkg -ne '') { Test-PackageName $pkg; $parts += '-p ' + $pkg }
+    if ($cat -ne '') { if ($cat -notmatch '^[A-Za-z0-9._]{1,120}$') { Fail 'The category can use letters, numbers, dots and underscores.' }; $parts += '-c ' + $cat }
+    foreach ($e in @(Get-Prop $body 'extras' @())) {
+        $t = [string](Get-Prop $e 'type' 'es'); $k = [string](Get-Prop $e 'key' ''); $v = [string](Get-Prop $e 'value' '')
+        if ($t -notin @('es', 'ei', 'ez')) { Fail 'Unknown extra type.' }
+        if ($k -notmatch '^[A-Za-z0-9._]{1,60}$') { Fail 'Extra names can use letters, numbers, dots and underscores.' }
+        if ($t -eq 'ei' -and $v -notmatch '^-?\d{1,12}$') { Fail 'A number extra needs a whole number.' }
+        if ($t -eq 'ez' -and $v -notin @('true', 'false')) { Fail 'A yes/no extra must be true or false.' }
+        if ($t -eq 'es' -and $v -notmatch '^[A-Za-z0-9 ._~:/?#@=&%+,;\-]{0,200}$') { Fail 'That extra text has characters that are not allowed.' }
+        $parts += ('--' + $t + ' ' + $k + ' ''' + $v + '''')
+    }
+    if ($parts.Count -eq 1) { Fail 'Fill in at least an action, a link or a component.' }
+    $r = Invoke-DeviceShell $serial ($parts -join ' ') 20
+    $o = ($r.out + $r.err)
+    if ($r.code -ne 0 -or $o -match 'Error|Exception|unable to resolve|No activity found') { Fail ('The phone could not open that: ' + $o.Trim()) }
+    Send-Json $Ctx @{ ok = $true; message = 'Sent to the phone.'; command = ($parts -join ' ') }
+}
+
+# ---------------------------------------------------------------------------
+# Insights: usage, battery by app, system access and permissions
+# ---------------------------------------------------------------------------
+$Routes['GET /api/insights/usage'] = { param($Ctx)
+    $serial = Get-Query $Ctx 'id'
+    $r = Invoke-DeviceShell $serial 'dumpsys usagestats 2>/dev/null | sed -n ''/daily stats/,/weekly stats/p'' | grep -E ''package=.*(totalTimeUsed|totalTimeInForeground)'' | head -n 400' 40
+    $totals = @{}
+    foreach ($line in ($r.out -split "`r?`n")) {
+        if ($line -match 'package=([A-Za-z0-9._]+)' ) {
+            $pkg = $Matches[1]
+            $ms = [long]0
+            if ($line -match 'totalTimeUsed="?([^"]*?)"?(?:\s+lastTime|\s+appLaunchCount|$)') { $ms = ConvertFrom-DurationText $Matches[1] }
+            elseif ($line -match 'totalTimeInForeground="?([^"\s]+)') { $ms = ConvertFrom-DurationText $Matches[1] }
+            if ($ms -gt 0) { if (-not $totals.ContainsKey($pkg) -or $totals[$pkg] -lt $ms) { $totals[$pkg] = $ms } }
+        }
+    }
+    $apps = @($totals.Keys | ForEach-Object { @{ package = $_; ms = [long]$totals[$_] } } | Sort-Object { $_.ms } -Descending | Select-Object -First 25)
+    Send-Json $Ctx @{ apps = $apps; note = $(if ($apps.Count -eq 0) { 'This phone did not share usage times. Some makers hide them from adb.' } else { '' }) }
+}
+
+$Routes['GET /api/insights/battery'] = { param($Ctx)
+    $serial = Get-Query $Ctx 'id'
+    $r = Invoke-DeviceShell $serial 'dumpsys batterystats 2>/dev/null | grep -E ''^\s+Uid [a-z0-9]+: [0-9.]+'' | head -n 60; echo @@UID; pm list packages -U 2>/dev/null' 40
+    $uidMap = @{}
+    $inUid = $false
+    $raw = @()
+    foreach ($line in ($r.out -split "`r?`n")) {
+        if ($line -match '^@@UID') { $inUid = $true; continue }
+        if ($inUid) { if ($line -match 'package:([A-Za-z0-9._]+)\s+uid:(\d+)') { $uidMap[$Matches[2]] = $Matches[1] }; continue }
+        if ($line -match '^\s+Uid ([a-z0-9]+): ([0-9.]+)') {
+            $raw += , @($Matches[1], $Matches[2])
+        }
+    }
+    $rows = @()
+    foreach ($pair in $raw) {
+        $u = $pair[0]
+        if ($true) {
+            $mah = [double]::Parse($pair[1], [Globalization.CultureInfo]::InvariantCulture)
+            $uidNum = ''
+            if ($u -match '^u0a(\d+)$') { $uidNum = [string](10000 + [int]$Matches[1]) } elseif ($u -match '^\d+$') { $uidNum = $u }
+            $name = $u
+            if ($uidNum -ne '' -and $uidMap.ContainsKey($uidNum)) { $name = $uidMap[$uidNum] } elseif ($u -eq '1000') { $name = 'Android system' }
+            $rows += , @{ uid = $u; package = $name; mah = [math]::Round($mah, 1) }
+        }
+    }
+    $rows = @($rows | Sort-Object { $_.mah } -Descending | Select-Object -First 15)
+    $sum = 0.0
+    foreach ($x in $rows) { $sum += $x.mah }
+    Send-Json $Ctx @{ apps = $rows; totalMah = [math]::Round($sum, 1); note = $(if ($rows.Count -eq 0) { 'This phone did not share battery use by app.' } else { '' }) }
+}
+
+$Routes['GET /api/insights/access'] = { param($Ctx)
+    $serial = Get-Query $Ctx 'id'
+    $r = Invoke-DeviceShell $serial 'echo A=$(settings get secure enabled_accessibility_services); echo N=$(settings get secure enabled_notification_listeners); echo I=$(settings get secure default_input_method); echo @@DA; dumpsys device_policy 2>/dev/null | grep -E ''admin=|Admin|ComponentInfo'' | head -n 10' 25
+    $kv = ConvertFrom-KeyLines (($r.out -split '@@DA')[0])
+    $split = { param($v) @(([string]$v -split ':') | Where-Object { $_ -and $_ -ne 'null' } | ForEach-Object { $_.Trim() }) }
+    $admins = @()
+    if ($r.out -match '@@DA') { foreach ($l in (($r.out -split '@@DA')[1] -split "`r?`n")) { if ($l -match '([A-Za-z0-9._]+/[A-Za-z0-9._$]+)') { $admins += $Matches[1] } } }
+    Send-Json $Ctx @{ accessibility = @(& $split $kv.A); listeners = @(& $split $kv.N); keyboard = [string]$kv.I; admins = @($admins | Select-Object -Unique) }
+}
+
+$RuntimePerms = @('CAMERA', 'RECORD_AUDIO', 'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION', 'ACCESS_BACKGROUND_LOCATION', 'READ_CONTACTS', 'WRITE_CONTACTS', 'READ_SMS', 'SEND_SMS', 'RECEIVE_SMS', 'READ_CALL_LOG', 'CALL_PHONE', 'READ_PHONE_STATE', 'READ_CALENDAR', 'WRITE_CALENDAR', 'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE', 'READ_MEDIA_IMAGES', 'READ_MEDIA_VIDEO', 'READ_MEDIA_AUDIO', 'POST_NOTIFICATIONS', 'BODY_SENSORS', 'ACTIVITY_RECOGNITION', 'BLUETOOTH_CONNECT', 'BLUETOOTH_SCAN', 'NEARBY_WIFI_DEVICES')
+$Routes['GET /api/perms'] = { param($Ctx)
+    $serial = Get-Query $Ctx 'id'
+    $pkg = Get-Query $Ctx 'package'
+    Test-PackageName $pkg
+    $r = Invoke-DeviceShell $serial ('dumpsys package ' + $pkg + ' 2>/dev/null | sed -n ''/runtime permissions:/,$p'' | grep -E ''granted='' | head -n 80') 25
+    $out = @()
+    $seen = @{}
+    foreach ($l in ($r.out -split "`r?`n")) {
+        if ($l -match '^\s*([A-Za-z0-9_.]+):\s*granted=(true|false)') {
+            $name = $Matches[1]
+            if ($seen.ContainsKey($name)) { continue }
+            $seen[$name] = $true
+            $short = $name -replace '^.*\.', ''
+            $out += , @{ name = $name; short = $short; granted = ($Matches[2] -eq 'true'); changeable = ($RuntimePerms -contains $short) }
+        }
+    }
+    Send-Json $Ctx @{ package = $pkg; perms = $out }
+}
+$Routes['POST /api/perms'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $pkg = [string](Get-Prop $body 'package' '')
+    Test-PackageName $pkg
+    $perm = [string](Get-Prop $body 'permission' '')
+    if ($perm -notmatch '^[A-Za-z0-9_.]{3,120}$' -or ($RuntimePerms -notcontains ($perm -replace '^.*\.', ''))) { Fail 'That permission cannot be changed from here.' }
+    $verb = $(if ([bool](Get-Prop $body 'grant' $false)) { 'grant' } else { 'revoke' })
+    $r = Invoke-DeviceShell ([string](Get-Prop $body 'serial' '')) ('pm ' + $verb + ' ' + $pkg + ' ' + $perm) 20
+    if ($r.code -ne 0 -or ($r.out + $r.err) -match 'Exception|Error|Unknown') { Fail ('The phone refused: ' + (($r.out + $r.err).Trim() -split "`n" | Select-Object -First 1)) }
+    Send-Json $Ctx @{ ok = $true }
+}
+
+# ---------------------------------------------------------------------------
+# Typing text from the PC (more characters than the quick text box)
+# ---------------------------------------------------------------------------
+$Routes['POST /api/type'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $serial = [string](Get-Prop $body 'serial' '')
+    $text = [string](Get-Prop $body 'text' '')
+    if ($text.Length -gt 600) { Fail 'Paste up to 600 characters at a time.' }
+    if ($text -match '[^\x20-\x7E\r\n\t]') { Fail 'The phone can only type plain English letters, numbers and symbols this way.' }
+    if ($text -match '[''\\`]') { Fail 'Apostrophes, backslashes and back-ticks cannot be typed this way. Remove them or type them on the phone.' }
+    $lines = @($text -split "`r?`n")
+    $n = 0
+    foreach ($line in $lines) {
+        $line = $line -replace "`t", ' '
+        if ($line -ne '') {
+            $enc = ($line -replace '%', '%%' -replace ' ', '%s')
+            $r = Invoke-DeviceShell $serial ('input text ''' + $enc + '''') 15
+            if ($r.code -ne 0) { Fail ('The phone did not accept the text: ' + ($r.err + $r.out).Trim()) }
+        }
+        $n++
+        if ($n -lt $lines.Count) { [void](Invoke-DeviceShell $serial 'input keyevent 66' 10) }
+    }
+    Send-Json $Ctx @{ ok = $true; message = 'Typed on the phone.' }
+}
+
+# ---------------------------------------------------------------------------
+# Automatic Wi-Fi reconnect for phones used before
+# ---------------------------------------------------------------------------
+function Invoke-AutoReconnect {
+    if (-not (Get-Settings).autoReconnect) { return }
+    $hosts = @(Get-StoreValue 'wifihosts' @())
+    if ($hosts.Count -eq 0) { return }
+    $ids = @($Shared.devices | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_.id })
+    foreach ($h in $hosts) {
+        $h = [string]$h
+        if ($h -notmatch '^\d{1,3}(\.\d{1,3}){3}:\d{1,5}$') { continue }
+        if ($ids -contains $h) { continue }
+        $last = $Shared.reconnectAt[$h]
+        $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+        if ($last -and ($nowMs - [long]$last) -lt 30000) { continue }
+        $Shared.reconnectAt[$h] = $nowMs
+        try { [void](Invoke-Adb ('connect ' + $h) 5) } catch {}
+    }
+}
+if (-not $Shared.reconnectAt) { $Shared.reconnectAt = [hashtable]::Synchronized(@{}) }
+
+$Routes['POST /api/wifi-hosts'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $list = @()
+    foreach ($h in @(Get-Prop $body 'hosts' @())) { if (([string]$h) -match '^\d{1,3}(\.\d{1,3}){3}:\d{1,5}$') { $list += [string]$h } }
+    Set-StoreValue 'wifihosts' @($list | Select-Object -First 12)
+    Send-Json $Ctx @{ ok = $true }
+}
+
+function Add-WifiHost {
+    param([string]$Address)
+    try {
+        $list = @(Get-StoreValue 'wifihosts' @())
+        if ($list -notcontains $Address) { Set-StoreValue 'wifihosts' @(@($Address) + $list | Select-Object -First 12) }
+    } catch {}
+}

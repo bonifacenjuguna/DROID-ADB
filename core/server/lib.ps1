@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '2.5.0'
+$ToolkitVersion = '3.0.0'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -12,6 +12,7 @@ $LogDir = Join-Path $Root 'Logs'
 $ConfigFile = Join-Path $ConfigDir 'settings.json'
 $ProfilesFile = Join-Path $ConfigDir 'profiles.json'
 $SessionsFile = Join-Path $LogDir 'sessions.json'
+$StoreFile = Join-Path $ConfigDir 'store.json'
 $BundledDir = Join-Path (Join-Path $Root 'core') 'scrcpy'
 New-Item -ItemType Directory -Force -Path $ConfigDir, $LogDir | Out-Null
 if (-not (Test-Path variable:Shared)) { $Shared = [hashtable]::Synchronized(@{}) }
@@ -194,7 +195,7 @@ $Schema = @(
     (F 'printFps' 'window' 'bool' $false 'Log frame rate' 'Writes FPS into the session log.'),
     # recording
     (F 'recordFormat' 'recording' 'choice' 'mkv' 'Recording format' 'MKV survives crashes and forced stops. MP4 needs a clean stop.' -Choices @((C 'mkv' 'MKV'), (C 'mp4' 'MP4'))),
-    (F 'recordTemplate' 'recording' 'text' 'Phone-{date}_{time}' 'Recording file name' 'Tokens: {date} {time} {serial} {model}.' -Pattern '^[A-Za-z0-9 ._\-{}]{1,80}$'),
+    (F 'recordTemplate' 'recording' 'text' 'Phone-{date}_{time}' 'Recording file name' 'Tokens: {date} {time} {serial} {model} {app}.' -Pattern '^[A-Za-z0-9 ._\-{}]{1,80}$'),
     (F 'recordTimeLimit' 'recording' 'int' 0 'Automatic stop' 'Stop recording after this many seconds. 0 means never.' -Min 0 -Max 86400 -Picks @(0, 60, 300, 600, 1800, 3600) -Unit 'sec'),
     (F 'recordWindowless' 'recording' 'bool' $false 'Record without a window' 'Records in the background. Use Stop in the dashboard to finish.'),
     (F 'recordWhileMirroring' 'recording' 'choice' 'companion' 'Record while mirroring' 'Companion starts a hidden second scrcpy recorder so the mirror window stays open. Block keeps one session per phone.' -Choices @((C 'companion' 'Hidden companion recorder'), (C 'block' 'Block (stop mirror first)'))),
@@ -202,7 +203,8 @@ $Schema = @(
     (F 'showRecBadge' 'recording' 'bool' $true 'Show recording badge on the phone picture' 'Shows REC with a timer on the dashboard phone picture while recording.'),
     (F 'companionAudio' 'recording' 'bool' $true 'Sound in companion recordings' 'Turn off if the phone is Android 11 or 12 and the mirror sound stops when recording starts.' -Show @{ audio = $true }),
     (F 'recordCountdown' 'recording' 'int' 0 'Start countdown' 'Seconds to count down in the dashboard before recording begins.' -Min 0 -Max 10 -Picks @(0, 3, 5) -Unit 'sec'),
-    (F 'screenshotTemplate' 'recording' 'text' 'Shot-{date}_{time}' 'Screenshot file name' 'Tokens: {date} {time} {serial} {model}.' -Pattern '^[A-Za-z0-9 ._\-{}]{1,80}$'),
+    (F 'nameByApp' 'recording' 'bool' $true 'Add the app name to file names' 'Adds the app that was in front on the phone, like Shot-2026-10-24_12-00-00-Chrome. Skipped when the name template already has {app}.'),
+    (F 'screenshotTemplate' 'recording' 'text' 'Shot-{date}_{time}' 'Screenshot file name' 'Tokens: {date} {time} {serial} {model} {app}.' -Pattern '^[A-Za-z0-9 ._\-{}]{1,80}$'),
     # files
     (F 'recordingsDir' 'files' 'path' '' 'Recordings folder' 'Full path. Empty uses Recordings inside the toolkit.' -Placeholder 'D:\Phone\Recordings'),
     (F 'screenshotsDir' 'files' 'path' '' 'Screenshots folder' 'Full path. Empty uses Screenshots inside the toolkit.' -Placeholder 'D:\Phone\Screenshots'),
@@ -224,12 +226,16 @@ $Schema = @(
     (F 'batteryAlertPct' 'toolkit' 'int' 15 'Low battery alert' 'Show an alert when the phone falls to this level and is not charging. 0 turns it off.' -Min 0 -Max 50 -Picks @(0, 10, 15, 20, 30) -Unit '%'),
     (F 'lowDiskGb' 'toolkit' 'int' 2 'Low disk alert' 'Warn when free space on the recordings drive falls below this. 0 turns it off.' -Min 0 -Max 500 -Picks @(0, 1, 2, 5, 10) -Unit 'GB'),
     (F 'appNames' 'toolkit' 'text' '' 'App display names' 'Friendly names for package names, like com.tencent.ig=PUBG Mobile;com.whatsapp=WhatsApp' -Pattern '^[A-Za-z0-9._=; \-]{0,240}$' -Placeholder 'com.tencent.ig=PUBG Mobile'),
+    (F 'autoReconnect' 'toolkit' 'bool' $true 'Reconnect Wi-Fi phones' 'Reconnect saved Wi-Fi phones automatically when they drop off the network.'),
+    (F 'notifyDesktop' 'toolkit' 'bool' $true 'Desktop notifications' 'Show a Windows notification when a recording is saved, a job finishes, the battery is low or the phone disconnects.'),
+    (F 'accent' 'toolkit' 'choice' 'amber' 'Accent colour' 'Colour of buttons and highlights in the dashboard.' -Choices @((C 'amber' 'Amber'), (C 'blue' 'Blue'), (C 'violet' 'Violet'), (C 'teal' 'Teal'), (C 'green' 'Green'), (C 'orange' 'Orange'), (C 'rose' 'Rose'))),
     (F 'theme' 'toolkit' 'choice' 'auto' 'Theme' 'Auto follows Windows.' -Choices @((C 'auto' 'Auto'), (C 'dark' 'Dark'), (C 'light' 'Light'))),
     (F 'confirmDeletes' 'toolkit' 'bool' $true 'Ask before deleting' 'Confirm before removing files and apps.'),
     (F 'adbTimeoutSec' 'toolkit' 'int' 15 'ADB timeout' 'How long to wait for the phone before giving up.' -Min 3 -Max 300 -Picks @(8, 15, 30, 60) -Unit 'sec'),
     (F 'tcpPort' 'toolkit' 'int' 5555 'Wi-Fi debugging port' 'Port used when switching a USB phone to Wi-Fi.' -Min 1024 -Max 65535),
     (F 'stopGraceSeconds' 'toolkit' 'int' 4 'Stop grace period' 'Seconds to wait for scrcpy to close cleanly before forcing it.' -Min 1 -Max 30 -Unit 'sec'),
     # advanced
+    (F 'ffmpegPath' 'advanced' 'path' '' 'ffmpeg executable' 'Optional. Needed for trimming, converting and making GIFs in the Library. The toolkit also looks in core\ffmpeg and on PATH.' -Placeholder 'C:\ffmpeg\bin\ffmpeg.exe'),
     (F 'adbPath' 'advanced' 'path' '' 'ADB executable' 'Use your own adb instead of the bundled one.' -Placeholder 'C:\platform-tools\adb.exe'),
     (F 'scrcpyPath' 'advanced' 'path' '' 'scrcpy executable' 'Use your own scrcpy instead of the bundled one.' -Placeholder 'C:\scrcpy\scrcpy.exe'),
     (F 'extraArgs' 'advanced' 'text' '' 'Extra scrcpy options' 'Raw options added to every command, for example --no-mouse-hover.' -Pattern '^(\s*--?[A-Za-z0-9][A-Za-z0-9\-]*(=[A-Za-z0-9._:/,+@\-]*)?)*\s*$' -Placeholder '--no-mouse-hover')
@@ -566,10 +572,39 @@ function New-ScrcpyArgs {
     return ($a -join ' ')
 }
 
+# Friendly name of the app in front on the phone (from the live readings), or an empty string.
+function Get-AppLabel {
+    param([string]$Package)
+    if (-not $Package) { return '' }
+    foreach ($pair in (([string](Get-Settings).appNames) -split ';')) {
+        $kv = $pair.Split('=', 2)
+        if ($kv.Count -eq 2 -and $kv[0].Trim() -eq $Package -and $kv[1].Trim() -ne '') { return $kv[1].Trim() }
+    }
+    $last = ($Package -split '\.')[-1]
+    if ($last -in @('android', 'app', 'mobile', 'main')) { $parts = $Package -split '\.'; if ($parts.Count -ge 2) { $last = $parts[-2] } }
+    return $last
+}
+function Get-ForegroundLabel {
+    param([string]$Serial)
+    try {
+        $l = $Shared.live
+        if (-not $l) { return '' }
+        $d = $null
+        if ($Serial -and $l.ContainsKey($Serial)) { $d = $l[$Serial] }
+        if (-not $d) { return '' }
+        $pkg = [string]$d.fgPackage
+        if ($pkg -match '^com\.android\.(launcher|systemui)|launcher|^com\.(miui|sec)\.[a-z.]*home$|^com\.transsion\.[a-z.]*launcher') { return '' }
+        $lab = Get-AppLabel $pkg
+        return ($lab -replace '[^A-Za-z0-9._\-]', '')
+    } catch { return '' }
+}
+
 function New-FileStem {
     param([string]$Template, [string]$Serial)
     $now = Get-Date
-    $name = $Template.Replace('{date}', $now.ToString('yyyy-MM-dd')).Replace('{time}', $now.ToString('HH-mm-ss')).Replace('{serial}', $Serial).Replace('{model}', (Get-DeviceModelHint $Serial))
+    $app = Get-ForegroundLabel $Serial
+    $name = $Template.Replace('{date}', $now.ToString('yyyy-MM-dd')).Replace('{time}', $now.ToString('HH-mm-ss')).Replace('{serial}', $Serial).Replace('{model}', (Get-DeviceModelHint $Serial)).Replace('{app}', $app)
+    if ($app -ne '' -and $Template.IndexOf('{app}') -lt 0 -and (Get-Settings).nameByApp) { $name = $name + '-' + $app }
     $name = ($name -replace '[^A-Za-z0-9._ \-]', '_').Trim()
     if ($name -eq '') { $name = 'Capture-' + $now.ToString('yyyyMMdd-HHmmss') }
     return $name
@@ -769,7 +804,7 @@ function Start-ToolkitScrcpy {
 # ---------------------------------------------------------------------------
 # Library
 # ---------------------------------------------------------------------------
-$VideoPattern = '(?i)\.(mp4|mkv)$'
+$VideoPattern = '(?i)\.(mp4|mkv|gif)$'
 $ImagePattern = '(?i)\.png$'
 
 function Get-SafeFile {
@@ -793,7 +828,7 @@ function Test-InProgress {
 
 function Get-Library {
     param([string]$Kind)
-    if ($Kind -eq 'screenshots') { $dir = Get-Dir 'screenshots'; $ext = @('.png') } else { $Kind = 'recordings'; $dir = Get-Dir 'recordings'; $ext = @('.mp4', '.mkv') }
+    if ($Kind -eq 'screenshots') { $dir = Get-Dir 'screenshots'; $ext = @('.png') } else { $Kind = 'recordings'; $dir = Get-Dir 'recordings'; $ext = @('.mp4', '.mkv', '.gif') }
     $live = @{}
     foreach ($s in (Get-LiveSessions)) { if ($s.fileName) { $live[$s.fileName] = $true } }
     $files = @(Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension.ToLower() -in $ext } | Sort-Object LastWriteTime -Descending | ForEach-Object {
@@ -807,7 +842,7 @@ function Get-Library {
 function Get-OldFiles {
     param([string]$Kind, [int]$Days)
     $cutoff = (Get-Date).AddDays(-$Days)
-    if ($Kind -eq 'screenshots') { $dir = Get-Dir 'screenshots'; $ext = @('.png') } else { $dir = Get-Dir 'recordings'; $ext = @('.mp4', '.mkv') }
+    if ($Kind -eq 'screenshots') { $dir = Get-Dir 'screenshots'; $ext = @('.png') } else { $dir = Get-Dir 'recordings'; $ext = @('.mp4', '.mkv', '.gif') }
     return @(Get-ChildItem -LiteralPath $dir -File | Where-Object { $_.Extension.ToLower() -in $ext -and $_.LastWriteTime -lt $cutoff -and -not (Test-InProgress $_.Name) })
 }
 

@@ -14,7 +14,12 @@ Turn on Developer options and USB debugging, use a data cable, unlock the phone 
 - **Remote controls:** Shade, Quick, Screen and Mute stay highlighted while on; click again to turn off. Other keys flash when pressed.
 - **Phone** page: quick settings (Wi-Fi, Bluetooth, brightness, volume...), apps, running apps (what is open and in front, Stop to close), files, log and shell.
 - **Library**: play, rename, delete, bulk delete and clean up by age.
-- Shortcuts: `Ctrl+K` palette, `1`-`5` pages, `M` mirror, `R` record, `S` screenshot.
+- **Studio:** Demo mode cleans the status bar; Game mode switches settings when a chosen game is in front.
+- **Automate:** press Record a macro, tap on the phone picture on the Console, press Stop, then Run it or schedule it.
+- **Monitor** and **Alerts** show live phone load and notifications.
+- **Library** also has Phone gallery and Backups; trim and GIF need ffmpeg (core\ffmpeg or Settings).
+- Background jobs: header button, shows progress and Cancel.
+- Shortcuts: `Ctrl+K` palette, `1`-`9` pages, `M` mirror, `R` record, `S` screenshot, `K` marker, `J` jobs, `?` help.
 
 ## Wi-Fi
 Devices page: "Switch this phone to Wi-Fi" with the cable plugged in, or pair with the code from Wireless debugging (Android 11+) and use "Find phones".

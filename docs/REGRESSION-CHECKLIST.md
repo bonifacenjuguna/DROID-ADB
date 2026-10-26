@@ -94,3 +94,17 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 ## Added in 2.5.0 (real device)
 - [ ] Media card: elapsed time follows the song. Total length only appears if the app reports it to Android (many do not, then the bar shows "live").
 - [ ] Charging ring runs smoothly for several minutes without restarting its animation.
+
+## Added in 3.0.0 (real device, Windows)
+- [ ] Monitor: CPU, memory, network and top apps look right on the TECNO (toybox top format varies).
+- [ ] Alerts: notification titles and text match the phone; Copy code works; Windows desktop alert appears when enabled.
+- [ ] Demo mode on and off restores the real status bar (SystemUI demo broadcasts; some phones ignore them).
+- [ ] Game mode applies and restores settings when the game opens and closes.
+- [ ] Phone gallery thumbnails appear (needs System.Drawing on Windows); Pull and Delete work.
+- [ ] Backups copy a folder, skip files already copied, Cancel stops it.
+- [ ] Macros: record, replay on the phone, schedule a daily one; schedule survives backend restart.
+- [ ] Inspect overlay boxes line up with the screen; Launch intents open the right screen.
+- [ ] Insights: screen time and battery per app roughly match Android settings.
+- [ ] ffmpeg trim, shrink and GIF work with ffmpeg in core\ffmpeg.
+- [ ] Auto reconnect: switch a phone to Wi-Fi, unplug, it comes back by itself.
+- [ ] Mobile layout (narrow window): bottom bar, More sheet, Library rows.

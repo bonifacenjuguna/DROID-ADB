@@ -1,4 +1,4 @@
-# Scrcpy Toolkit 2.5
+# Scrcpy Toolkit 3.0
 
 A portable Windows control center for scrcpy: mirror, record, screenshot, remote-control and manage your Android phone from a local dashboard.
 
@@ -10,6 +10,9 @@ Helper project around scrcpy v5.0.1. The scrcpy binaries in `core/scrcpy/` are u
 3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
+
+## What changed in 3.0
+- Grouped navigation, new Studio, Automate, Monitor and Alerts pages, phone gallery and backups, macros and schedules, background jobs, inspector, insights, accent colours and more. See CHANGELOG.md.
 
 ## What changed in 2.5
 - Bigger portrait phone, rebuilt charging animation, richer Media card (time, length, volume), balanced Console layout. See CHANGELOG.md.
@@ -35,12 +38,12 @@ Open the dashboard through the address above. Opening `index.html` directly from
 
 ## Layout
 - `index.html`, `assets/`: dashboard.
-- `core/server/`: PowerShell backend (`server.ps1`, `supervisor.ps1`, `lib.ps1`, `handlers.ps1`).
+- `core/server/`: PowerShell backend (`server.ps1`, `supervisor.ps1`, `lib.ps1`, `handlers.ps1`, `routes-store.ps1`, `routes-phone.ps1`).
 - `core/scripts/`: `start.ps1`, `launch.ps1` (used by `Mirror.bat` and `Record.bat`).
 - `Config/`: settings and profiles. `Recordings/`, `Screenshots/`, `Logs/`: data.
 
 ## Testing status
-Developed and tested with PowerShell 7 on Linux using fake adb and scrcpy programs and a real browser (backend load tests, toggle flows, reconnect after backend loss, mobile layout). These Windows-only parts could not be run and need a quick check on a real PC: stopping a background (windowless) recording with Ctrl+C, finding the scrcpy child process, and the Open folder / Show in folder actions. See `docs/REGRESSION-CHECKLIST.md`.
+Developed and tested with PowerShell 7 on Linux using fake adb and scrcpy programs and a real browser (backend load tests, toggle flows, reconnect after backend loss, mobile layout). These Windows-only parts could not be run and need a quick check on a real PC: stopping a background (windowless) recording with Ctrl+C, finding the scrcpy child process, and the Open folder / Show in folder actions. The 3.0 features that read real phone output (notifications, usage stats, battery stats, uiautomator, demo mode) were tested only against fake adb output and need a check on a real phone. See `docs/REGRESSION-CHECKLIST.md`.
 
 ## Safety
 The backend binds to 127.0.0.1 only, validates the Host and Origin headers and requires a custom header on every change request. Phone file changes are limited to /sdcard.

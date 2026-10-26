@@ -77,20 +77,53 @@
 <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
 <symbol id="i-keys" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.4"/><path d="M7 9h.01M11 9h.01M15 9h.01M7 13h10"/></symbol>
 <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 4-6"/></symbol>
+<symbol id="i-game" viewBox="0 0 24 24"><rect x="3" y="7.5" width="18" height="10" rx="5"/><path d="M8 10.5v4M6 12.5h4M15.5 11.5h.01M18 13.5h.01"/></symbol>
+<symbol id="i-macro" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M10 8.5l5.5 3.5L10 15.5z"/></symbol>
+<symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.8l2.5 5.2 5.7.8-4.1 4 1 5.7-5.1-2.7-5.1 2.7 1-5.7-4.1-4 5.7-.8z"/></symbol>
+<symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.5 12.5V4.5h8l9 9-8 8z"/><circle cx="8" cy="9" r="1.2"/></symbol>
+<symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.5"/><circle cx="6" cy="17" r="2.5"/><path d="M8 8.5L20 18M8 15.5L20 6"/></symbol>
+<symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18.5a4.5 4.5 0 01-.6-9A6 6 0 0118 10.5a4 4 0 01-.5 8z"/><path d="M12 11v6M9.5 14.5L12 17l2.5-2.5"/></symbol>
+<symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3v1.5H7V13l3-3zM12 14.5V20"/></symbol>
+<symbol id="i-jobs" viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h9"/><circle cx="18.5" cy="17" r="2.2"/></symbol>
+<symbol id="i-wand" viewBox="0 0 24 24"><path d="M5 19L16 8M14 6l4 4M7 5v2M6 6h2M18 15v2M17 16h2"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5l7 2.8v5.4c0 4.2-2.8 7.4-7 8.8-4.2-1.4-7-4.6-7-8.8V6.3z"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+<symbol id="i-draw" viewBox="0 0 24 24"><path d="M4 20l1-4L16.5 4.5a2 2 0 013 3L8 19z"/></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><path d="M6 21V4M6 5h11l-2 4 2 4H6"/></symbol>
 </defs>
 </svg>
 
 <div class="app">
   <nav class="rail" aria-label="Main">
     <div class="logo" aria-hidden="true"><svg class="ic"><use href="#i-logo"/></svg></div>
-    <button class="rail-btn is-active" data-view="console" aria-current="page"><svg class="ic"><use href="#i-console"/></svg><span>Console</span></button>
-    <button class="rail-btn" data-view="library"><svg class="ic"><use href="#i-library"/></svg><span>Library</span><i class="rail-badge" id="rail-count" hidden>0</i></button>
-    <button class="rail-btn" data-view="phone"><svg class="ic"><use href="#i-apps"/></svg><span>Phone</span></button>
-    <button class="rail-btn" data-view="device"><svg class="ic"><use href="#i-phone"/></svg><span>Devices</span></button>
-    <button class="rail-btn" data-view="settings"><svg class="ic"><use href="#i-sliders"/></svg><span>Settings</span></button>
+    <div class="rail-group" role="group" aria-label="Control">
+      <span class="rail-label">Control</span>
+      <button class="rail-btn is-active" data-view="console" data-prim aria-current="page"><svg class="ic"><use href="#i-console"/></svg><span>Console</span></button>
+      <button class="rail-btn" data-view="studio"><svg class="ic"><use href="#i-wand"/></svg><span>Studio</span></button>
+      <button class="rail-btn" data-view="automation"><svg class="ic"><use href="#i-macro"/></svg><span>Automate</span></button>
+    </div>
+    <div class="rail-group" role="group" aria-label="Phone">
+      <span class="rail-label">Phone</span>
+      <button class="rail-btn" data-view="phone" data-prim><svg class="ic"><use href="#i-apps"/></svg><span>Tools</span></button>
+      <button class="rail-btn" data-view="monitor"><svg class="ic"><use href="#i-chart"/></svg><span>Monitor</span></button>
+      <button class="rail-btn" data-view="notifications"><svg class="ic"><use href="#i-bell"/></svg><span>Alerts</span><i class="rail-badge" id="rail-notif" hidden>0</i></button>
+    </div>
+    <div class="rail-group" role="group" aria-label="Capture">
+      <span class="rail-label">Capture</span>
+      <button class="rail-btn" data-view="library" data-prim><svg class="ic"><use href="#i-library"/></svg><span>Library</span><i class="rail-badge" id="rail-count" hidden>0</i></button>
+    </div>
+    <div class="rail-group" role="group" aria-label="System">
+      <span class="rail-label">System</span>
+      <button class="rail-btn" data-view="device"><svg class="ic"><use href="#i-phone"/></svg><span>Devices</span></button>
+      <button class="rail-btn" data-view="settings"><svg class="ic"><use href="#i-sliders"/></svg><span>Settings</span></button>
+    </div>
+    <button class="rail-btn rail-more" id="rail-more" aria-haspopup="dialog"><svg class="ic"><use href="#i-grid"/></svg><span>More</span></button>
     <div class="rail-foot" title="Local backend">
       <span class="dot" id="rail-dot"></span>
-      <span id="rail-version">v2.5</span>
+      <span id="rail-version">v3.0</span>
     </div>
   </nav>
 
@@ -103,6 +136,8 @@
           <select id="device-select" aria-label="Active device"></select>
           <svg class="ic sm chev"><use href="#i-chevron"/></svg>
         </div>
+        <span class="hdr-batt" id="hdr-batt" hidden title="Phone battery"></span>
+        <button class="icon-btn jobs-btn" id="jobs-btn" aria-label="Background jobs" title="Background jobs" hidden><svg class="ic"><use href="#i-jobs"/></svg><i class="jobs-count" id="jobs-count">0</i></button>
         <button class="palette-btn" id="palette-btn" aria-label="Open command palette">
           <svg class="ic sm"><use href="#i-search"/></svg>
           <span>Search or run a command</span>
@@ -151,6 +186,7 @@
               <div class="stage-actions" id="stage-actions">
                 <button class="btn primary lg toggle" id="mirror-btn" data-act="mirror" aria-pressed="false"></button>
                 <button class="btn rec lg toggle" id="rec-btn" data-act="record" aria-pressed="false"></button>
+                <button class="btn lg" id="marker-btn" type="button" hidden title="Drop a marker at this moment of the recording (K)"><svg class="ic"><use href="#i-flag"/></svg><span>Marker</span></button>
                 <button class="btn lg" id="shot-btn" data-act="screenshot"><svg class="ic"><use href="#i-camera"/></svg><span>Screenshot</span></button>
               </div>
               <div class="quickline" id="quickline"></div>
@@ -187,6 +223,7 @@
                 <input id="text-input" type="text" maxlength="200" placeholder="Type text to send to the focused field on the phone" autocomplete="off" spellcheck="false" aria-label="Text to send to the phone">
                 <button class="btn sm" id="text-send"><svg class="ic sm"><use href="#i-send"/></svg><span>Send</span></button>
               </div>
+              <div class="remote-extra" id="remote-extra"></div>
               <div class="typebar">
                 <svg class="ic sm"><use href="#i-globe"/></svg>
                 <input id="url-input" type="text" placeholder="Open a web address on the phone, https://..." autocomplete="off" spellcheck="false" aria-label="Web address to open on the phone">
@@ -236,19 +273,45 @@
         </div>
       </section>
 
+
+      <!-- STUDIO -->
+      <section class="view" id="view-studio" hidden><div id="studio-root"></div></section>
+
+      <!-- AUTOMATION -->
+      <section class="view" id="view-automation" hidden><div id="auto-root"></div></section>
+
+      <!-- MONITOR -->
+      <section class="view" id="view-monitor" hidden>
+        <div class="toolbar">
+          <div class="tabs" role="tablist" aria-label="Monitor">
+            <button role="tab" class="tab is-active" data-mtab="live" aria-selected="true"><svg class="ic sm"><use href="#i-pulse"/></svg>Live</button>
+            <button role="tab" class="tab" data-mtab="usage" aria-selected="false"><svg class="ic sm"><use href="#i-clock"/></svg>Usage</button>
+            <button role="tab" class="tab" data-mtab="perms" aria-selected="false"><svg class="ic sm"><use href="#i-shield"/></svg>Permissions</button>
+          </div>
+        </div>
+        <div id="mon-root"></div>
+      </section>
+
+      <!-- NOTIFICATIONS -->
+      <section class="view" id="view-notifications" hidden><div id="notif-root"></div></section>
+
       <!-- LIBRARY -->
       <section class="view" id="view-library" hidden>
         <div class="toolbar">
           <div class="tabs" role="tablist" aria-label="Library">
             <button role="tab" class="tab is-active" data-tab="recordings" aria-selected="true"><svg class="ic sm"><use href="#i-library"/></svg>Recordings <b id="tab-rec-count">0</b></button>
             <button role="tab" class="tab" data-tab="screenshots" aria-selected="false"><svg class="ic sm"><use href="#i-image"/></svg>Screenshots <b id="tab-shot-count">0</b></button>
+            <button role="tab" class="tab" data-xtab="gallery" aria-selected="false"><svg class="ic sm"><use href="#i-phone"/></svg>Phone gallery</button>
+            <button role="tab" class="tab" data-xtab="backups" aria-selected="false"><svg class="ic sm"><use href="#i-cloud"/></svg>Backups</button>
           </div>
           <div class="search"><svg class="ic sm"><use href="#i-search"/></svg><input id="lib-search" type="search" placeholder="Filter by name" aria-label="Filter files" autocomplete="off"></div>
           <div class="select-wrap plain"><svg class="ic sm"><use href="#i-sort"/></svg><select id="lib-sort" aria-label="Sort files"><option value="new">Newest first</option><option value="old">Oldest first</option><option value="big">Largest first</option><option value="name">Name</option></select><svg class="ic sm chev"><use href="#i-chevron"/></svg></div>
+          <button class="btn" id="lib-fav" title="Show favourites only"><svg class="ic sm"><use href="#i-star"/></svg><span>Favourites</span></button>
           <button class="btn" id="lib-select"><svg class="ic sm"><use href="#i-check"/></svg><span>Select</span></button>
           <button class="btn" id="lib-refresh"><svg class="ic sm"><use href="#i-refresh"/></svg><span>Refresh</span></button>
           <button class="btn" id="lib-folder"><svg class="ic sm"><use href="#i-folder"/></svg><span>Open folder</span></button>
         </div>
+        <div id="lib-classic">
         <div class="library-summary panel" id="lib-summary"></div>
         <div class="bulkbar" id="bulkbar" hidden>
           <b id="bulk-count">0 selected</b>
@@ -267,6 +330,9 @@
             <button class="btn danger" id="cleanup-btn"><svg class="ic sm"><use href="#i-trash"/></svg><span>Review files</span></button>
           </div>
         </section>
+        </div>
+        <div id="lib-gallery" hidden></div>
+        <div id="lib-backups" hidden></div>
       </section>
 
       <!-- PHONE -->
@@ -277,6 +343,8 @@
             <button role="tab" class="tab" data-ptab="apps" aria-selected="false"><svg class="ic sm"><use href="#i-apps"/></svg>Apps</button>
             <button role="tab" class="tab" data-ptab="running" aria-selected="false"><svg class="ic sm"><use href="#i-pulse"/></svg>Running</button>
             <button role="tab" class="tab" data-ptab="files" aria-selected="false"><svg class="ic sm"><use href="#i-folder"/></svg>Files</button>
+            <button role="tab" class="tab" data-ptab="inspect" aria-selected="false"><svg class="ic sm"><use href="#i-eye"/></svg>Inspect</button>
+            <button role="tab" class="tab" data-ptab="launch" aria-selected="false"><svg class="ic sm"><use href="#i-external"/></svg>Launch</button>
             <button role="tab" class="tab" data-ptab="logcat" aria-selected="false"><svg class="ic sm"><use href="#i-list"/></svg>Log</button>
             <button role="tab" class="tab" data-ptab="shell" aria-selected="false"><svg class="ic sm"><use href="#i-terminal"/></svg>Shell</button>
           </div>
@@ -286,6 +354,8 @@
         <div id="ptab-apps" class="ptab" hidden></div>
         <div id="ptab-running" class="ptab" hidden></div>
         <div id="ptab-files" class="ptab" hidden></div>
+        <div id="ptab-inspect" class="ptab" hidden></div>
+        <div id="ptab-launch" class="ptab" hidden></div>
         <div id="ptab-logcat" class="ptab" hidden></div>
         <div id="ptab-shell" class="ptab" hidden></div>
       </section>
@@ -406,11 +476,58 @@
   </form>
 </dialog>
 
+
+<dialog id="dlg-form" class="dlg">
+  <form method="dialog" class="dlg-body" id="form-form">
+    <h2 id="form-title"></h2>
+    <div id="form-body" class="dlg-text formgrid"></div>
+    <div class="dlg-actions"><button class="btn" value="cancel" type="submit" formnovalidate>Cancel</button><button class="btn primary" value="ok" id="form-ok" type="submit">Save</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-more" class="dlg">
+  <div class="dlg-body">
+    <header class="panel-head"><h2>All sections</h2><button class="icon-btn" id="more-close" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></header>
+    <div class="more-grid" id="more-grid"></div>
+  </div>
+</dialog>
+
+<dialog id="dlg-pic" class="dlg wide">
+  <div class="dlg-body">
+    <header class="panel-head"><h2 id="pic-title"></h2><button class="icon-btn" id="pic-close" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></header>
+    <div class="shot-frame"><img id="pic-img" alt="Phone picture"></div>
+    <div class="dlg-actions"><button class="btn" id="pic-prev"><svg class="ic sm"><use href="#i-left"/></svg></button><button class="btn" id="pic-next"><svg class="ic sm"><use href="#i-right"/></svg></button><span class="grow"></span><button class="btn" id="pic-pull"><svg class="ic sm"><use href="#i-download"/></svg><span>Copy to PC</span></button></div>
+  </div>
+</dialog>
+
+<dialog id="dlg-annot" class="dlg wide">
+  <div class="dlg-body">
+    <header class="panel-head"><h2>Annotate screenshot</h2><button class="icon-btn" id="annot-close" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></header>
+    <div class="annot-tools" id="annot-tools">
+      <button class="btn sm is-active" data-tool="pen"><svg class="ic sm"><use href="#i-draw"/></svg><span>Pen</span></button>
+      <button class="btn sm" data-tool="arrow"><svg class="ic sm"><use href="#i-up"/></svg><span>Arrow</span></button>
+      <button class="btn sm" data-tool="box"><svg class="ic sm"><use href="#i-expand"/></svg><span>Box</span></button>
+      <button class="btn sm" data-tool="blur"><svg class="ic sm"><use href="#i-eye"/></svg><span>Hide</span></button>
+      <button class="btn sm" data-tool="crop"><svg class="ic sm"><use href="#i-scissors"/></svg><span>Crop</span></button>
+      <span class="swatches" id="annot-colors"></span>
+      <span class="grow"></span>
+      <button class="btn sm" id="annot-undo"><span>Undo</span></button>
+    </div>
+    <div class="annot-wrap"><canvas id="annot-canvas"></canvas></div>
+    <div class="dlg-actions"><button class="btn" id="annot-copy"><svg class="ic sm"><use href="#i-copy"/></svg><span>Copy</span></button><button class="btn primary" id="annot-save"><svg class="ic sm"><use href="#i-save"/></svg><span>Save to library</span></button></div>
+  </div>
+</dialog>
+
+<aside class="jobs-panel" id="jobs-panel" hidden aria-label="Background jobs">
+  <header class="panel-head"><h2>Background jobs</h2><span class="grow"></span><button class="btn sm ghost" id="jobs-clear">Clear finished</button><button class="icon-btn" id="jobs-close" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></header>
+  <div id="jobs-list"></div>
+</aside>
+
 <dialog id="dlg-shot" class="dlg wide">
   <div class="dlg-body">
     <header class="panel-head"><h2 id="shot-title"></h2><button class="icon-btn" id="shot-close" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></header>
     <div class="shot-frame"><img id="shot-img" alt="Screenshot"></div>
-    <div class="dlg-actions"><button class="btn" id="shot-prev"><svg class="ic sm"><use href="#i-left"/></svg></button><button class="btn" id="shot-next"><svg class="ic sm"><use href="#i-right"/></svg></button><span class="grow"></span><button class="btn" id="shot-save"><svg class="ic sm"><use href="#i-download"/></svg><span>Download</span></button><button class="btn" id="shot-reveal"><svg class="ic sm"><use href="#i-folder"/></svg><span>Show in folder</span></button><button class="btn danger" id="shot-delete"><svg class="ic sm"><use href="#i-trash"/></svg><span>Delete</span></button></div>
+    <div class="dlg-actions"><button class="btn" id="shot-prev"><svg class="ic sm"><use href="#i-left"/></svg></button><button class="btn" id="shot-next"><svg class="ic sm"><use href="#i-right"/></svg></button><span class="grow"></span><button class="btn" id="shot-save"><svg class="ic sm"><use href="#i-download"/></svg><span>Download</span></button><button class="btn" id="shot-reveal"><svg class="ic sm"><use href="#i-folder"/></svg><span>Show in folder</span></button><button class="btn" id="shot-annot"><svg class="ic sm"><use href="#i-draw"/></svg><span>Annotate</span></button><button class="btn danger" id="shot-delete"><svg class="ic sm"><use href="#i-trash"/></svg><span>Delete</span></button></div>
   </div>
 </dialog>
 
@@ -418,6 +535,7 @@
   <div class="dlg-body">
     <header class="panel-head"><h2 id="video-title"></h2><button class="icon-btn" id="video-close" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></header>
     <div class="shot-frame"><video id="video-el" controls preload="metadata"></video></div>
+    <div class="markrow" id="video-markers" hidden></div>
     <p class="hint" id="video-note">If the video does not play here, use Open to play it in your default player.</p>
     <div class="dlg-actions"><button class="btn" id="video-open"><svg class="ic sm"><use href="#i-external"/></svg><span>Open in player</span></button><button class="btn" id="video-save"><svg class="ic sm"><use href="#i-download"/></svg><span>Download</span></button><button class="btn" id="video-reveal"><svg class="ic sm"><use href="#i-folder"/></svg><span>Show in folder</span></button></div>
   </div>
@@ -436,7 +554,9 @@
     <header class="panel-head"><h2>Keyboard shortcuts</h2><button class="icon-btn" id="help-close" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></header>
     <dl class="keylist">
       <div><dt><kbd>Ctrl</kbd> <kbd>K</kbd></dt><dd>Command palette</dd></div>
-      <div><dt><kbd>1</kbd> to <kbd>5</kbd></dt><dd>Console, Library, Phone, Devices, Settings</dd></div>
+      <div><dt><kbd>1</kbd> to <kbd>9</kbd></dt><dd>Console, Studio, Automate, Tools, Monitor, Alerts, Library, Devices, Settings</dd></div>
+      <div><dt><kbd>K</kbd></dt><dd>Drop a marker while recording</dd></div>
+      <div><dt><kbd>J</kbd></dt><dd>Background jobs</dd></div>
       <div><dt><kbd>M</kbd></dt><dd>Start or stop mirroring</dd></div>
       <div><dt><kbd>R</kbd></dt><dd>Start or stop recording</dd></div>
       <div><dt><kbd>S</kbd></dt><dd>Take a screenshot</dd></div>
@@ -463,6 +583,15 @@
 <script src="assets/phone.js"></script>
 <script src="assets/devices.js"></script>
 <script src="assets/settings.js"></script>
+<script src="assets/v3.js"></script>
+<script src="assets/console-x.js"></script>
+<script src="assets/library-x.js"></script>
+<script src="assets/monitor.js"></script>
+<script src="assets/alerts.js"></script>
+<script src="assets/studio.js"></script>
+<script src="assets/automation.js"></script>
+<script src="assets/inspect.js"></script>
+<script src="assets/wall.js"></script>
 <script src="assets/boot.js"></script>
 </body>
 </html>

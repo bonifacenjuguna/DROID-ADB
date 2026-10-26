@@ -47,7 +47,7 @@ function spark(serial) {
 function checkAlerts() {
   const id = STK.sel(), L = STK.live(), pct = Number(S().batteryAlertPct) || 0;
   if (id && L && pct > 0 && L.battery >= 0) {
-    if (!L.charging && L.battery <= pct && !alerted[id]) { alerted[id] = true; STK.toast('Phone battery is low: ' + L.battery + '%.', 'bad'); }
+    if (!L.charging && L.battery <= pct && !alerted[id]) { alerted[id] = true; STK.toast('Phone battery is low: ' + L.battery + '%.', 'bad'); STK.notify && STK.notify('Phone battery is low', L.battery + '% left', 'batt'); }
     if (L.charging || L.battery > pct + 5) alerted[id] = false;
   }
   const lim = Number(S().lowDiskGb) || 0, d = state.disk;
@@ -244,7 +244,7 @@ async function sendKey(btn) {
   if (['playpause', 'next', 'prev'].includes(key)) { setTimeout(() => pollMedia(true), 700); setTimeout(() => pollMedia(true), 2200); }
   if (['back', 'home', 'recents'].includes(key)) { K.shade = false; K.quick = false; renderKeys(); }
   await STK.busy(btn, async () => {
-    try { await STK.post('/key', { serial: STK.sel(), key }, { timeout: 20000 }); STK.flash(btn, true); if (key === 'volup' || key === 'voldown') setTimeout(() => pollKeystate(true), 400); if (key === 'power') { K.screenOn = K.screenOn === false; renderKeys(); setTimeout(() => pollKeystate(true), 800); } }
+    try { await STK.post('/key', { serial: STK.sel(), key }, { timeout: 20000 }); STK.emit('phone-input', { t: 'key', key }); STK.flash(btn, true); if (key === 'volup' || key === 'voldown') setTimeout(() => pollKeystate(true), 400); if (key === 'power') { K.screenOn = K.screenOn === false; renderKeys(); setTimeout(() => pollKeystate(true), 800); } }
     catch (e) { STK.fail(e); STK.flash(btn, false); }
   });
 }
@@ -591,8 +591,8 @@ $('#screen').addEventListener('pointerup', async e => {
   const ms = Math.round(performance.now() - T.t), moved = Math.hypot(e.clientX - T.x, e.clientY - T.y);
   const serial = STK.sel(); T.inflight++;
   try {
-    if (moved < 9) { fx('tap', T.p.nx, T.p.ny); await STK.post('/tap', { serial, x: T.p.x, y: T.p.y, holdMs: ms >= 450 ? Math.min(ms, 3000) : 0 }, { timeout: 15000 }); }
-    else { fx('swipe', T.p.nx, T.p.ny, p.nx, p.ny); await STK.post('/swipe', { serial, x1: T.p.x, y1: T.p.y, x2: p.x, y2: p.y, ms: Math.min(1500, Math.max(80, ms)) }, { timeout: 15000 }); }
+    if (moved < 9) { fx('tap', T.p.nx, T.p.ny); await STK.post('/tap', { serial, x: T.p.x, y: T.p.y, holdMs: ms >= 450 ? Math.min(ms, 3000) : 0 }, { timeout: 15000 }); STK.emit('phone-input', ms >= 450 ? { t: 'long', x: T.p.x, y: T.p.y } : { t: 'tap', x: T.p.x, y: T.p.y }); }
+    else { fx('swipe', T.p.nx, T.p.ny, p.nx, p.ny); await STK.post('/swipe', { serial, x1: T.p.x, y1: T.p.y, x2: p.x, y2: p.y, ms: Math.min(1500, Math.max(80, ms)) }, { timeout: 15000 }); STK.emit('phone-input', { t: 'swipe', x1: T.p.x, y1: T.p.y, x2: p.x, y2: p.y, ms: Math.min(1500, Math.max(80, ms)) }); }
     clearTimeout(P.followUp); P.followUp = setTimeout(() => shoot({ reason: 'touch' }), 450);
   } catch (er) { STK.fail(er); } finally { T.inflight--; }
 });
@@ -672,7 +672,7 @@ async function nick() {
   const id = STK.sel(); if (!id) return;
   const v = await STK.prompt('Phone nickname', 'Shown in the dashboard only. Leave empty to use the phone model.', STK.store.get('nick:' + id, ''));
   if (v === null || v === undefined) return;
-  STK.store.set('nick:' + id, String(v).trim().slice(0, 40)); renderStage(); renderPicker();
+  STK.store.set('nick:' + id, String(v).trim().slice(0, 40)); if (STK.saveNick) STK.saveNick(id, String(v).trim().slice(0, 40)); renderStage(); renderPicker();
 }
 async function showSessionLog(id) {
   try { const r = await STK.api('/log?id=' + encodeURIComponent(id)); STK.showText('scrcpy output ' + (r.name ? '(' + r.name + ')' : ''), r.log); } catch (e) { STK.fail(e); }

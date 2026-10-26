@@ -1,5 +1,31 @@
 # Changelog
 
+## 3.0.0
+A big update: the dashboard is regrouped and many new tools were added.
+
+Organised
+- Navigation is grouped: Control (Console, Studio, Automate), Phone (Tools, Monitor, Alerts), Capture (Library), System (Devices, Settings). Keys 1-9 jump to pages; K drops a marker while recording; J opens background jobs. On small screens the bottom bar has a More sheet.
+- Background jobs panel (header button) shows backups, pulls, conversions, macros and scheduled shots with progress and Cancel.
+- Accent colours (Settings), settings export / import, phone nicknames now saved by the backend.
+
+New pages
+- **Studio:** Demo mode (clean status bar for screenshots), Game mode (per-game profile applied when the game comes to the front), capture presets, presentation view.
+- **Automate:** record and replay macros (taps, swipes, keys, waits), edit steps, text snippets, scheduled screenshots and macros (every N minutes or daily).
+- **Monitor:** live CPU, memory, network, temperature and top apps with trend lines.
+- **Alerts:** phone notifications on the PC, copy one-time codes, optional Windows desktop alerts.
+
+Library
+- Phone gallery (thumbnails, pull or delete), Backups of phone folders, favourites, tags, search, recording markers.
+- Trim, shrink and convert to GIF with ffmpeg (optional; put ffmpeg in core\ffmpeg or set its path). GIF capture from the Console.
+- File names can include the foreground app ({app}).
+
+Phone tools
+- Inspect (tap the screen picture to see UI elements), Launch (send an intent), Insights (screen time, battery per app, accessibility and device-admin apps, permissions).
+- Pin apps to the Console, paste text from the PC, live keyboard typing, annotate screenshots.
+
+Devices
+- Auto reconnect to known Wi-Fi phones, live wall of all connected phones.
+
 ## 2.5.0
 Changed
 - Portrait phone is bigger: it fills the card height and leaves room at the top.

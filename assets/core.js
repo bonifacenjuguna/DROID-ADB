@@ -182,7 +182,7 @@ STK.menu = function (anchor, items) {
 };
 
 /* ---------- navigation ---------- */
-const TITLES = { console: 'Console', library: 'Library', phone: 'Phone tools', device: 'Devices', settings: 'Settings' };
+const TITLES = { console: 'Console', studio: 'Studio', automation: 'Automation', phone: 'Phone tools', monitor: 'Monitor', notifications: 'Notifications', library: 'Library', device: 'Devices', settings: 'Settings' };
 STK.go = function go(name) {
   if (!TITLES[name]) name = 'console';
   state.view = name;
@@ -282,7 +282,9 @@ function handleEvents(d) {
   for (const ev of d.events || []) {
     if (state.ignoreSessions.has(ev.session)) continue;
     if (ev.kind === 'failed') STK.toast('scrcpy closed right away' + (ev.reason ? ': ' + ev.reason : '. Check the cable and unlock the phone.'), 'bad');
+    else if (ev.kind === 'job') STK.emit('job-event', ev);
     else if (ev.kind === 'ended') {
+      if (ev.mode === 'record' && ev.file) STK.notify && STK.notify('Recording saved', ev.file + ' (' + STK.bytes(ev.size) + ')', 'rec');
       if (ev.mode === 'record' && ev.file) STK.toast('Recording saved: ' + ev.file + ' (' + STK.bytes(ev.size) + ', ' + STK.dur(ev.seconds) + ')', 'ok', { label: 'Library', run: () => STK.go('library') });
       else STK.toast('Mirror window closed.');
       STK.emit('library-changed');

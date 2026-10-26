@@ -26,13 +26,13 @@ const nice = pkg => {
   return w.charAt(0).toUpperCase() + w.slice(1);
 };
 function setTab(name) {
-  if (!['quick', 'apps', 'running', 'files', 'logcat', 'shell'].includes(name)) name = 'quick';
+  if (!['quick', 'apps', 'running', 'files', 'inspect', 'launch', 'logcat', 'shell'].includes(name)) name = 'quick';
   P.tab = name; STK.store.set('ptab', name);
   $$('[data-ptab]').forEach(b => { const on = b.dataset.ptab === name; b.classList.toggle('is-active', on); b.setAttribute('aria-selected', on); });
   if (name !== 'logcat') stopLog();
   if (name !== 'running') stopRun();
   if (!guard()) return;
-  ({ quick: loadQuick, apps: loadApps, running: loadRunning, files: loadFiles, logcat: loadLog, shell: renderShell }[name])();
+  ({ quick: loadQuick, apps: loadApps, running: loadRunning, files: loadFiles, inspect: () => STK.inspectShow(), launch: () => STK.launchShow(), logcat: loadLog, shell: renderShell }[name])();
 }
 
 /* ---------- quick settings ---------- */
@@ -115,6 +115,7 @@ async function appAction(pkg, action, btn, extra) {
 function appMenu(btn) {
   const pkg = btn.dataset.pkg, dis = btn.dataset.dis === '1';
   STK.menu(btn, [
+    { label: 'Pin to the Console', icon: 'pin', run: () => STK.pinApp(pkg) },
     { label: 'Stop app', icon: 'stop', run: () => appAction(pkg, 'stop') },
     { label: 'Copy package name', icon: 'copy', run: () => navigator.clipboard.writeText(pkg).then(() => STK.toast('Copied ' + pkg), () => STK.toast('Copy was blocked by the browser.', 'bad')) },
     { label: 'App info', icon: 'info', run: () => appAction(pkg, 'info') },

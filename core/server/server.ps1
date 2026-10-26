@@ -26,9 +26,13 @@ $Shared.started = Get-Date
 $Shared.versions = @{ adb = ''; scrcpy = '' }
 $Shared.queue = New-Object 'System.Collections.Concurrent.BlockingCollection[object]' 500
 $Shared.fastQueue = New-Object 'System.Collections.Concurrent.BlockingCollection[object]' 500
+$Shared.jobQueue = New-Object 'System.Collections.Concurrent.BlockingCollection[string]' 100
+$Shared.jobs = [hashtable]::Synchronized(@{})
 
 . (Join-Path $PSScriptRoot 'lib.ps1')
 . (Join-Path $PSScriptRoot 'handlers.ps1')
+. (Join-Path $PSScriptRoot 'routes-store.ps1')
+. (Join-Path $PSScriptRoot 'routes-phone.ps1')
 
 $Settings = Get-Settings
 $Port = [int]$Settings.port
@@ -43,7 +47,7 @@ $Listener = New-Object Net.HttpListener
 $Listener.Prefixes.Add('http://127.0.0.1:' + $Port + '/')
 $Shared.listener = $Listener
 
-$InitText = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'lib.ps1')) + "`n" + [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'handlers.ps1'))
+$InitText = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'lib.ps1')) + "`n" + [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'handlers.ps1')) + "`n" + [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'routes-store.ps1')) + "`n" + [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'routes-phone.ps1'))
 
 $WorkerLoop = @'
 
@@ -73,6 +77,7 @@ while (-not $Shared.stop) {
     try {
         Update-DeviceCache
         [void](Get-LiveSessions)
+        try { Invoke-AutoReconnect } catch {}
         $n++
         if ($n % 60 -eq 0) { $Shared.versions = Get-ServerVersions }
     } catch { Write-BackendLog ('Ticker: ' + $_.Exception.Message) }
@@ -145,6 +150,9 @@ try {
     Add-Activity 'system' ('Backend started on port ' + $Port + '.')
     [void]$Runners.Add((Start-Runner 'ticker' $TickerLoop))
     [void]$Runners.Add((Start-Runner 'live' $LiveLoop))
+    [void]$Runners.Add((Start-Runner 'jobs-1' $JobLoop))
+    [void]$Runners.Add((Start-Runner 'jobs-2' $JobLoop))
+    [void]$Runners.Add((Start-Runner 'sched' $SchedLoop))
     for ($i = 1; $i -le $WorkerCount; $i++) { [void]$Runners.Add((Start-Runner ('worker-' + $i) $WorkerLoop)) }
     for ($i = 1; $i -le 3; $i++) { [void]$Runners.Add((Start-Runner ('fast-' + $i) $FastLoop)) }
 

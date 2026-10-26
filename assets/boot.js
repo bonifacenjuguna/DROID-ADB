@@ -36,10 +36,21 @@ if (window.matchMedia) window.matchMedia('(prefers-color-scheme: light)').addEve
 const need = fn => () => STK.sel() ? fn() : STK.toast('Connect a phone first.', 'bad');
 const COMMANDS = [
   { name: 'Go to Console', hint: '1', run: () => STK.go('console') },
-  { name: 'Go to Library', hint: '2', run: () => STK.go('library') },
-  { name: 'Go to Phone tools', hint: '3', run: () => STK.go('phone') },
-  { name: 'Go to Devices', hint: '4', run: () => STK.go('device') },
-  { name: 'Go to Settings', hint: '5', run: () => STK.go('settings') },
+  { name: 'Go to Studio (game mode, demo mode)', hint: '2', run: () => STK.go('studio') },
+  { name: 'Go to Automation (macros, schedules)', hint: '3', run: () => STK.go('automation') },
+  { name: 'Go to Phone tools', hint: '4', run: () => STK.go('phone') },
+  { name: 'Go to Monitor', hint: '5', run: () => STK.go('monitor') },
+  { name: 'Go to Notifications', hint: '6', run: () => STK.go('notifications') },
+  { name: 'Go to Library', hint: '7', run: () => STK.go('library') },
+  { name: 'Go to Devices', hint: '8', run: () => STK.go('device') },
+  { name: 'Go to Settings', hint: '9', run: () => STK.go('settings') },
+  { name: 'Open phone gallery', run: () => { STK.go('library'); setTimeout(() => $('[data-xtab="gallery"]').click(), 0); } },
+  { name: 'Back up phone photos', run: () => { STK.go('library'); setTimeout(() => $('[data-xtab="backups"]').click(), 0); } },
+  { name: 'Inspect the phone screen', run: () => { STK.go('phone'); setTimeout(() => $('[data-ptab="inspect"]').click(), 0); } },
+  { name: 'Open an intent or link on the phone', run: () => { STK.go('phone'); setTimeout(() => $('[data-ptab="launch"]').click(), 0); } },
+  { name: 'Turn demo mode on or off', run: need(() => STK.demoToggle && STK.demoToggle()) },
+  { name: 'Record a GIF of the phone screen', run: need(() => STK.gifCapture && STK.gifCapture()) },
+  { name: 'Background jobs', hint: 'J', run: () => STK.jobs && STK.jobs.toggle() },
   { name: 'Start or stop mirroring', hint: 'M', run: need(() => STK.actions.mirror()) },
   { name: 'Start or stop recording', hint: 'R', run: need(() => STK.actions.record()) },
   { name: 'Take a screenshot', hint: 'S', run: need(() => STK.actions.screenshot()) },
@@ -88,7 +99,7 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const tag = (e.target.tagName || '').toLowerCase();
   if (['input', 'textarea', 'select'].includes(tag) || e.target.isContentEditable || document.querySelector('dialog[open]')) return;
-  const views = { 1: 'console', 2: 'library', 3: 'phone', 4: 'device', 5: 'settings' };
+  const views = { 1: 'console', 2: 'studio', 3: 'automation', 4: 'phone', 5: 'monitor', 6: 'notifications', 7: 'library', 8: 'device', 9: 'settings' };
   if (views[e.key]) return STK.go(views[e.key]);
   const k = e.key.toLowerCase();
   if (k === 'm') need(() => STK.actions.mirror())();
@@ -97,6 +108,8 @@ document.addEventListener('keydown', e => {
   else if (k === 'u') need(() => STK.preview.update())();
   else if (k === 'l') need(() => STK.preview.toggleLive())();
   else if (k === 'c') need(() => STK.preview.copy())();
+  else if (k === 'k') { if (STK.markRecording) STK.markRecording(); }
+  else if (k === 'j') { if (STK.jobs) STK.jobs.toggle(); }
   else if (e.key === '?') $('#dlg-help').showModal();
 });
 

@@ -17,7 +17,7 @@ function renderList() {
     const [cls, label] = STATE_INFO[d.state] || ['warn', d.state];
     const wifi = /:\d+$/.test(d.id) || /_adb/.test(d.id);
     const inf = state.info[d.id];
-    const name = d.model || (inf && inf.model) || d.id;
+    const name = STK.nickFor(d.id) || d.model || (inf && inf.model) || d.id;
     const active = cur && cur.id === d.id;
     return `<div class="dev ${active ? 'active' : ''}"><span class="badge">${icon(wifi ? 'wifi' : 'usb')}</span><div><b>${esc(String(name).replace(/_/g, ' '))}</b><small>${esc(d.id)} · ${wifi ? 'Wi-Fi' : 'USB'}</small></div><span class="chip sm ${cls}"><i class="dot"></i><b>${esc(label)}</b></span>${d.state === 'device' ? (active ? '<span class="pill">In use</span>' : `<button class="btn sm" data-use="${esc(d.id)}">Use this phone</button>`) : '<span></span>'}</div>`;
   }).join(''));

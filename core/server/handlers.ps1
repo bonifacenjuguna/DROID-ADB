@@ -1,7 +1,7 @@
 # Scrcpy Toolkit HTTP helpers and API routes. ASCII only.
 # Dot-sourced after lib.ps1 by the main thread (for static files) and by every worker runspace (for the API).
 
-$MimeTypes = @{ '.html' = 'text/html; charset=utf-8'; '.css' = 'text/css; charset=utf-8'; '.js' = 'text/javascript; charset=utf-8'; '.svg' = 'image/svg+xml'; '.png' = 'image/png'; '.ico' = 'image/x-icon'; '.json' = 'application/json; charset=utf-8'; '.mkv' = 'video/x-matroska'; '.mp4' = 'video/mp4' }
+$MimeTypes = @{ '.html' = 'text/html; charset=utf-8'; '.css' = 'text/css; charset=utf-8'; '.js' = 'text/javascript; charset=utf-8'; '.svg' = 'image/svg+xml'; '.png' = 'image/png'; '.ico' = 'image/x-icon'; '.json' = 'application/json; charset=utf-8'; '.mkv' = 'video/x-matroska'; '.mp4' = 'video/mp4'; '.gif' = 'image/gif' }
 $CspValue = "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 
 function Set-CommonHeaders {
@@ -50,7 +50,7 @@ function Send-Static {
 
 # Streams a file with HTTP range support so videos can seek and play while still growing.
 function Send-File {
-    param($Ctx, [string]$Path, [string]$Type, [string]$DownloadName = '')
+    param($Ctx, [string]$Path, [string]$Type, [string]$DownloadName = '', [string]$CacheControl = 'no-store')
     $res = $Ctx.Response
     $fs = $null
     try {
@@ -76,7 +76,7 @@ function Send-File {
         $res.StatusCode = $status
         $res.ContentType = $Type
         $res.Headers['Accept-Ranges'] = 'bytes'
-        $res.Headers['Cache-Control'] = 'no-store'
+        $res.Headers['Cache-Control'] = $CacheControl
         Set-CommonHeaders $Ctx
         if ($status -eq 206) { $res.Headers['Content-Range'] = 'bytes ' + $start + '-' + $end + '/' + $len }
         if ($DownloadName) { $res.Headers['Content-Disposition'] = 'attachment; filename="' + $DownloadName + '"' }
@@ -288,6 +288,7 @@ function Invoke-Wifi {
             Start-Sleep -Seconds 2
             $c = Invoke-Adb ('connect ' + $ip + ':' + $port) 15
             if (($c.out + $c.err) -notmatch 'connected to') { Fail ('Wi-Fi connection failed: ' + ($c.out + $c.err).Trim()) }
+            Add-WifiHost ($ip + ':' + $port)
             return @{ message = 'Connected over Wi-Fi at ' + $ip + ':' + $port + '. You can unplug the cable.'; address = ($ip + ':' + $port) }
         }
         'connect' {
@@ -296,6 +297,7 @@ function Invoke-Wifi {
             if ($target -notmatch ':') { $target += ':' + $port }
             $c = Invoke-Adb ('connect ' + $target) 15
             if (($c.out + $c.err) -notmatch 'connected to') { Fail ('Could not connect: ' + ($c.out + $c.err).Trim()) }
+            Add-WifiHost $target
             return @{ message = 'Connected to ' + $target + '.'; address = $target }
         }
         'pair' {
@@ -1138,6 +1140,7 @@ $Routes['POST /api/open-folder'] = { param($Ctx)
         'recordings' { $dir = Get-Dir 'recordings' }
         'screenshots' { $dir = Get-Dir 'screenshots' }
         'downloads' { $dir = Get-Dir 'downloads' }
+        'backups' { $dir = Join-Path (Get-Dir 'downloads') 'Backups'; New-Item -ItemType Directory -Force -Path $dir | Out-Null }
         'logs' { $dir = $LogDir }
         'root' { $dir = $Root }
         default { Fail 'Unknown folder.' }

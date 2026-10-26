@@ -131,7 +131,7 @@ document.addEventListener('click', async e => {
   }
   if (t.closest('#preview-mode') && t.dataset.mode) { S.mode = t.dataset.mode; $$('#preview-mode button').forEach(b => b.classList.toggle('is-active', b === t)); return refreshCmd(); }
   if (t.id === 'cmd-copy') return navigator.clipboard.writeText($('#cmd-preview').textContent).then(() => STK.toast('Command copied.'), () => STK.toast('Copy was blocked by the browser.', 'bad'));
-  if (t.id === 'settings-export') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(state.settings, null, 2)], { type: 'application/json' })); a.download = 'scrcpy-toolkit-settings.json'; a.click(); return setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
+  if (t.id === 'settings-export') { const a = document.createElement('a'); a.href = '/api/export'; a.download = 'scrcpy-toolkit-backup.json'; document.body.append(a); a.click(); a.remove(); STK.toast('Backup downloaded: settings, profiles, pinned apps, macros, tags and more.'); return; }
   if (t.id === 'settings-import') return $('#settings-file').click();
   if (t.id === 'settings-reset') {
     if (!await STK.confirm('Reset all settings?', '<p>Every setting goes back to its default. Saved profiles are kept.</p>', 'Reset all')) return;
@@ -143,6 +143,7 @@ $('#settings-file').addEventListener('change', async e => {
   try {
     const obj = JSON.parse(await file.text());
     if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('That file does not look like a settings export.');
+    if (obj.toolkit === 'scrcpy-toolkit') { const r = await STK.post('/import', obj); await STK.loadSettings(); await STK.kv.load(); STK.loadProfiles(); STK.toast(`Imported ${r.counts.settings} settings, ${r.counts.profiles} profiles and ${r.counts.store} saved items.`); return renderAll(); }
     const known = new Set(fields().map(f => f.key)), patch = {};
     for (const [k, v] of Object.entries(obj)) if (known.has(k)) patch[k] = v;
     if (!Object.keys(patch).length) throw new Error('No known settings were found in that file.');

@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 const { $, $$, esc, icon, bytes, when, ago, state } = STK;
-const L = { tab: 'recordings', filter: '', sort: 'new', selecting: false, selected: new Set(), shotIndex: -1, shotList: [], current: null };
+const L = { tab: 'recordings', favOnly: false, curKind: '', filter: '', sort: 'new', selecting: false, selected: new Set(), shotIndex: -1, shotList: [], current: null };
 state.lib = { recs: [], shots: [], totals: { recs: 0, shots: 0 }, disk: null, loaded: false };
 
 STK.loadLibrary = async function () {
@@ -22,7 +22,8 @@ const SORT = {
   big: (a, b) => b.size - a.size,
   name: (a, b) => a.name.localeCompare(b.name)
 };
-const files = () => (L.tab === 'recordings' ? state.lib.recs : state.lib.shots).filter(f => f.name.toLowerCase().includes(L.filter.toLowerCase())).sort(SORT[L.sort]);
+const X = () => STK.libX || { meta: () => ({}), tagsText: () => '' };
+const files = () => (L.tab === 'recordings' ? state.lib.recs : state.lib.shots).filter(f => (f.name + ' ' + X().tagsText(f.name)).toLowerCase().includes(L.filter.toLowerCase()) && (!L.favOnly || X().meta(f.name).f)).sort(SORT[L.sort]);
 const kind = () => L.tab;
 
 function render() {
@@ -55,8 +56,9 @@ function render() {
   STK.setHtml(box, list.map(f => `<div class="row-file ${L.selecting ? 'selectable' : ''} ${sel(f.name) ? 'sel' : ''}">
     ${L.selecting ? `<input type="checkbox" data-lsel="${esc(f.name)}" ${sel(f.name) ? 'checked' : ''} ${f.live ? 'disabled' : ''} aria-label="Select ${esc(f.name)}">` : ''}
     <span class="badge">${icon('library')}</span>
-    <div><b>${esc(f.name)}${f.live ? '<span class="live-tag">REC</span>' : ''}</b><small>${esc(when(f.modified))} · ${esc(ago(f.modified))}</small></div>
+    <div><b>${esc(f.name)}${f.live ? '<span class="live-tag">REC</span>' : ''}</b><small>${esc(when(f.modified))} · ${esc(ago(f.modified))}</small>${X().chips ? X().chips(f.name) : ''}</div>
     <span class="size">${bytes(f.size)}</span>
+    <button class="icon-btn starbtn ${X().meta(f.name).f ? 'on' : ''}" data-lfav="${esc(f.name)}" title="Favourite" aria-label="Favourite ${esc(f.name)}">${icon('star')}</button>
     <div class="row-actions">
       <button class="icon-btn" data-lplay="${esc(f.name)}" title="Play" aria-label="Play ${esc(f.name)}">${icon('play')}</button>
       <button class="icon-btn" data-lreveal="${esc(f.name)}" title="Show in folder" aria-label="Show ${esc(f.name)} in folder">${icon('folder')}</button>
@@ -64,6 +66,7 @@ function render() {
     </div></div>`).join(''));
 }
 STK.renderLibrary = render;
+STK.on('kv', () => { if (state.view === 'library' && state.lib.loaded) render(); });
 
 /* ---------- file actions ---------- */
 async function fileOp(k, name, op, extra = {}) { return STK.post('/file-op', { kind: k, name, op, ...extra }); }
@@ -81,12 +84,14 @@ async function del(k, name) {
 function download(k, name) { const a = document.createElement('a'); a.href = `/api/file?kind=${k}&name=${encodeURIComponent(name)}&download=1`; a.download = name; document.body.append(a); a.click(); a.remove(); }
 
 function play(name) {
+  if (/\.gif$/i.test(name)) return showPicFile('recordings', name);
   L.current = name;
   const v = $('#video-el');
   $('#video-title').textContent = name;
   $('#video-note').textContent = 'If the video does not play here, use Open in player.';
   v.onerror = () => { $('#video-note').textContent = 'This browser cannot play this file. Use Open in player instead.'; };
   v.src = `/api/file?kind=recordings&name=${encodeURIComponent(name)}`;
+  if (X().markers) X().markers(name);
   $('#dlg-video').showModal();
   v.play().catch(() => {});
 }
@@ -99,7 +104,14 @@ $('#video-save').addEventListener('click', () => download('recordings', L.curren
 STK.playRecording = play;
 
 /* screenshot viewer */
+function showPicFile(kind, name) {
+  L.shotList = [name]; L.shotIndex = 0; L.curKind = kind; L.current = name;
+  $('#shot-title').textContent = name; $('#shot-img').src = `/api/file?kind=${kind}&name=${encodeURIComponent(name)}`;
+  $('#shot-prev').disabled = true; $('#shot-next').disabled = true;
+  if (!$('#dlg-shot').open) $('#dlg-shot').showModal();
+}
 function showShot(name) {
+  L.curKind = 'screenshots';
   L.shotList = (state.lib.shots.slice().sort(SORT.new)).map(f => f.name);
   L.shotIndex = Math.max(0, L.shotList.indexOf(name));
   paintShot();
@@ -118,9 +130,9 @@ STK.showShot = showShot;
 $('#shot-close').addEventListener('click', () => $('#dlg-shot').close());
 $('#shot-prev').addEventListener('click', () => { L.shotIndex--; paintShot(); });
 $('#shot-next').addEventListener('click', () => { L.shotIndex++; paintShot(); });
-$('#shot-reveal').addEventListener('click', () => reveal('screenshots', L.current));
-$('#shot-save').addEventListener('click', () => download('screenshots', L.current));
-$('#shot-delete').addEventListener('click', async () => { const name = L.current; if (await del('screenshots', name)) { L.shotList.splice(L.shotIndex, 1); if (L.shotIndex >= L.shotList.length) L.shotIndex = L.shotList.length - 1; paintShot(); } });
+$('#shot-reveal').addEventListener('click', () => reveal(L.curKind || 'screenshots', L.current));
+$('#shot-save').addEventListener('click', () => download(L.curKind || 'screenshots', L.current));
+$('#shot-delete').addEventListener('click', async () => { const name = L.current; if (await del(L.curKind || 'screenshots', name)) { L.shotList.splice(L.shotIndex, 1); if (L.shotIndex >= L.shotList.length) L.shotIndex = L.shotList.length - 1; paintShot(); } });
 $('#dlg-shot').addEventListener('keydown', e => { if (e.key === 'ArrowLeft' && !$('#shot-prev').disabled) { L.shotIndex--; paintShot(); } if (e.key === 'ArrowRight' && !$('#shot-next').disabled) { L.shotIndex++; paintShot(); } });
 
 /* cleanup */
@@ -146,6 +158,7 @@ document.addEventListener('click', e => {
   const t = e.target.closest('button, input[data-lsel]');
   if (!t) return;
   if (t.dataset.tab) { L.tab = t.dataset.tab; L.selected.clear(); $$('#view-library .tab').forEach(b => { const on = b === t; b.classList.toggle('is-active', on); b.setAttribute('aria-selected', on); }); return render(); }
+  if (t.dataset.lfav) { X().toggleFav(t.dataset.lfav); return render(); }
   if (t.dataset.lplay) return play(t.dataset.lplay);
   if (t.dataset.play) { STK.go('library'); return play(t.dataset.play); }
   if (t.dataset.lreveal) return reveal('recordings', t.dataset.lreveal);
@@ -155,6 +168,9 @@ document.addEventListener('click', e => {
       { label: 'Open in player', icon: 'external', run: () => fileOp('recordings', n, 'open').catch(STK.fail) },
       { label: 'Download', icon: 'download', run: () => download('recordings', n) },
       { label: 'Rename', icon: 'pencil', run: () => rename('recordings', n), disabled: f && f.live },
+      { label: 'Tags', icon: 'tag', run: () => X().editTags(n) },
+      { label: 'Trim or shrink', icon: 'scissors', run: () => X().convert(n, 'trim'), disabled: f && f.live },
+      { label: 'Make a GIF', icon: 'image', run: () => X().convert(n, 'gif'), disabled: f && f.live },
       '-',
       { label: 'Delete', icon: 'trash', danger: true, run: () => del('recordings', n) }
     ].filter(i => !i.disabled));
@@ -176,6 +192,7 @@ $('#bulk-delete').addEventListener('click', async e => {
 });
 $('#lib-search').addEventListener('input', e => { L.filter = e.target.value; render(); });
 $('#lib-sort').addEventListener('change', e => { L.sort = e.target.value; render(); });
+$('#lib-fav').addEventListener('click', e => { L.favOnly = !L.favOnly; e.currentTarget.classList.toggle('primary', L.favOnly); render(); });
 $('#lib-refresh').addEventListener('click', e => STK.busy(e.currentTarget, async () => { await STK.loadLibrary(); STK.toast('Library refreshed.'); }));
 $('#lib-folder').addEventListener('click', () => STK.post('/open-folder', { kind: L.tab }).catch(STK.fail));
 $('#cleanup-btn').addEventListener('click', e => cleanup(e.currentTarget));
