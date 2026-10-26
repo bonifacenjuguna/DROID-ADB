@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/images/droid-adb-logo.jpg" alt="DROID ADB" width="320"></p>
 
-# DROID ADB 3.6
+# DROID ADB 3.7
 
 A portable Windows control center for your Android phone: mirror, record, screenshot, remote-control and manage it from a local dashboard.
 
@@ -15,7 +15,7 @@ Open the dashboard through the address above. Opening `index.html` directly from
 
 ## What changed in 3.7
 
-3.7 turns Studio into a Performance Studio for gaming and heavy apps: a live cockpit with suggestions, one-tap Boost with a full Restore, cooling tools (Cool-down mode and Heat guard), per-app profiles with session history, and a ping and Wi-Fi check. It also fixes Android Game Mode wrongly reporting "needs Android 12" on Android 13, and restores package-name validation that 3.6 had switched off for the app routes. Details in CHANGELOG.md.
+3.7 turns Studio into a Performance Studio for gaming or any heavy app: a readiness score, live gauges (temperature, processor, memory, battery, frame rate, storage) with trends, smart suggestions with one-tap fixes, a Turbo profile with Undo, a cool-down assistant with cooling techniques, a network check, per-game profiles with Play and session history, and the old demo mode and capture presets under Capture. The Game Mode "not supported" error on Android 13 is fixed: the toolkit now tries the right commands and shows what the phone really answered. A package-name check that 3.6 accidentally weakened is restored. After updating, run Launch.bat once.
 
 ## What changed in 3.6
 

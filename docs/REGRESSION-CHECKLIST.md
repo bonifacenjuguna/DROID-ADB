@@ -162,14 +162,12 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 3.6.0).
 
 ## 3.7 Performance Studio
-- [ ] On an Android 13 phone, Studio, Boost, Android tools: Check support shows Android 13 (API 33). Game Mode: performance on a real game succeeds, or the message names the true reason (no service from the maker, or not a game). It never says "needs Android 12" on Android 12 or newer.
-- [ ] On an Android 11 phone, Game Mode says it needs Android 12 and shows the phone's Android version.
-- [ ] Security: with a bad package name (for example `a.b;reboot`) POST /api/app action stop is refused with "not a valid app package name".
-- [ ] Cockpit: rings, graphs, cores and sensors update about every 4 s and stop when you leave the page. Suggestions change with the phone state and their buttons work.
-- [ ] Boost: each profile fills in the checklist. Boost now lists every step with a tick or a cross and a reason. Restore settings returns Do not disturb, animations, refresh rate, brightness, battery saver, performance mode and Game Mode to what they were before. Close and reopen the dashboard first and restore still works.
-- [ ] Background apps: Scan lists apps with memory; Stop selected closes them; the pin keeps an app out of future scans; the foreground app and the target app are never listed.
-- [ ] Cooling: Start cool-down applies 60 Hz, dim screen and stops heavy apps, shows progress toward the target and restores when reached. Heat guard caps to 60 Hz past the limit and restores 4 degrees below.
-- [ ] Games: add an app with refresh rate, performance mode and Heat guard. Open it, confirm the settings apply, leave it, confirm they return and a session appears in Session history.
-- [ ] Network: ping test returns average, jitter and loss with a verdict; Wi-Fi card shows signal, band and speed. The Wi-Fi, Bluetooth and Airplane buttons toggle.
-- [ ] Capture tab: Demo mode and presets work as in 3.6.
-- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 3.7.0).
+- [ ] Studio opens on Overview with a phone connected: ring, six gauges, trends and suggestions fill within about 5 seconds. With no phone, the connect message shows.
+- [ ] Game Mode: Optimize, pick a game, press Game Mode: performance on an Android 13 phone. It either applies or shows the phone's real reply. It never says Android 12 or newer is needed on Android 13. Settings, Error log holds the reply.
+- [ ] Turbo on: each step reports done or skipped. Undo restores Do not disturb, animations, stay awake, battery saver and refresh rate. Reload the page while Turbo is on: Undo still works.
+- [ ] Cooling: temperature and trend update. Cool-down lowers brightness and turns on battery saver; Restore returns them. The notice appears at the target temperature.
+- [ ] Network check shows delay, loss and Wi-Fi band. With Wi-Fi off it says there is no internet.
+- [ ] Games: add a game with Free memory, Lock refresh rate and Game Mode. Play opens it. Leaving it restores settings and adds a session row with peak temperature.
+- [ ] Capture: demo mode on and off, presentation view and capture presets still work.
+- [ ] Opening any app route with a bad package name (for example from Apps) is still rejected with "not a valid app package name".
+

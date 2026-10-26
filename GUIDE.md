@@ -18,7 +18,7 @@ Turn on Developer options and USB debugging, use a data cable, unlock the phone 
 - **Remote controls:** Shade, Quick, Screen and Mute stay highlighted while on; click again to turn off. Other keys flash when pressed.
 - **Phone** page: quick settings (Wi-Fi, Bluetooth, brightness, volume...), apps, running apps (what is open and in front, Stop to close), files, log and shell.
 - **Library**: play, rename, delete, bulk delete and clean up by age.
-- **Studio:** a performance hub with Cockpit, Boost, Cooling, Games, Network and Capture tabs.
+- **Studio:** Demo mode cleans the status bar; Game mode switches settings when a chosen game is in front.
 - **Automate:** press Record a macro, tap on the phone picture on the Console, press Stop, then Run it or schedule it.
 - **Monitor** and **Alerts** show live phone load and notifications.
 - **Library** also has Phone gallery and Backups; trim and GIF need ffmpeg (core\ffmpeg or Settings).
@@ -42,6 +42,9 @@ Everything is configurable: quality presets, saved profiles, folders, file name 
 - **Camera** (Remote controls) wakes the phone and opens its camera app.
 - **Studio, Gaming kit**: live battery and temperature, quick switches, Free memory, Performance mode, Android Game Mode and frame stats. Games in Game mode can also free memory and use Game Mode automatically.
 
-## New in 3.7
-- **Studio is now the Performance Studio.** Cockpit shows live CPU, memory, temperature and battery with suggestions. **Boost** applies a profile in one tap and **Restore settings** undoes it. **Cooling** has Cool-down mode and Heat guard. **Games** holds per-app profiles and session history. **Network** runs a ping test from the phone.
-- **Game Mode fix:** Android 13 phones no longer get the wrong "needs Android 12" message. If the phone really cannot do it, the message now says why.
+## New in 3.7: Performance Studio
+- **Overview** shows how ready the phone is, live gauges and suggestions. **Turbo boost** sets up a gaming environment in one tap and **Undo** restores it.
+- **Cooling** shows temperatures and runs the cool-down assistant. Set your own warning limit.
+- **Optimize** has quick switches, memory, performance mode, Game Mode, frame stats and a network check.
+- **Games** holds game profiles, a Play button and session history. **Capture** has demo mode and capture presets.
+- If the phone declines Game Mode or performance mode, the message shows what it answered. The technical reply is in Settings, Error log.
