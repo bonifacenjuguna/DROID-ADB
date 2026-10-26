@@ -1,4 +1,4 @@
-/* Scrcpy Toolkit 3.0 shared pieces: saved data (store), forms, jobs panel, notifications, accent, header battery, More sheet, charts. */
+/* DROID ADB 3.0 shared pieces: saved data (store), forms, jobs panel, notifications, accent, header battery, More sheet, charts. */
 (() => {
 'use strict';
 const { $, $$, esc, icon, bytes, state } = STK;

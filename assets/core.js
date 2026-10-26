@@ -1,4 +1,4 @@
-/* Scrcpy Toolkit 2.3 core: helpers, resilient API client, polling, dialogs, routing. */
+/* DROID ADB 2.3 core: helpers, resilient API client, polling, dialogs, routing. */
 (() => {
 'use strict';
 const STK = window.STK = { views: {}, state: {
@@ -247,7 +247,8 @@ function setConn() {
   chip.className = cls; chip.innerHTML = `<i class="dot"></i><b>${label}</b>`;
   dot.className = dcls;
 }
-STK.FRONT_VERSION = '3.3.0';
+STK.FRONT_VERSION = '3.4.0';
+{ const av = document.getElementById('about-version'); if (av) av.textContent = 'v' + STK.FRONT_VERSION; }
 const stale = () => !!(state.online && state.data && state.data.version && state.data.version !== STK.FRONT_VERSION);
 function setBanner() {
   const b = $('#banner');

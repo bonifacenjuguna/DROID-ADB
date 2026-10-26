@@ -1,4 +1,4 @@
-/* Scrcpy Toolkit 2.3 - local-only styles. No remote fonts, images or scripts. */
+/* DROID ADB 2.3 - local-only styles. No remote fonts, images or scripts. */
 :root {
   --display: "Bahnschrift", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --text: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -975,3 +975,9 @@ body.theater .device[data-orient="landscape"] .device-screen { height: auto; wid
 .nline small { color: var(--ink-3); font-size: 11px; }
 .nhint { display: block; margin-top: 4px; color: var(--ink-3); font-style: italic; }
 .banner.stale { border-color: var(--accent); }
+
+/* DROID ADB branding */
+.logo.brand { background: none; color: inherit; width: 48px; height: 48px; border-radius: 12px; overflow: hidden; margin-bottom: 14px; }
+.logo.brand img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.about-logo { background: #0b1220; border-radius: 14px; padding: 14px; display: grid; place-items: center; margin-bottom: 12px; }
+.about-logo img { max-width: 100%; height: auto; display: block; }

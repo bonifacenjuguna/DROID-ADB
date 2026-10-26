@@ -1,4 +1,4 @@
-# Scrcpy Toolkit backend.
+# DROID ADB backend.
 #
 # Design notes (why the dashboard no longer goes "offline" while recording):
 #  - The main thread only accepts connections and answers /api/ping and static files instantly.

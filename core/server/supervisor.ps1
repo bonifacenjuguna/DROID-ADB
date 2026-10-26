@@ -1,4 +1,4 @@
-# Keeps the Scrcpy Toolkit backend alive. Exit codes from server.ps1:
+# Keeps the DROID ADB backend alive. Exit codes from server.ps1:
 #   0  quit on request       10 restart on request       20 port busy       anything else: crash, restart
 $ErrorActionPreference = 'Continue'
 $Root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)

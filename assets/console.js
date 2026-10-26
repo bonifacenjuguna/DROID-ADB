@@ -662,7 +662,7 @@ function tick() {
   $$('.timer[data-since]').forEach(el => { el.textContent = clock(el.dataset.since); });
   $$('time[data-since]').forEach(el => { el.textContent = clock(el.dataset.since); });
   const r = STK.recording();
-  document.title = r ? '● REC ' + clock(r.started) + ' · Scrcpy Toolkit' : 'Scrcpy Toolkit';
+  document.title = r ? '● REC ' + clock(r.started) + ' · DROID ADB' : 'DROID ADB';
   if (state.view === 'console') renderMeta();
 }
 

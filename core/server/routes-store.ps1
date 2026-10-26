@@ -1,4 +1,4 @@
-# Scrcpy Toolkit 3.0: shared store, background jobs, scheduler, ffmpeg tools, export and import. ASCII only.
+# DROID ADB 3.0: shared store, background jobs, scheduler, ffmpeg tools, export and import. ASCII only.
 # Dot-sourced after handlers.ps1 (main thread, every worker and every runner).
 
 # ---------------------------------------------------------------------------
@@ -592,14 +592,14 @@ $Routes['POST /api/schedules'] = { param($Ctx)
 # Export and import of settings, profiles and the store
 # ---------------------------------------------------------------------------
 $Routes['GET /api/export'] = { param($Ctx)
-    $payload = @{ toolkit = 'scrcpy-toolkit'; version = $ToolkitVersion; exported = (Get-UtcNow); settings = (Get-Settings); profiles = @(Get-Profiles); store = (Get-StoreAll) }
+    $payload = @{ toolkit = 'droid-adb'; version = $ToolkitVersion; exported = (Get-UtcNow); settings = (Get-Settings); profiles = @(Get-Profiles); store = (Get-StoreAll) }
     $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject $payload -Depth 9))
-    Send-Bytes $Ctx $bytes 'application/json; charset=utf-8' 200 'no-store' @{ 'Content-Disposition' = 'attachment; filename="scrcpy-toolkit-backup.json"' }
+    Send-Bytes $Ctx $bytes 'application/json; charset=utf-8' 200 'no-store' @{ 'Content-Disposition' = 'attachment; filename="droid-adb-backup.json"' }
 }
 
 $Routes['POST /api/import'] = { param($Ctx)
     $body = Read-JsonBody $Ctx 1900000
-    if ([string](Get-Prop $body 'toolkit' '') -ne 'scrcpy-toolkit') { Fail 'That file is not a Scrcpy Toolkit backup.' }
+    if (@('droid-adb', 'scrcpy-toolkit') -notcontains [string](Get-Prop $body 'toolkit' '')) { Fail 'That file is not a DROID ADB backup.' }
     $counts = @{ settings = 0; profiles = 0; store = 0; skipped = 0 }
     $st = Get-Prop $body 'settings' $null
     if ($st -is [hashtable]) {

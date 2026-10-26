@@ -1,9 +1,9 @@
-# Scrcpy Toolkit shared library.
+# DROID ADB shared library.
 # Dot-sourced by server.ps1 (main thread and every worker runspace) and by core/scripts/launch.ps1.
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '3.3.0'
+$ToolkitVersion = '3.4.0'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -184,7 +184,7 @@ $Schema = @(
     (F 'noPowerOn' 'control' 'bool' $false 'Do not wake the phone on start' 'Leave the phone screen as it is when scrcpy starts.'),
     (F 'screenOffTimeout' 'control' 'int' 0 'Screen-off timeout' 'Temporarily change the phone timeout. 0 leaves it alone.' -Min 0 -Max 3600 -Picks @(0, 30, 60, 300) -Unit 'sec'),
     # window
-    (F 'windowTitle' 'window' 'text' 'Scrcpy Toolkit' 'Window title' 'Shown in the title bar and taskbar.' -Pattern '^[A-Za-z0-9 ._\-]{1,60}$'),
+    (F 'windowTitle' 'window' 'text' 'DROID ADB' 'Window title' 'Shown in the title bar and taskbar.' -Pattern '^[A-Za-z0-9 ._\-]{1,60}$'),
     (F 'alwaysOnTop' 'window' 'bool' $false 'Keep window on top' 'The mirror window stays above other apps.'),
     (F 'fullscreen' 'window' 'bool' $false 'Start in full screen' 'Open the mirror window full screen.'),
     (F 'borderless' 'window' 'bool' $false 'Borderless window' 'Hide the window title bar.'),
@@ -325,6 +325,7 @@ function Get-Settings {
         $base = ConvertTo-Settings $raw $null
         $result = ConvertTo-Settings $legacy $base
     } catch { $result = ConvertTo-Settings @{} $null }
+    if ($result -and [string]$result.windowTitle -eq 'Scrcpy Toolkit') { $result.windowTitle = 'DROID ADB' }
     Use-Lock { $Shared.settings = $result.Clone(); $Shared.settingsStamp = $stamp }
     return $result
 }
@@ -566,7 +567,7 @@ function New-ScrcpyArgs {
     # window
     if ($headless) { [void]$a.Add('--no-playback') } else {
         $title = $S.windowTitle
-        if ($title -eq '') { $title = 'Scrcpy Toolkit' }
+        if ($title -eq '') { $title = 'DROID ADB' }
         [void]$a.Add('--window-title="' + $title + '"')
         if ($S.alwaysOnTop) { [void]$a.Add('--always-on-top') }
         if ($S.fullscreen) { [void]$a.Add('--fullscreen') }
@@ -801,6 +802,8 @@ function Start-ToolkitScrcpy {
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true
     if ([string]$settings.adbPath -ne '') { $psi.EnvironmentVariables['ADB'] = [string]$settings.adbPath }
+    $brandIcon = Join-Path (Join-Path (Join-Path $Root 'core') 'branding') 'droid-adb-icon.png'
+    if (Test-Path -LiteralPath $brandIcon) { $psi.EnvironmentVariables['SCRCPY_ICON_PATH'] = $brandIcon }
     $proc = [Diagnostics.Process]::Start($psi)
     $startTicks = [long]0
     try { $startTicks = $proc.StartTime.ToUniversalTime().Ticks } catch {}

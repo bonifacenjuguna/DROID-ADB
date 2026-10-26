@@ -132,3 +132,11 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Alerts: a chat with several unread messages shows "Show N earlier messages"; opening it lists them with sender and time.
 - [ ] A notification the phone gives no text for shows the grey explanation line.
 
+## 3.4 rebrand
+- [ ] Browser tab, sidebar logo and favicon show DROID ADB.
+- [ ] Mirror window title says DROID ADB (or your own title if you set one) and shows the DROID ADB icon. If the icon is still scrcpy's, that is cosmetic only.
+- [ ] While recording, the tab title shows the red REC marker followed by DROID ADB.
+- [ ] Settings > About shows the logo, version v3.4.0 and the credits.
+- [ ] Export gives `droid-adb-backup.json`; importing it works. Importing an older `scrcpy-toolkit-backup.json` also works.
+- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 3.4.0).
+- [ ] Launch.bat window title reads DROID ADB Launcher.

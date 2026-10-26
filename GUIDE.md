@@ -1,4 +1,4 @@
-# Quick Guide
+# DROID ADB - Quick Guide
 
 ## First run
 1. Extract the full ZIP, run `Launch.bat`. The dashboard opens at http://127.0.0.1:47821/.

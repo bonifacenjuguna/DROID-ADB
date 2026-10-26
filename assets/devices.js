@@ -101,7 +101,7 @@ document.addEventListener('click', async e => {
   }
   if (t.id === 'copy-report') {
     const i = STK.info() || {}, s = state.status || {};
-    const text = ['Scrcpy Toolkit report', 'Toolkit: ' + (s.version || '?') + ' on ' + (s.platform || '?'), 'scrcpy: ' + ((s.versions || {}).scrcpy || '?') + ', adb: ' + ((s.versions || {}).adb || '?'),
+    const text = ['DROID ADB report', 'Toolkit: ' + (s.version || '?') + ' on ' + (s.platform || '?'), 'scrcpy: ' + ((s.versions || {}).scrcpy || '?') + ', adb: ' + ((s.versions || {}).adb || '?'),
       'Devices: ' + (state.devices.map(d => d.id + ' (' + d.state + ')').join(', ') || 'none'), 'Phone: ' + [i.manufacturer, i.model, 'Android ' + i.android].join(' '),
       ...(lastDiag || []).map(c => (c.ok ? 'OK   ' : 'FAIL ') + c.name + ': ' + c.detail)].join('\n');
     return navigator.clipboard.writeText(text).then(() => STK.toast('Report copied.'), () => STK.showText('Report', text));

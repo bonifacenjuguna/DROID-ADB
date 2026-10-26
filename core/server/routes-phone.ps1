@@ -1,4 +1,4 @@
-# Scrcpy Toolkit 3.0: phone-side routes (monitor, notifications, demo mode, gallery, inspector, intents, insights). ASCII only.
+# DROID ADB 3.0: phone-side routes (monitor, notifications, demo mode, gallery, inspector, intents, insights). ASCII only.
 
 function ConvertFrom-DurationText {
     param([string]$Text)

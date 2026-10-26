@@ -1,4 +1,4 @@
-# Starts (or stops) the Scrcpy Toolkit backend. Used by Launch.bat and Stop.bat.
+# Starts (or stops) the DROID ADB backend. Used by Launch.bat and Stop.bat.
 param([switch]$Stop, [switch]$NoBrowser)
 $ErrorActionPreference = 'Continue'
 $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -28,7 +28,7 @@ function Stop-Previous {
 
 if ($Stop) {
     Stop-Previous
-    Write-Host 'Scrcpy Toolkit backend stopped.'
+    Write-Host 'DROID ADB backend stopped.'
     exit 0
 }
 

@@ -1,8 +1,10 @@
-# Scrcpy Toolkit 3.3
+<p align="center"><img src="docs/images/droid-adb-logo.jpg" alt="DROID ADB" width="320"></p>
 
-A portable Windows control center for scrcpy: mirror, record, screenshot, remote-control and manage your Android phone from a local dashboard.
+# DROID ADB 3.4
 
-Helper project around scrcpy v5.0.1. The scrcpy binaries in `core/scrcpy/` are unmodified (Apache 2.0, see LICENSE.txt).
+A portable Windows control center for your Android phone: mirror, record, screenshot, remote-control and manage it from a local dashboard.
+
+DROID ADB is powered by [scrcpy](https://github.com/Genymobile/scrcpy) v5.0.1 (Genymobile, Apache 2.0). The scrcpy binaries in `core/scrcpy/` are unmodified. See `NOTICE.md` and `THIRD-PARTY-LICENSES.md`. DROID ADB is an independent project, not affiliated with or endorsed by Genymobile, Google or Microsoft.
 
 ## Start
 1. Extract the whole ZIP to a writable folder.
@@ -10,6 +12,10 @@ Helper project around scrcpy v5.0.1. The scrcpy binaries in `core/scrcpy/` are u
 3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
+
+## What changed in 3.4
+
+3.4 is the rebrand to DROID ADB: new name, logo, favicon, window titles and About panel, plus the licence notices. No features were removed. Old backups (`scrcpy-toolkit` files) still import. See CHANGELOG.md.
 
 ## What changed in 3.3
 
@@ -52,6 +58,8 @@ Open the dashboard through the address above. Opening `index.html` directly from
 - `index.html`, `assets/`: dashboard.
 - `core/server/`: PowerShell backend (`server.ps1`, `supervisor.ps1`, `lib.ps1`, `handlers.ps1`, `routes-store.ps1`, `routes-phone.ps1`).
 - `core/scripts/`: `start.ps1`, `launch.ps1` (used by `Mirror.bat` and `Record.bat`).
+- `branding/`, `core/branding/`: DROID ADB logo files and the icon used for the mirror window.
+- `NOTICE.md`, `THIRD-PARTY-LICENSES.md`, `LICENSE.txt`: attribution and licences (LICENSE.txt is the Apache 2.0 text that covers scrcpy).
 - `Config/`: settings and profiles. `Recordings/`, `Screenshots/`, `Logs/`: data.
 
 ## Testing status

@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.4.0
+Rebrand to DROID ADB. No features were added or removed.
+
+Branding
+- New name everywhere: page title, tab title (including the recording indicator), the default mirror window title, launcher window, backend messages, docs and code comments.
+- New logo in the sidebar, favicon and app icon from the DROID ADB logo set. The full logo set is in `branding/`.
+- The mirror window icon is set to the DROID ADB icon through scrcpy's own SCRCPY_ICON_PATH option. No scrcpy file is changed.
+- New About panel in Settings with the version, credits and licence summary.
+
+Compatibility
+- Backups are now named `droid-adb-backup.json`. Backups made by earlier versions (`scrcpy-toolkit`) still import.
+- A window title saved by an older version (Scrcpy Toolkit) is shown as DROID ADB. Titles you changed yourself are kept.
+- Internal names (settings keys, browser storage keys, request header, folders) are unchanged, so your saved data keeps working.
+- scrcpy and adb are still called by their real names where the text describes the tools themselves.
+
+Legal
+- Added `NOTICE.md` and `THIRD-PARTY-LICENSES.md`. scrcpy's licence text and copyright lines are kept in `LICENSE.txt`.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
+
+
 ## 3.3.0
 Fixes after testing 3.2 on a real phone.
 

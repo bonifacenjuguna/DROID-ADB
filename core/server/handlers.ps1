@@ -1,4 +1,4 @@
-# Scrcpy Toolkit HTTP helpers and API routes. ASCII only.
+# DROID ADB HTTP helpers and API routes. ASCII only.
 # Dot-sourced after lib.ps1 by the main thread (for static files) and by every worker runspace (for the API).
 
 $MimeTypes = @{ '.html' = 'text/html; charset=utf-8'; '.css' = 'text/css; charset=utf-8'; '.js' = 'text/javascript; charset=utf-8'; '.svg' = 'image/svg+xml'; '.png' = 'image/png'; '.ico' = 'image/x-icon'; '.json' = 'application/json; charset=utf-8'; '.mkv' = 'video/x-matroska'; '.mp4' = 'video/mp4'; '.gif' = 'image/gif' }
@@ -442,7 +442,7 @@ function Save-SettingsPatch {
             elseif (-not (Test-WritableDir $new[$f.key])) { Fail ($f.label + ': that folder cannot be created or written to.') }
         }
     }
-    if (-not $new.windowTitle) { $new.windowTitle = 'Scrcpy Toolkit' }
+    if (-not $new.windowTitle) { $new.windowTitle = 'DROID ADB' }
     Save-Settings $new
     return @{ settings = $new; restartRequired = [bool](([int]$new.port -ne [int]$Shared.port) -or ([int]$new.serverWorkers -ne [int]$Shared.workerCount)) }
 }
