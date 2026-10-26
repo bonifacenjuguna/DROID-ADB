@@ -160,3 +160,16 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Studio, Gaming kit: HUD shows battery, temperature, app in front. Each switch toggles on the phone and the label updates. Free memory, Performance mode on/off, Game Mode and frame stats give a result or a clear "not supported" message.
 - [ ] Game mode: add a game with Free memory and Game Mode ticked, open it on the phone, confirm they run, leave the game and confirm settings return and play time is added.
 - [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 3.6.0).
+
+## 3.7 Performance Studio
+- [ ] On an Android 13 phone, Studio, Boost, Android tools: Check support shows Android 13 (API 33). Game Mode: performance on a real game succeeds, or the message names the true reason (no service from the maker, or not a game). It never says "needs Android 12" on Android 12 or newer.
+- [ ] On an Android 11 phone, Game Mode says it needs Android 12 and shows the phone's Android version.
+- [ ] Security: with a bad package name (for example `a.b;reboot`) POST /api/app action stop is refused with "not a valid app package name".
+- [ ] Cockpit: rings, graphs, cores and sensors update about every 4 s and stop when you leave the page. Suggestions change with the phone state and their buttons work.
+- [ ] Boost: each profile fills in the checklist. Boost now lists every step with a tick or a cross and a reason. Restore settings returns Do not disturb, animations, refresh rate, brightness, battery saver, performance mode and Game Mode to what they were before. Close and reopen the dashboard first and restore still works.
+- [ ] Background apps: Scan lists apps with memory; Stop selected closes them; the pin keeps an app out of future scans; the foreground app and the target app are never listed.
+- [ ] Cooling: Start cool-down applies 60 Hz, dim screen and stops heavy apps, shows progress toward the target and restores when reached. Heat guard caps to 60 Hz past the limit and restores 4 degrees below.
+- [ ] Games: add an app with refresh rate, performance mode and Heat guard. Open it, confirm the settings apply, leave it, confirm they return and a session appears in Session history.
+- [ ] Network: ping test returns average, jitter and loss with a verdict; Wi-Fi card shows signal, band and speed. The Wi-Fi, Bluetooth and Airplane buttons toggle.
+- [ ] Capture tab: Demo mode and presets work as in 3.6.
+- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 3.7.0).

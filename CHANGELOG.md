@@ -1,5 +1,29 @@
 # Changelog
 
+## 3.7.0
+Performance Studio. The Studio page is now a gaming and app performance hub, and Android Game Mode is fixed.
+
+Fixed
+- Studio, Game Mode: Android 13 phones were told "needs Android 12 or newer". The old code treated any word like "error" in the phone's reply as "not supported" and then showed a fixed Android 12 message whatever the real cause. Game Mode now uses the documented command (`cmd game mode <mode> <package>`) with fallbacks, checks the Android version, checks that the phone actually has a Game Mode service, and shows the phone's real answer when it refuses (for example a maker that removed the service, or an app Android does not treat as a game).
+- Security: 3.6 redefined `Test-PackageName` in routes-phone.ps1 so that it returned true or false instead of stopping bad input. Because it loads last, it silently turned off package-name checking for app Stop, Clear, Uninstall, Disable, Launch and similar routes. The gaming code now uses its own `Test-PackageOk`, and the original check is back everywhere.
+- Performance mode, battery saver and refresh rate also report the phone's real reply instead of a guess.
+
+New
+- Cockpit: play-readiness score, live rings for CPU, memory, temperature, battery and screen Hz, smart suggestions with one-tap fixes, live graphs, per-core CPU speeds, throttling detection, thermal status and all temperature sensors the phone exposes.
+- Boost: four profiles (Max performance, Balanced, Cool play, Endurance) and a checklist of what Boost does (Do not disturb, animations off, stay awake, battery saver off, free memory, stop heavy apps, clear caches, performance mode, Game Mode, refresh rate, brightness). Each step shows whether the phone accepted it. Restore settings puts back exactly what Boost changed, even after restarting the dashboard.
+- Background apps scan with memory per app, tick and stop, and an always-keep list. Refresh rate and brightness controls. Android tools with a Game Mode support check.
+- Cooling: live temperature with rising/falling trend, Cool-down mode with a target temperature and optional automatic restore, Heat guard (caps the screen at 60 Hz when the phone passes your limit and brings it back once cooled), and a cooling playbook.
+- Games: any app can be a profile. New options per game: refresh rate, performance mode, Heat guard. Session history records length, peak and average temperature and battery use. Frame doctor explains frame stats in plain words.
+- Network: ping test run from the phone (average, best/worst, jitter, loss, verdict) and Wi-Fi signal, band and link speed.
+- Capture: Demo mode and capture presets, moved to their own tab.
+- Target app selector: tune the phone for the app in front, a saved game or any other app.
+- Backend: `GET /api/perf-snapshot`; new `POST /api/game-tools` actions `gameinfo`, `forcestop`, `trimcache`, `refresh`, `batterysaver`, `ping`.
+
+Compatibility
+- No settings keys, backup format or existing API routes changed. Game profiles from 3.6 load as before.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
+
 ## 3.6.0
 Reliability, clearer messages, Studio gaming tools.
 

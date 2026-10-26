@@ -13,6 +13,10 @@ DROID ADB is powered by [scrcpy](https://github.com/Genymobile/scrcpy) v5.0.1 (G
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
 
+## What changed in 3.7
+
+3.7 turns Studio into a Performance Studio for gaming and heavy apps: a live cockpit with suggestions, one-tap Boost with a full Restore, cooling tools (Cool-down mode and Heat guard), per-app profiles with session history, and a ping and Wi-Fi check. It also fixes Android Game Mode wrongly reporting "needs Android 12" on Android 13, and restores package-name validation that 3.6 had switched off for the app routes. Details in CHANGELOG.md.
+
 ## What changed in 3.6
 
 3.6 is a reliability and polish release. "Restart service" now restarts on the first click and waits until the new service is back (the old shutdown could hang). Errors are shown as plain sentences, and the original technical text is kept in Settings, Error log. The Remote controls Camera button now opens the phone camera. In Settings, Command preview sits above Backup and the About card is centered. Studio has a new Gaming kit: live battery and temperature, quick toggles, free memory, performance mode, Android Game Mode and frame stats. After updating, run Launch.bat once so the service loads the new version.

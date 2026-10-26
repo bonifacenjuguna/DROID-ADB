@@ -36,7 +36,7 @@ if (window.matchMedia) window.matchMedia('(prefers-color-scheme: light)').addEve
 const need = fn => () => STK.sel() ? fn() : STK.toast('Connect a phone first.', 'bad');
 const COMMANDS = [
   { name: 'Go to Console', hint: '1', run: () => STK.go('console') },
-  { name: 'Go to Studio (game mode, demo mode)', hint: '2', run: () => STK.go('studio') },
+  { name: 'Go to Studio (boost, cooling, games, network)', hint: '2', run: () => STK.go('studio') },
   { name: 'Go to Automation (macros, schedules)', hint: '3', run: () => STK.go('automation') },
   { name: 'Go to Phone tools', hint: '4', run: () => STK.go('phone') },
   { name: 'Go to Monitor', hint: '5', run: () => STK.go('monitor') },

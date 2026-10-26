@@ -678,10 +678,33 @@ function Add-WifiHost {
 }
 
 # ---------------------------------------------------------------------------
-# 3.6 Studio gaming tools: free memory, Android Game Mode / performance mode, frame stats.
-# Everything here is reversible and uses standard Android shell commands.
+# 3.7 Performance Studio backend: Game Mode (fixed), performance mode, refresh rate, boost tools,
+# live performance snapshot, ping test and frame stats. Everything is reversible and uses standard
+# Android shell commands. Failures report the phone's real answer instead of a guess.
+#
+# NOTE: this file must not define its own Test-PackageName. handlers.ps1 owns that name and other
+# routes rely on it throwing for a bad package. The yes/no check here is called Test-PackageOk.
 # ---------------------------------------------------------------------------
-function Test-PackageName([string]$Pkg) { return [bool]($Pkg -match '^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$') }
+function Test-PackageOk([string]$Pkg) { return [bool]($Pkg.Length -le 150 -and $Pkg -match '^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$') }
+
+function Get-ShellText($r) { return ((([string]$r.out) + ' ' + ([string]$r.err)) -replace '\s+', ' ').Trim() }
+function Limit-Text([string]$t, [int]$n = 220) { $t = ($t -replace '\s+', ' ').Trim(); if ($t.Length -gt $n) { return $t.Substring(0, $n) + '...' } return $t }
+# Words that mean a shell command really failed. Plain "error" is NOT in this list on purpose: it showed up in
+# harmless output and made working phones look unsupported.
+$ShellFailPattern = '(?i)exception|unknown command|can''t find service|service .* not found|permission denial|not allowed|inaccessible|usage:|aborted|no such file|invalid|not valid'
+
+function Get-DeviceVersion([string]$Serial) {
+    $r = Invoke-DeviceShell $Serial 'echo sdk=$(getprop ro.build.version.sdk); echo rel=$(getprop ro.build.version.release); echo maker=$(getprop ro.product.manufacturer)' 12
+    $kv = ConvertFrom-KeyLines $r.out
+    $sdk = 0; [void][int]::TryParse(([string]$kv.sdk).Trim(), [ref]$sdk)
+    return @{ sdk = $sdk; release = ([string]$kv.rel).Trim(); maker = ([string]$kv.maker).Trim() }
+}
+
+function Test-ShellService([string]$Serial, [string]$Name) {
+    $r = Invoke-DeviceShell $Serial 'cmd -l 2>/dev/null' 12
+    foreach ($line in (([string]$r.out) -split "`r?`n")) { if ($line.Trim() -eq $Name) { return $true } }
+    return $false
+}
 
 $Routes['POST /api/game-tools'] = { param($Ctx)
     $body = Read-JsonBody $Ctx
@@ -692,34 +715,129 @@ $Routes['POST /api/game-tools'] = { param($Ctx)
     switch ($action) {
         'freemem' {
             $r = Invoke-DeviceShell $serial 'am kill-all' 20
-            if ($r.code -ne 0) { Fail ('The phone refused to free memory: ' + ($r.err + $r.out).Trim()) }
+            if ($r.code -ne 0) { Fail ('The phone refused to free memory: ' + (Limit-Text (Get-ShellText $r))) }
             Add-Activity 'system' 'Freed background memory on the phone.'
             Send-Json $Ctx @{ ok = $true; message = 'Background apps were closed to free memory.' }
         }
+        'forcestop' {
+            $keep = [string](Get-Prop $body 'keep' '')
+            $protect = '^(android|com\.android\.(systemui|phone|settings|bluetooth|nfc|server\.telecom|providers\..*|inputmethod\..*)|com\.google\.android\.(gms|gsf|inputmethod\..*|apps\.nexuslauncher)|com\.sec\.android\.app\.launcher|com\.miui\.home|com\.android\.launcher\d*)$'
+            $done = 0; $cmds = @()
+            foreach ($p in @(Get-Prop $body 'packages' @())) {
+                $p = [string]$p
+                if (-not (Test-PackageOk $p) -or $p -eq $keep -or $p -match $protect) { continue }
+                $cmds += ('am force-stop ' + $p)
+                if ($cmds.Count -ge 40) { break }
+            }
+            if ($cmds.Count -eq 0) { Send-Json $Ctx @{ ok = $true; stopped = 0; message = 'Nothing to stop.' }; return }
+            $r = Invoke-DeviceShell $serial ($cmds -join ';') 40
+            if ($r.code -ne 0) { Fail ('The phone refused to stop those apps: ' + (Limit-Text (Get-ShellText $r))) }
+            Add-Activity 'system' ('Stopped ' + $cmds.Count + ' background apps.')
+            Send-Json $Ctx @{ ok = $true; stopped = $cmds.Count; message = ('Stopped ' + $cmds.Count + ' background apps.') }
+        }
+        'trimcache' {
+            $r = Invoke-DeviceShell $serial 'pm trim-caches 4096G' 40
+            $txt = Get-ShellText $r
+            if ($r.code -ne 0 -or $txt -match $ShellFailPattern) { Fail ('The phone would not clear app caches. It said: ' + (Limit-Text $txt)) }
+            Send-Json $Ctx @{ ok = $true; message = 'App caches were cleared.' }
+        }
         'perfmode' {
-            $cmd = 'cmd power set-fixed-performance-mode-enabled ' + $(if ($on) { 'true' } else { 'false' })
-            $r = Invoke-DeviceShell $serial $cmd 15
-            $txt = ($r.out + ' ' + $r.err).Trim()
-            if ($r.code -ne 0 -or $txt -match '(?i)unknown|error|exception|not supported|unsupported') { Fail 'This phone does not allow fixed performance mode (it needs Android 12 or newer and manufacturer support).' }
+            $v = Get-DeviceVersion $serial
+            if ($v.sdk -gt 0 -and $v.sdk -lt 31) { Fail ('Fixed performance mode needs Android 12 or newer. This phone runs Android ' + $v.release + '.') }
+            $r = Invoke-DeviceShell $serial ('cmd power set-fixed-performance-mode-enabled ' + $(if ($on) { 'true' } else { 'false' })) 15
+            $txt = Get-ShellText $r
+            if ($r.code -ne 0 -or $txt -match $ShellFailPattern) {
+                Fail ('This phone does not offer fixed performance mode (Android ' + $v.release + ' is new enough, so the phone hardware or maker firmware is what blocks it). The phone said: ' + $(if ($txt) { Limit-Text $txt } else { 'nothing' }))
+            }
             Send-Json $Ctx @{ ok = $true; on = $on; message = $(if ($on) { 'Performance mode is on. The phone may run warmer.' } else { 'Performance mode is off.' }) }
         }
+        'gameinfo' {
+            $v = Get-DeviceVersion $serial
+            $svc = Test-ShellService $serial 'game'
+            $modes = ''
+            if ($svc -and (Test-PackageOk $pkg)) { $m = Invoke-DeviceShell $serial ('cmd game list-modes ' + $pkg) 15; $modes = Limit-Text (Get-ShellText $m) 300 }
+            Send-Json $Ctx @{ ok = $true; sdk = $v.sdk; release = $v.release; maker = $v.maker; service = $svc; modes = $modes; supported = ($v.sdk -ge 31 -and $svc) }
+        }
         'gamemode' {
-            if (-not (Test-PackageName $pkg)) { Fail 'Pick a valid game first.' }
+            if (-not (Test-PackageOk $pkg)) { Fail 'Pick a valid game first.' }
             $mode = [string](Get-Prop $body 'mode' 'performance')
             if ($mode -notin @('performance', 'battery', 'standard')) { Fail 'Unknown game mode.' }
-            $r = Invoke-DeviceShell $serial ('cmd game set --mode ' + $mode + ' ' + $pkg) 15
-            $txt = ($r.out + ' ' + $r.err).Trim()
-            if ($r.code -ne 0 -or $txt -match '(?i)unknown|error|exception|invalid|not supported') {
-                $r = Invoke-DeviceShell $serial ('cmd game mode ' + $mode + ' ' + $pkg) 15
-                $txt = ($r.out + ' ' + $r.err).Trim()
+            $v = Get-DeviceVersion $serial
+            if ($v.sdk -gt 0 -and $v.sdk -lt 31) { Fail ('Android Game Mode needs Android 12 or newer. This phone runs Android ' + $v.release + '.') }
+            # 'cmd game mode <mode> <package>' is the documented form (Android 12 and later). The others are fallbacks for builds that differ.
+            $tries = @(
+                ('cmd game mode ' + $mode + ' ' + $pkg),
+                ('cmd game mode --user 0 ' + $mode + ' ' + $pkg),
+                ('cmd game set --mode ' + $mode + ' ' + $pkg),
+                ('cmd game set --mode ' + $mode + ' --user 0 ' + $pkg)
+            )
+            $last = ''; $good = $false
+            foreach ($t in $tries) {
+                $r = Invoke-DeviceShell $serial $t 15
+                $txt = Get-ShellText $r
+                $last = $txt
+                if ($r.code -eq 0 -and $txt -notmatch $ShellFailPattern) { $good = $true; break }
             }
-            if ($r.code -ne 0 -or $txt -match '(?i)unknown|error|exception|invalid|not supported') { Fail 'This phone does not support Android Game Mode for that app (it needs Android 12 or newer).' }
-            Send-Json $Ctx @{ ok = $true; message = ('Game Mode set to ' + $mode + '.') }
+            if (-not $good) {
+                if (-not (Test-ShellService $serial 'game')) {
+                    Fail ('This phone (Android ' + $v.release + ', ' + $v.maker + ') has no Android Game Mode service. The maker removed it and uses its own game booster instead (for example Game Booster, Game Turbo or Game Space). Open that app on the phone.')
+                }
+                if ($last -match '(?i)not a game|category|not support|unsupported|not available') {
+                    Fail ('Android only allows Game Mode on apps that are marked as games or that declare support for it. That app is not, so the phone ignored the request. The phone said: ' + (Limit-Text $last))
+                }
+                Fail ('Game Mode exists on this phone (Android ' + $v.release + ') but it would not accept the change. The phone said: ' + $(if ($last) { Limit-Text $last } else { 'nothing' }))
+            }
+            $m = Invoke-DeviceShell $serial ('cmd game list-modes ' + $pkg) 15
+            Send-Json $Ctx @{ ok = $true; mode = $mode; modes = (Limit-Text (Get-ShellText $m) 300); message = ('Game Mode set to ' + $mode + '.') }
+        }
+        'refresh' {
+            $min = [string](Get-Prop $body 'min' ''); $peak = [string](Get-Prop $body 'peak' '')
+            $hz = [int](Get-Prop $body 'hz' -1)
+            if ($hz -ge 0) {
+                if ($hz -eq 0) { $min = 'null'; $peak = 'null' }
+                elseif ($hz -lt 30 -or $hz -gt 240) { Fail 'That refresh rate is not supported.' }
+                else { $min = [string]$hz; $peak = [string]$hz }
+            }
+            foreach ($x in @($min, $peak)) { if ($x -notmatch '^(null|\d{1,3}(\.\d{1,2})?)$') { Fail 'That refresh rate is not supported.' } }
+            $cmds = @()
+            foreach ($pair in @(@('min_refresh_rate', $min), @('peak_refresh_rate', $peak))) {
+                if ($pair[1] -eq 'null') { $cmds += ('settings delete system ' + $pair[0]) } else { $cmds += ('settings put system ' + $pair[0] + ' ' + $pair[1]) }
+            }
+            $r = Invoke-DeviceShell $serial ($cmds -join ';') 15
+            $txt = Get-ShellText $r
+            if ($r.code -ne 0 -or $txt -match '(?i)exception|permission denial|not allowed') { Fail ('The phone refused the refresh rate change. ' + (Limit-Text $txt)) }
+            Send-Json $Ctx @{ ok = $true; message = $(if ($peak -eq 'null') { 'Refresh rate is back to automatic.' } else { 'Refresh rate set to ' + $peak + ' Hz.' }) }
+        }
+        'batterysaver' {
+            $r = Invoke-DeviceShell $serial ('settings put global low_power ' + $(if ($on) { '1' } else { '0' })) 12
+            $txt = Get-ShellText $r
+            if ($r.code -ne 0 -or $txt -match '(?i)exception|permission denial|not allowed') { Fail ('The phone refused to change battery saver. ' + (Limit-Text $txt)) }
+            Send-Json $Ctx @{ ok = $true; message = $(if ($on) { 'Battery saver is on.' } else { 'Battery saver is off, so the phone is free to run at full speed.' }) }
         }
         'resetstats' {
-            if (-not (Test-PackageName $pkg)) { Fail 'Pick a valid game first.' }
+            if (-not (Test-PackageOk $pkg)) { Fail 'Pick an app first.' }
             $r = Invoke-DeviceShell $serial ('dumpsys gfxinfo ' + $pkg + ' reset') 15
             Send-Json $Ctx @{ ok = $true; message = 'Frame counters were reset.' }
+        }
+        'ping' {
+            $hostName = [string](Get-Prop $body 'host' '8.8.8.8')
+            if ($hostName -notmatch '^[A-Za-z0-9][A-Za-z0-9.\-]{0,98}$') { Fail 'Use an address like 8.8.8.8 or a host name like example.com.' }
+            $r = Invoke-DeviceShell $serial ('ping -c 8 -W 2 ' + $hostName) 40
+            $t = [string]$r.out
+            $times = @()
+            foreach ($m in [regex]::Matches($t, 'time[=<]([\d.]+)\s*ms')) { $times += [double]::Parse($m.Groups[1].Value, [Globalization.CultureInfo]::InvariantCulture) }
+            $o = @{ ok = $true; host = $hostName; sent = 0; received = $times.Count; lossPct = 100; min = $null; avg = $null; max = $null; jitter = $null; times = @($times) }
+            if ($t -match '(\d+)\s+packets transmitted,\s+(\d+)\s+(?:packets )?received') { $o.sent = [int]$Matches[1]; $o.received = [int]$Matches[2] }
+            if ($t -match '([\d.]+)%\s+packet loss') { $o.lossPct = [double]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture) } elseif ($o.sent -gt 0) { $o.lossPct = [math]::Round(100 * (1 - $o.received / $o.sent), 1) }
+            if ($times.Count -gt 0) {
+                $o.min = [math]::Round(($times | Measure-Object -Minimum).Minimum, 1)
+                $o.max = [math]::Round(($times | Measure-Object -Maximum).Maximum, 1)
+                $o.avg = [math]::Round(($times | Measure-Object -Average).Average, 1)
+                if ($times.Count -gt 1) { $d = 0.0; for ($i = 1; $i -lt $times.Count; $i++) { $d += [math]::Abs($times[$i] - $times[$i - 1]) }; $o.jitter = [math]::Round($d / ($times.Count - 1), 1) }
+            } elseif ((Get-ShellText $r) -match '(?i)unknown host|bad address|network is unreachable') {
+                Fail 'The phone could not reach that address. Check that it is online.'
+            }
+            Send-Json $Ctx $o
         }
         default { Fail 'Unknown gaming tool.' }
     }
@@ -728,15 +846,113 @@ $Routes['POST /api/game-tools'] = { param($Ctx)
 $Routes['GET /api/game-stats'] = { param($Ctx)
     $serial = Get-Query $Ctx 'id'
     $pkg = Get-Query $Ctx 'pkg'
-    if (-not (Test-PackageName $pkg)) { Fail 'Pick a valid game first.' }
+    if (-not (Test-PackageOk $pkg)) { Fail 'Pick an app first.' }
     $r = Invoke-DeviceShell $serial ('dumpsys gfxinfo ' + $pkg) 20
     $t = [string]$r.out
     $o = @{ ok = $true; pkg = $pkg; frames = 0; janky = 0; jankyPct = 0.0; p50 = $null; p90 = $null; p95 = $null; p99 = $null; running = $false }
     if ($t -match 'Total frames rendered:\s*(\d+)') { $o.frames = [int]$Matches[1]; $o.running = $true }
-    if ($t -match 'Janky frames:\s*(\d+)\s*\(([\d.]+)%\)') { $o.janky = [int]$Matches[1]; $o.jankyPct = [double]$Matches[2] }
+    if ($t -match 'Janky frames:\s*(\d+)\s*\(([\d.]+)%\)') { $o.janky = [int]$Matches[1]; $o.jankyPct = [double]::Parse($Matches[2], [Globalization.CultureInfo]::InvariantCulture) }
     if ($t -match '50th percentile:\s*(\d+)ms') { $o.p50 = [int]$Matches[1] }
     if ($t -match '90th percentile:\s*(\d+)ms') { $o.p90 = [int]$Matches[1] }
     if ($t -match '95th percentile:\s*(\d+)ms') { $o.p95 = [int]$Matches[1] }
     if ($t -match '99th percentile:\s*(\d+)ms') { $o.p99 = [int]$Matches[1] }
+    Send-Json $Ctx $o
+}
+
+# One call that reads everything the Performance Studio shows: CPU load and per-core speed, temperatures,
+# thermal status, memory, GPU where the phone exposes it, battery, display and Wi-Fi.
+if (-not $Shared.perfPrev) { $Shared.perfPrev = [hashtable]::Synchronized(@{}) }
+
+$Routes['GET /api/perf-snapshot'] = { param($Ctx)
+    $serial = Get-Query $Ctx 'id'
+    $script = @(
+        'echo @@STAT; head -n 1 /proc/stat',
+        'echo @@CPU; for c in /sys/devices/system/cpu/cpu[0-9]*; do echo ${c##*/} $(cat $c/cpufreq/scaling_cur_freq 2>/dev/null) $(cat $c/cpufreq/cpuinfo_max_freq 2>/dev/null); done',
+        'echo @@GOV; cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null',
+        'echo @@TZ; for z in /sys/class/thermal/thermal_zone*; do echo $(cat $z/type 2>/dev/null)=$(cat $z/temp 2>/dev/null); done 2>/dev/null | head -n 70',
+        'echo @@TS; dumpsys thermalservice 2>/dev/null | grep -E ''Thermal Status|mValue='' | head -n 16',
+        'echo @@BAT; dumpsys battery 2>/dev/null; echo cur=$(cat /sys/class/power_supply/battery/current_now 2>/dev/null)',
+        'echo @@MEM; head -n 25 /proc/meminfo',
+        'echo @@LOAD; cat /proc/loadavg 2>/dev/null',
+        'echo @@GPU; for f in /sys/class/kgsl/kgsl-3d0/gpuclk /sys/class/kgsl/kgsl-3d0/devfreq/cur_freq /sys/kernel/gpu/gpu_clock /sys/class/devfreq/*gpu*/cur_freq /sys/class/devfreq/*mali*/cur_freq; do [ -r $f ] && echo freq=$(cat $f 2>/dev/null); done; echo busy=$(cat /sys/class/kgsl/kgsl-3d0/gpu_busy_percentage 2>/dev/null)',
+        'echo @@DISP; echo peak=$(settings get system peak_refresh_rate); echo min=$(settings get system min_refresh_rate); echo bright=$(settings get system screen_brightness); echo lowpower=$(settings get global low_power); echo anim=$(settings get global animator_duration_scale); echo hz=$(dumpsys display 2>/dev/null | grep -m1 -oE ''renderFrameRate [0-9.]+|mRefreshRate=[0-9.]+'')',
+        'echo @@WIFI; dumpsys wifi 2>/dev/null | grep -m1 mWifiInfo'
+    ) -join ';'
+    $r = Invoke-DeviceShell $serial $script 25
+    $sec = @{}
+    $cur = ''
+    foreach ($line in (([string]$r.out) -split "`r?`n")) {
+        if ($line -match '^@@([A-Z]+)\s*$') { $cur = $Matches[1]; $sec[$cur] = ''; continue }
+        if ($cur) { $sec[$cur] += $line + "`n" }
+    }
+    $inv = [Globalization.CultureInfo]::InvariantCulture
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    $o = @{ ok = $true; at = $now; cpu = $null; cores = @(); governor = ''; zones = @(); hal = @(); thermalStatus = $null; battery = -1; charging = $false; batteryTempC = $null; voltage = $null; currentMa = $null
+            memTotalMb = $null; memUsedMb = $null; memPct = $null; swapUsedMb = $null; swapTotalMb = $null; load1 = $null; gpuMhz = $null; gpuBusy = $null
+            refreshPeak = $null; refreshMin = $null; renderHz = $null; brightness = $null; batterySaver = $false; animations = $null; wifi = $null }
+    # CPU load from two /proc/stat samples
+    if ($sec.STAT -match '(?m)^cpu\s+(.+)$') {
+        $v = @($Matches[1].Trim() -split '\s+' | ForEach-Object { [long]$_ })
+        $tot = [long]0; foreach ($x in $v) { $tot += $x }
+        $idle = [long]0; if ($v.Count -ge 5) { $idle = $v[3] + $v[4] } elseif ($v.Count -ge 4) { $idle = $v[3] }
+        $prev = $Shared.perfPrev[$serial]
+        if ($prev -and $tot -gt [long]$prev.tot) { $o.cpu = [math]::Round([math]::Max(0, [math]::Min(100, 100 * (1 - ($idle - [long]$prev.idle) / ($tot - [long]$prev.tot)))), 1) }
+        $Shared.perfPrev[$serial] = @{ tot = $tot; idle = $idle }
+    }
+    $cores = @()
+    foreach ($line in (([string]$sec.CPU) -split "`n")) {
+        if ($line -match '^cpu(\d+)\s*(\d*)\s*(\d*)\s*$') { $cores += , @{ id = [int]$Matches[1]; mhz = $(if ($Matches[2]) { [int]([long]$Matches[2] / 1000) } else { $null }); maxMhz = $(if ($Matches[3]) { [int]([long]$Matches[3] / 1000) } else { $null }) } }
+    }
+    $o.cores = @($cores)
+    $o.governor = ([string]$sec.GOV).Trim()
+    $zones = @{}
+    foreach ($line in (([string]$sec.TZ) -split "`n")) {
+        if ($line -match '^([A-Za-z0-9_\-\.]+)=(-?\d+)\s*$') {
+            $d = [double]$Matches[2]; if ([math]::Abs($d) -gt 1000) { $d = $d / 1000 }
+            if ($d -ge 15 -and $d -le 120) { $nm = $Matches[1]; if (-not $zones.ContainsKey($nm) -or $zones[$nm] -lt $d) { $zones[$nm] = [math]::Round($d, 1) } }
+        }
+    }
+    $zl = @(); foreach ($k in $zones.Keys) { $zl += , @{ name = $k; c = $zones[$k] } }
+    $o.zones = @($zl | Sort-Object { $_.c } -Descending | Select-Object -First 16)
+    if ($sec.TS -match 'Thermal Status:\s*(\d+)') { $o.thermalStatus = [int]$Matches[1] }
+    $hal = @(); $seen = @{}
+    foreach ($m in [regex]::Matches([string]$sec.TS, 'mValue=(-?[\d.]+),\s*mType=(\d+),\s*mName=([^,}]+)')) {
+        $nm = $m.Groups[3].Value.Trim(); $val = [double]::Parse($m.Groups[1].Value, $inv)
+        if ($val -gt 0 -and $val -lt 130 -and -not $seen.ContainsKey($nm)) { $seen[$nm] = 1; $hal += , @{ name = $nm; c = [math]::Round($val, 1); type = [int]$m.Groups[2].Value } }
+    }
+    $o.hal = @($hal)
+    $b = [string]$sec.BAT
+    if ($b -match '(?m)^\s*level:\s*(\d+)') { $o.battery = [int]$Matches[1] }
+    if ($b -match '(?m)^\s*status:\s*2') { $o.charging = $true }
+    if ($b -match '(?m)^\s*temperature:\s*(\d+)') { $o.batteryTempC = [math]::Round([int]$Matches[1] / 10, 1) }
+    if ($b -match '(?m)^\s*voltage:\s*(\d+)') { $o.voltage = [int]$Matches[1] }
+    if ($b -match '(?m)^cur=(-?\d+)') { $c = [math]::Abs([long]$Matches[1]); $o.currentMa = $(if ($c -gt 20000) { [int]($c / 1000) } else { [int]$c }) }
+    $mem = [string]$sec.MEM
+    $mt = 0; $ma = 0; $st = 0; $sf = 0
+    if ($mem -match 'MemTotal:\s+(\d+)') { $mt = [long]$Matches[1] }
+    if ($mem -match 'MemAvailable:\s+(\d+)') { $ma = [long]$Matches[1] }
+    if ($mem -match 'SwapTotal:\s+(\d+)') { $st = [long]$Matches[1] }
+    if ($mem -match 'SwapFree:\s+(\d+)') { $sf = [long]$Matches[1] }
+    if ($mt -gt 0) { $o.memTotalMb = [int]($mt / 1024); $o.memUsedMb = [int](($mt - $ma) / 1024); $o.memPct = [math]::Round(100 * ($mt - $ma) / $mt, 1) }
+    if ($st -gt 0) { $o.swapTotalMb = [int]($st / 1024); $o.swapUsedMb = [int](($st - $sf) / 1024) }
+    if (([string]$sec.LOAD) -match '^([\d.]+)') { $o.load1 = [double]::Parse($Matches[1], $inv) }
+    $g = ConvertFrom-KeyLines ([string]$sec.GPU)
+    if ($g.freq -match '^(\d+)') { $f = [long]$Matches[1]; if ($f -gt 100000000) { $f = $f / 1000000 } elseif ($f -gt 100000) { $f = $f / 1000 }; $o.gpuMhz = [int]$f }
+    if ($g.busy -match '(\d+)') { $o.gpuBusy = [int]$Matches[1] }
+    $d = ConvertFrom-KeyLines ([string]$sec.DISP)
+    if ($d.peak -match '^[\d.]+$') { $o.refreshPeak = [double]::Parse($d.peak, $inv) }
+    if ($d.min -match '^[\d.]+$') { $o.refreshMin = [double]::Parse($d.min, $inv) }
+    if ($d.hz -match '([\d.]+)') { $o.renderHz = [math]::Round([double]::Parse($Matches[1], $inv)) }
+    if ($d.bright -match '^\d+$') { $o.brightness = [int]$d.bright }
+    $o.batterySaver = ($d.lowpower -eq '1')
+    if ($d.anim -match '^[\d.]+$') { $o.animations = [double]::Parse($d.anim, $inv) }
+    $w = [string]$sec.WIFI
+    if ($w) {
+        $wf = @{ rssi = $null; linkMbps = $null; mhz = $null }
+        if ($w -match 'RSSI:\s*(-?\d+)') { $wf.rssi = [int]$Matches[1] }
+        if ($w -match 'Link speed:\s*(\d+)') { $wf.linkMbps = [int]$Matches[1] }
+        if ($w -match 'Frequency:\s*(\d+)') { $wf.mhz = [int]$Matches[1] }
+        if ($null -ne $wf.rssi) { $o.wifi = $wf }
+    }
     Send-Json $Ctx $o
 }

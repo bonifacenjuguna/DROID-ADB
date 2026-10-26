@@ -18,7 +18,7 @@ Turn on Developer options and USB debugging, use a data cable, unlock the phone 
 - **Remote controls:** Shade, Quick, Screen and Mute stay highlighted while on; click again to turn off. Other keys flash when pressed.
 - **Phone** page: quick settings (Wi-Fi, Bluetooth, brightness, volume...), apps, running apps (what is open and in front, Stop to close), files, log and shell.
 - **Library**: play, rename, delete, bulk delete and clean up by age.
-- **Studio:** Demo mode cleans the status bar; Game mode switches settings when a chosen game is in front.
+- **Studio:** a performance hub with Cockpit, Boost, Cooling, Games, Network and Capture tabs.
 - **Automate:** press Record a macro, tap on the phone picture on the Console, press Stop, then Run it or schedule it.
 - **Monitor** and **Alerts** show live phone load and notifications.
 - **Library** also has Phone gallery and Backups; trim and GIF need ffmpeg (core\ffmpeg or Settings).
@@ -41,3 +41,7 @@ Everything is configurable: quality presets, saved profiles, folders, file name 
 - **Error messages** are short sentences. For the original technical text open **Settings, Error log** (or press **Details** on an error notice).
 - **Camera** (Remote controls) wakes the phone and opens its camera app.
 - **Studio, Gaming kit**: live battery and temperature, quick switches, Free memory, Performance mode, Android Game Mode and frame stats. Games in Game mode can also free memory and use Game Mode automatically.
+
+## New in 3.7
+- **Studio is now the Performance Studio.** Cockpit shows live CPU, memory, temperature and battery with suggestions. **Boost** applies a profile in one tap and **Restore settings** undoes it. **Cooling** has Cool-down mode and Heat guard. **Games** holds per-app profiles and session history. **Network** runs a ping test from the phone.
+- **Game Mode fix:** Android 13 phones no longer get the wrong "needs Android 12" message. If the phone really cannot do it, the message now says why.
