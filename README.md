@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/images/droid-adb-logo.jpg" alt="DROID ADB" width="320"></p>
 
-# DROID ADB 3.4
+# DROID ADB 3.5
 
 A portable Windows control center for your Android phone: mirror, record, screenshot, remote-control and manage it from a local dashboard.
 
@@ -12,6 +12,12 @@ DROID ADB is powered by [scrcpy](https://github.com/Genymobile/scrcpy) v5.0.1 (G
 3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
+
+## What changed in 3.5
+
+3.5 polishes the branding. New favicon and sidebar icon that stay clear at small sizes, the mirror window now really shows the DROID ADB icon (3.4 used a setting scrcpy 5 does not have), a DROID ADB "phone disconnected" screen, a one-click desktop shortcut with the DROID ADB icon, and the dashboard can be installed as an app from Chrome or Edge. See CHANGELOG.md.
+
+To get the desktop shortcut, double-click `Create-Desktop-Shortcut.bat`. To install the dashboard as an app, open it in Chrome or Edge and use "Install DROID ADB" from the address bar or menu.
 
 ## What changed in 3.4
 
@@ -58,7 +64,8 @@ Open the dashboard through the address above. Opening `index.html` directly from
 - `index.html`, `assets/`: dashboard.
 - `core/server/`: PowerShell backend (`server.ps1`, `supervisor.ps1`, `lib.ps1`, `handlers.ps1`, `routes-store.ps1`, `routes-phone.ps1`).
 - `core/scripts/`: `start.ps1`, `launch.ps1` (used by `Mirror.bat` and `Record.bat`).
-- `branding/`, `core/branding/`: DROID ADB logo files and the icon used for the mirror window.
+- `branding/`: the full DROID ADB logo set. `core/branding/`: icons used for the mirror window and the desktop shortcut (see the README.txt inside).
+- `Create-Desktop-Shortcut.bat`: makes a DROID ADB shortcut with the logo on your Desktop.
 - `NOTICE.md`, `THIRD-PARTY-LICENSES.md`, `LICENSE.txt`: attribution and licences (LICENSE.txt is the Apache 2.0 text that covers scrcpy).
 - `Config/`: settings and profiles. `Recordings/`, `Screenshots/`, `Logs/`: data.
 

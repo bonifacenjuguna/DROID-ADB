@@ -1,7 +1,7 @@
 # DROID ADB HTTP helpers and API routes. ASCII only.
 # Dot-sourced after lib.ps1 by the main thread (for static files) and by every worker runspace (for the API).
 
-$MimeTypes = @{ '.html' = 'text/html; charset=utf-8'; '.css' = 'text/css; charset=utf-8'; '.js' = 'text/javascript; charset=utf-8'; '.svg' = 'image/svg+xml'; '.png' = 'image/png'; '.ico' = 'image/x-icon'; '.json' = 'application/json; charset=utf-8'; '.mkv' = 'video/x-matroska'; '.mp4' = 'video/mp4'; '.gif' = 'image/gif' }
+$MimeTypes = @{ '.html' = 'text/html; charset=utf-8'; '.css' = 'text/css; charset=utf-8'; '.js' = 'text/javascript; charset=utf-8'; '.svg' = 'image/svg+xml'; '.png' = 'image/png'; '.ico' = 'image/x-icon'; '.webmanifest' = 'application/manifest+json'; '.json' = 'application/json; charset=utf-8'; '.mkv' = 'video/x-matroska'; '.mp4' = 'video/mp4'; '.gif' = 'image/gif' }
 $CspValue = "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 
 function Set-CommonHeaders {

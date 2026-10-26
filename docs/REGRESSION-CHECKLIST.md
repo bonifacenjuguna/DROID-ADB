@@ -140,3 +140,13 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Export gives `droid-adb-backup.json`; importing it works. Importing an older `scrcpy-toolkit-backup.json` also works.
 - [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 3.4.0).
 - [ ] Launch.bat window title reads DROID ADB Launcher.
+
+## 3.5 branding polish
+- [ ] Browser tab shows the new favicon (blue panes and green robot). Hard-refresh (Ctrl+F5) if the old one is cached.
+- [ ] Mirror window title bar and taskbar show the DROID ADB icon, not scrcpy's. Start a mirror and look.
+- [ ] Unplug the phone while mirroring: the window shows the grey DROID ADB "disconnected" picture.
+- [ ] Double-click Create-Desktop-Shortcut.bat: a "DROID ADB" shortcut with the logo appears on the Desktop and starts the app.
+- [ ] Chrome or Edge offers "Install DROID ADB"; the installed app opens the dashboard with the DROID ADB icon.
+- [ ] Delete `core/branding/`: mirroring still works (scrcpy falls back to its own icon).
+- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 3.5.0).
+

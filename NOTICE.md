@@ -12,7 +12,7 @@ DROID ADB uses scrcpy, an open-source project by Genymobile and Romain Vimont.
 - Copyright (C) 2018-2026 Romain Vimont
 - Licence: Apache License, Version 2.0 (full text in `LICENSE.txt`)
 
-The scrcpy files in `core/scrcpy/` (scrcpy.exe, scrcpy-server and the images next to them) are distributed unmodified. DROID ADB starts them as a separate program and does not change their code. The DROID ADB mirror window icon is applied through scrcpy's SCRCPY_ICON_PATH setting, not by editing scrcpy.
+The scrcpy files in `core/scrcpy/` (scrcpy.exe, scrcpy-server and the images next to them) are distributed unmodified. DROID ADB starts them as a separate program and does not change their code. The DROID ADB mirror window icon is applied through scrcpy's own SCRCPY_ICON_DIR setting, which points at `core/branding/` (DROID ADB's own icon files), not by editing scrcpy.
 
 ## Other bundled components
 

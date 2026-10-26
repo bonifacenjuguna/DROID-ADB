@@ -1,0 +1,14 @@
+{
+  "name": "DROID ADB",
+  "short_name": "DROID ADB",
+  "description": "Local control center to mirror, record, capture and manage your Android phone.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020f20",
+  "theme_color": "#020f20",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

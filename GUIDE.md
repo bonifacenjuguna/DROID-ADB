@@ -4,6 +4,10 @@
 1. Extract the full ZIP, run `Launch.bat`. The dashboard opens at http://127.0.0.1:47821/.
 2. If the banner says the backend is not answering, wait a few seconds (it restarts itself) or run `Launch.bat` again.
 
+## Shortcut and app install
+- Double-click `Create-Desktop-Shortcut.bat` to put a DROID ADB shortcut with the logo on your Desktop (run it again if you move the folder).
+- In Chrome or Edge you can also install the dashboard as an app from the address bar.
+
 ## Connect Android
 Turn on Developer options and USB debugging, use a data cable, unlock the phone and accept the prompt.
 

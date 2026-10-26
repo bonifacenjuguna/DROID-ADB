@@ -1,12 +1,30 @@
 # Changelog
 
+## 3.5.0
+Branding polish. No feature changes.
+
+Icons
+- New favicon and sidebar mark: the Windows panes and the Android robot on a navy tile. The earlier one squeezed the whole monitor-and-phone scene into 16 pixels and looked blurry. The full scene logo is still used in the About panel and README.
+- Fixed: the mirror window kept scrcpy's icon. scrcpy 5 reads its icons from a folder named by SCRCPY_ICON_DIR (files scrcpy.png and disconnected.png). DROID ADB now points that at `core/branding/`, which holds the DROID ADB icon and a DROID ADB "phone disconnected" picture. Files in `core/scrcpy/` are still untouched. Delete `core/branding/` to get scrcpy's icons back.
+- Known limit: the icon inside scrcpy.exe itself (seen in Explorer or when pinning scrcpy.exe) is part of the program and is not changed.
+
+New
+- `Create-Desktop-Shortcut.bat` creates a "DROID ADB" shortcut with the logo on your Desktop. The icon file is `core/branding/droid-adb.ico`.
+- The dashboard has a web app manifest (name, theme colour, 192 and 512 pixel icons), so Chrome and Edge can install it as an app with the DROID ADB icon. A theme-color tag and an apple-touch icon were added too.
+- The backend now serves `.webmanifest` files.
+
+Docs
+- Version 3.5.0 everywhere. NOTICE, third-party list, README, guide and regression checklist updated.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
+
 ## 3.4.0
 Rebrand to DROID ADB. No features were added or removed.
 
 Branding
 - New name everywhere: page title, tab title (including the recording indicator), the default mirror window title, launcher window, backend messages, docs and code comments.
 - New logo in the sidebar, favicon and app icon from the DROID ADB logo set. The full logo set is in `branding/`.
-- The mirror window icon is set to the DROID ADB icon through scrcpy's own SCRCPY_ICON_PATH option. No scrcpy file is changed.
+- Mirror window icon: 3.4 tried to set it with a scrcpy option that scrcpy 5 does not have, so it kept the scrcpy icon. Fixed in 3.5.0.
 - New About panel in Settings with the version, credits and licence summary.
 
 Compatibility

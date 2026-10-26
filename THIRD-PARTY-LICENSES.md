@@ -10,6 +10,10 @@ DROID ADB ships these programs unmodified in `core/scrcpy/`. Each keeps its own 
 | SDL 3 | SDL3.dll | zlib licence | https://libsdl.org |
 | libusb 1.0 | libusb-1.0.dll | LGPL version 2.1 or later | https://libusb.info |
 
+## Files that look like scrcpy's but are DROID ADB's
+
+`core/branding/scrcpy.png` and `core/branding/disconnected.png` are DROID ADB artwork. They use the file names scrcpy looks for so it shows the DROID ADB icon. They are not copies of scrcpy's images. The originals stay in `core/scrcpy/`.
+
 ## What the LGPL parts mean for you
 
 FFmpeg and libusb are used as separate DLL files, so you can replace them with your own builds of the same version. Keep them as separate files, do not merge them into another program, and keep this notice. You may request or download their source from the project sites above. These DLLs came with the scrcpy release. If you swap in a different FFmpeg build that was compiled with GPL options, different terms apply.

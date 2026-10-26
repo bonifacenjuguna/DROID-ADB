@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '3.4.0'
+$ToolkitVersion = '3.5.0'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -802,8 +802,8 @@ function Start-ToolkitScrcpy {
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true
     if ([string]$settings.adbPath -ne '') { $psi.EnvironmentVariables['ADB'] = [string]$settings.adbPath }
-    $brandIcon = Join-Path (Join-Path (Join-Path $Root 'core') 'branding') 'droid-adb-icon.png'
-    if (Test-Path -LiteralPath $brandIcon) { $psi.EnvironmentVariables['SCRCPY_ICON_PATH'] = $brandIcon }
+    $brandDir = Join-Path (Join-Path $Root 'core') 'branding'
+    if ((Test-Path -LiteralPath (Join-Path $brandDir 'scrcpy.png')) -and (Test-Path -LiteralPath (Join-Path $brandDir 'disconnected.png'))) { $psi.EnvironmentVariables['SCRCPY_ICON_DIR'] = $brandDir }
     $proc = [Diagnostics.Process]::Start($psi)
     $startTicks = [long]0
     try { $startTicks = $proc.StartTime.ToUniversalTime().Ticks } catch {}
