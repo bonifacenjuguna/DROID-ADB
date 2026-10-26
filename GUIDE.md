@@ -35,3 +35,9 @@ Everything is configurable: quality presets, saved profiles, folders, file name 
 - No device: check cable, USB debugging, authorization; use Restart ADB on Devices, or run the system check.
 - scrcpy closes immediately: the toast shows the reason; full output is in `Logs/session-<id>.log`.
 - Port busy: change the port in Settings (restart needed) or close the other instance.
+
+## New in 3.6
+- **Restart service / Restart backend** now waits for the new service and works on the first click. If it does not return in 60 seconds, run `Launch.bat`.
+- **Error messages** are short sentences. For the original technical text open **Settings, Error log** (or press **Details** on an error notice).
+- **Camera** (Remote controls) wakes the phone and opens its camera app.
+- **Studio, Gaming kit**: live battery and temperature, quick switches, Free memory, Performance mode, Android Game Mode and frame stats. Games in Game mode can also free memory and use Game Mode automatically.

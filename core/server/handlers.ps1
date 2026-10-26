@@ -223,12 +223,38 @@ $KeyCodes = @{ back = 4; home = 3; recents = 187; power = 26; volup = 24; voldow
 
 function Invoke-Key {
     param([string]$Serial, [string]$Key)
+    if ($Key -eq 'camera') { Open-PhoneCamera $Serial; return }
     if ($Key -eq 'notifications') { $r = Invoke-DeviceShell $Serial 'cmd statusbar expand-notifications' 10 }
     elseif ($Key -eq 'quicksettings') { $r = Invoke-DeviceShell $Serial 'cmd statusbar expand-settings' 10 }
     elseif ($Key -eq 'collapse') { $r = Invoke-DeviceShell $Serial 'cmd statusbar collapse' 10 }
     elseif ($KeyCodes.ContainsKey($Key)) { $r = Invoke-DeviceShell $Serial ('input keyevent ' + $KeyCodes[$Key]) 10 }
     else { Fail 'Unknown key.' }
     if ($r.code -ne 0) { Fail ('The phone did not accept the key: ' + ($r.err + $r.out).Trim()) }
+}
+
+# Opens the phone's camera app. The old camera "key" only sent KEYCODE_CAMERA, which most phones ignore,
+# so the button looked dead. Launching the camera intent works on stock Android and on the common skins.
+function Open-PhoneCamera {
+    param([string]$Serial)
+    [void](Invoke-DeviceShell $Serial 'input keyevent 224' 8)   # wake the screen first
+    $tries = @(
+        'am start -a android.media.action.STILL_IMAGE_CAMERA',
+        'am start -a android.media.action.IMAGE_CAPTURE',
+        'am start -a android.media.action.STILL_IMAGE_CAMERA_SECURE',
+        'monkey -p com.android.camera -c android.intent.category.LAUNCHER 1',
+        'monkey -p com.google.android.GoogleCamera -c android.intent.category.LAUNCHER 1',
+        'monkey -p com.sec.android.app.camera -c android.intent.category.LAUNCHER 1'
+    )
+    $last = ''
+    foreach ($t in $tries) {
+        $r = Invoke-DeviceShell $Serial $t 12
+        $txt = ($r.out + ' ' + $r.err)
+        $last = $txt.Trim()
+        if ($r.code -eq 0 -and $txt -notmatch '(?i)error|exception|unable to resolve|no activities found|monkey aborted|No activities') { return }
+    }
+    # Last resort: the hardware camera key.
+    $r = Invoke-DeviceShell $Serial 'input keyevent 27' 8
+    if ($r.code -ne 0) { Fail ('The phone has no camera app that could be opened. ' + $last) }
 }
 
 $ToggleDefs = @{
@@ -386,7 +412,7 @@ function Get-ServerVersions {
 $Routes = @{}
 # Routes that only read local state (no adb calls). They get their own worker lane.
 $FastRoutes = @{}
-foreach ($k in @('GET /api/state', 'GET /api/status', 'GET /api/schema', 'GET /api/settings', 'POST /api/settings', 'POST /api/settings/reset', 'GET /api/profiles', 'POST /api/profiles', 'POST /api/profiles/apply', 'POST /api/profiles/delete', 'POST /api/preview', 'GET /api/sessions', 'GET /api/library', 'GET /api/file', 'POST /api/file-op', 'POST /api/delete-files', 'POST /api/open-folder', 'GET /api/cleanup-preview', 'POST /api/cleanup', 'GET /api/activity', 'GET /api/log', 'GET /api/backend-log', 'POST /api/backend')) { $FastRoutes[$k] = $true }
+foreach ($k in @('GET /api/state', 'GET /api/status', 'GET /api/schema', 'GET /api/settings', 'POST /api/settings', 'POST /api/settings/reset', 'GET /api/profiles', 'POST /api/profiles', 'POST /api/profiles/apply', 'POST /api/profiles/delete', 'POST /api/preview', 'GET /api/sessions', 'GET /api/library', 'GET /api/file', 'POST /api/file-op', 'POST /api/delete-files', 'POST /api/open-folder', 'GET /api/cleanup-preview', 'POST /api/cleanup', 'GET /api/activity', 'GET /api/log', 'GET /api/backend-log', 'POST /api/backend', 'GET /api/logs', 'POST /api/logs-clear')) { $FastRoutes[$k] = $true }
 
 $Routes['GET /api/ping'] = { param($Ctx) Send-Json $Ctx @{ ok = $true; version = $ToolkitVersion } }
 
@@ -1207,6 +1233,41 @@ $Routes['GET /api/backend-log'] = { param($Ctx)
     Send-Json $Ctx @{ log = $text }
 }
 
+# Raw logs live here so the dashboard can show plain-language messages everywhere else.
+function Test-LogName([string]$Name) {
+    return ($Name -match '^(backend-error|scrcpy-last|supervisor)\.log$' -or $Name -match '^session-[a-f0-9]{8}\.log$')
+}
+$Routes['GET /api/logs'] = { param($Ctx)
+    $name = Get-Query $Ctx 'name'
+    if ($name -eq '') {
+        $items = @()
+        foreach ($f in @(Get-ChildItem -LiteralPath $LogDir -Filter '*.log' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)) {
+            if (Test-LogName $f.Name) { $items += , @{ name = $f.Name; size = [long]$f.Length; modified = $f.LastWriteTime.ToString('o') } }
+            if ($items.Count -ge 25) { break }
+        }
+        Send-Json $Ctx @{ logs = $items }
+        return
+    }
+    if (-not (Test-LogName $name)) { Fail 'Unknown log file.' }
+    $path = Join-Path $LogDir $name
+    $text = ''
+    if (Test-Path -LiteralPath $path) {
+        try {
+            $fs = New-Object IO.FileStream($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+            try { $sr = New-Object IO.StreamReader($fs); $text = $sr.ReadToEnd() } finally { $fs.Dispose() }
+        } catch {}
+        if ($text.Length -gt 20000) { $text = $text.Substring($text.Length - 20000) }
+    }
+    Send-Json $Ctx @{ name = $name; log = $text }
+}
+$Routes['POST /api/logs-clear'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $name = [string](Get-Prop $body 'name' '')
+    if ($name -ne 'backend-error.log') { Fail 'Only the backend error log can be cleared here.' }
+    try { Set-Content -LiteralPath (Join-Path $LogDir $name) -Value '' -ErrorAction Stop } catch { Fail 'The log file is in use. Try again in a moment.' }
+    Send-Json $Ctx @{ ok = $true }
+}
+
 $Routes['GET /api/diagnostics'] = { param($Ctx)
     $checks = @()
     $adb = Get-AdbPath
@@ -1236,12 +1297,22 @@ $Routes['POST /api/backend'] = { param($Ctx)
     $body = Read-JsonBody $Ctx
     $action = [string](Get-Prop $body 'action' '')
     if ($action -notin @('restart', 'quit')) { Fail 'Unknown backend action.' }
-    Send-Json $Ctx @{ ok = $true; message = $(if ($action -eq 'restart') { 'Restarting the backend...' } else { 'The backend is shutting down.' }) }
+    # A second click while the first restart is already under way is answered, not repeated.
+    if ($Shared.stop) { Send-Json $Ctx @{ ok = $true; message = 'The backend is already restarting.' }; return }
+    Send-Json $Ctx @{ ok = $true; message = $(if ($action -eq 'restart') { 'Restarting the backend...' } else { 'The backend is shutting down.' }); version = $ToolkitVersion }
     Add-Activity 'system' ('Backend ' + $action + ' requested.')
-    Start-Sleep -Milliseconds 400
-    $Shared.exitCode = $(if ($action -eq 'restart') { 10 } else { 0 })
+    $code = $(if ($action -eq 'restart') { 10 } else { 0 })
+    Start-Sleep -Milliseconds 300
+    $Shared.exitCode = $code
     $Shared.stop = $true
     try { $Shared.listener.Stop() } catch {}
+    # Normal shutdown stops every worker and then exits. A worker stuck inside a slow adb call can make that
+    # hang, which left the dashboard dead until Launch.bat was run again (the old "click many times" bug).
+    # If the clean exit has not happened after a few seconds, leave the process right here. The supervisor
+    # sees the same exit code and starts a fresh backend either way.
+    Start-Sleep -Milliseconds 3500
+    try { Remove-Item -LiteralPath (Join-Path $LogDir 'backend.pid') -Force -ErrorAction SilentlyContinue } catch {}
+    [Environment]::Exit($code)
 }
 
 # Dispatches one request. Never throws.

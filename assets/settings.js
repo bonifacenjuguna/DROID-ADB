@@ -50,6 +50,7 @@ function renderBody() {
   STK.setHtml($('#settings-body'), html);
   const navEl = $('#settings-nav');
   if (!$('input', navEl)) navEl.innerHTML = '<input type="search" id="settings-search" placeholder="Search settings" autocomplete="off" aria-label="Search settings"><div id="settings-links" style="display:grid;gap:2px"></div>';
+  nav += '<a href="#errlog-panel" data-nav="errlog">Error log</a><a href="#about-panel" data-nav="about">About</a>';
   STK.setHtml($('#settings-links'), nav);
   S.rendered = true;
 }
@@ -116,7 +117,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('click', async e => {
   const t = e.target.closest('button, a[data-nav]'); if (!t || !$('#view-settings').contains(t)) return;
-  if (t.dataset.nav) { e.preventDefault(); const el = $('#grp-' + t.dataset.nav); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+  if (t.dataset.nav) { e.preventDefault(); const el = $('#grp-' + t.dataset.nav) || (t.dataset.nav === 'errlog' ? $('#errlog-panel') : t.dataset.nav === 'about' ? $('#about-panel') : null); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   if (t.dataset.pick) { const f = fields().find(x => x.key === t.dataset.pick), v = Number(t.dataset.val); state.settings[f.key] = v; setField(f.key, v); refreshFields(); return save(f.key, v); }
   if (t.dataset.reset) { const f = fields().find(x => x.key === t.dataset.reset); state.settings[f.key] = f.default; setField(f.key, f.default); refreshFields(); return save(f.key, f.default); }
   if (t.dataset.preset) {
@@ -151,7 +152,56 @@ $('#settings-file').addEventListener('change', async e => {
   } catch (er) { STK.fail(er.message ? er : new Error('Could not read that file.')); }
 });
 
-STK.views.settings = { onShow() { STK.loadSchema().then(() => { if (!state.settings) return STK.loadSettings(); }).then(() => { STK.loadProfiles(); renderAll(); }).catch(STK.fail); } };
+
+/* ---------- error log (raw technical text lives here, not in toasts) ---------- */
+const EL = { tab: 'app', backend: '', files: [], openFile: '', fileText: '', loading: false };
+function errWhen(t) { try { return new Date(t).toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' }); } catch (e) { return String(t); } }
+function renderErrLog() {
+  const body = $('#errlog-body'); if (!body) return;
+  const n = (STK.errlog || []).length;
+  $('#errlog-count').textContent = EL.tab === 'app' ? (n ? n + ' recorded this session' : 'Nothing recorded') : '';
+  $$('#errlog-tabs button').forEach(b => b.classList.toggle('is-active', b.dataset.errtab === EL.tab));
+  $('#errlog-clear').hidden = EL.tab === 'files';
+  if (EL.tab === 'app') {
+    const items = (STK.errlog || []).slice().reverse();
+    STK.setHtml(body, items.length ? items.map(x => `<div class="errentry"><div class="errhead"><b>${esc(x.friendly)}</b><span class="errwhere">${esc(x.where)}</span><small>${esc(errWhen(x.t))}</small>${x.count > 1 ? `<span class="errcount">happened ${x.count} times</span>` : ''}</div><pre class="errraw">${esc(x.raw)}</pre></div>`).join('') : `<div class="empty small">${icon('check')}<b>No errors recorded</b><p>When something goes wrong, the technical details appear here.</p></div>`);
+  } else if (EL.tab === 'backend') {
+    STK.setHtml(body, EL.loading ? '<p class="hint">Loading...</p>' : `<pre class="errraw code">${esc(EL.backend || 'The backend error log is empty. That is a good sign.')}</pre>`);
+  } else {
+    if (EL.openFile) { STK.setHtml(body, `<div class="row"><button class="btn sm" data-errback type="button">Back to files</button><b>${esc(EL.openFile)}</b></div><pre class="errraw code">${esc(EL.fileText || '(empty)')}</pre>`); return; }
+    STK.setHtml(body, EL.loading ? '<p class="hint">Loading...</p>' : (EL.files.length ? EL.files.map(f => `<div class="errentry"><div class="errhead"><b>${esc(f.name)}</b><small>${esc(STK.bytes(f.size))} · ${esc(errWhen(f.modified))}</small><button class="btn sm" data-errfile="${esc(f.name)}" type="button">View</button></div></div>`).join('') : '<p class="hint">No log files yet.</p>'));
+  }
+}
+async function loadErrTab() {
+  if (EL.tab === 'app') return renderErrLog();
+  EL.loading = true; renderErrLog();
+  try {
+    if (EL.tab === 'backend') EL.backend = (await STK.api('/logs?name=backend-error.log', { timeout: 15000 })).log || '';
+    else { EL.files = (await STK.api('/logs', { timeout: 15000 })).logs || []; EL.openFile = ''; }
+  } catch (e) { if (EL.tab === 'backend') EL.backend = 'Could not read the log: ' + e.message; }
+  EL.loading = false; renderErrLog();
+}
+document.addEventListener('click', async e => {
+  const t = e.target.closest('#errlog-panel button'); if (!t) return;
+  if (t.dataset.errtab) { EL.tab = t.dataset.errtab; EL.openFile = ''; return loadErrTab(); }
+  if (t.id === 'errlog-refresh') return loadErrTab();
+  if (t.dataset.errback !== undefined) { EL.openFile = ''; return renderErrLog(); }
+  if (t.dataset.errfile) { try { EL.fileText = (await STK.api('/logs?name=' + encodeURIComponent(t.dataset.errfile), { timeout: 15000 })).log || ''; EL.openFile = t.dataset.errfile; renderErrLog(); } catch (er) { STK.fail(er); } return; }
+  if (t.id === 'errlog-copy') {
+    let text = '';
+    if (EL.tab === 'app') text = (STK.errlog || []).map(x => `[${x.t}] ${x.where}\n${x.raw}`).join('\n\n');
+    else if (EL.tab === 'backend') text = EL.backend; else text = EL.fileText;
+    return navigator.clipboard.writeText(text || '').then(() => STK.toast('Log copied.'), () => STK.toast('Copy was blocked by the browser.', 'bad'));
+  }
+  if (t.id === 'errlog-clear') {
+    if (EL.tab === 'app') { STK.clearErrorLog(); return renderErrLog(); }
+    if (!await STK.confirm('Clear the backend error log?', '<p>This empties <b>Logs\\backend-error.log</b>. New problems will be recorded again.</p>', 'Clear', true)) return;
+    try { await STK.post('/logs-clear', { name: 'backend-error.log' }); EL.backend = ''; STK.toast('Backend log cleared.'); renderErrLog(); } catch (er) { STK.fail(er); }
+  }
+});
+STK.on('errlog', () => { if (state.view === 'settings' && EL.tab === 'app') renderErrLog(); });
+
+STK.views.settings = { onShow() { renderErrLog(); STK.loadSchema().then(() => { if (!state.settings) return STK.loadSettings(); }).then(() => { STK.loadProfiles(); renderAll(); }).catch(STK.fail); } };
 STK.on('settings', () => { if (state.view === 'settings' && !S.rendered) renderAll(); });
 STK.on('device-changed', () => { if (state.view === 'settings') refreshCmd(); });
 STK.loadProfiles();

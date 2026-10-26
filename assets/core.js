@@ -50,6 +50,50 @@ const bus = new EventTarget();
 STK.on = (name, fn) => bus.addEventListener(name, e => fn(e.detail));
 STK.emit = (name, detail) => bus.dispatchEvent(new CustomEvent(name, { detail }));
 
+/* ---------- friendly errors and the raw error log ----------
+   Raw technical text (adb, scrcpy, PowerShell) never goes straight to the screen. It is turned into a
+   plain sentence for toasts and cards, and the original text is kept in Settings > Error log. */
+const ERR_RULES = [
+  [/unauthori[sz]ed/i, 'The phone has not allowed this computer yet. Unlock it and tap Allow on the USB debugging prompt.'],
+  [/no devices\/emulators found|no devices found|device '[^']*' not found|device not found|no such device|could not find any adb device/i, 'No phone was found. Check the cable, unlock the phone and make sure USB debugging is on.'],
+  [/more than one device|multiple devices/i, 'More than one phone is connected. Pick the one to use from the phone list at the top.'],
+  [/device offline|error: closed|protocol fault|no permissions/i, 'The phone is connected but not answering. Unplug the cable and plug it back in, or use Restart ADB on the Devices page.'],
+  [/cannot connect to daemon|failed to start daemon|server didn't ack|adb server|connection refused/i, 'ADB (the tool that talks to the phone) is not running properly. Use Restart ADB on the Devices page.'],
+  [/INSTALL_FAILED_ALREADY_EXISTS|INSTALL_FAILED_UPDATE_INCOMPATIBLE/i, 'That app is already installed in a different version. Uninstall it first, then try again.'],
+  [/INSTALL_FAILED_INSUFFICIENT_STORAGE|no space left|not enough space/i, 'The phone does not have enough free storage for this.'],
+  [/INSTALL_FAILED_USER_RESTRICTED|INSTALL_FAILED_VERIFICATION|INSTALL_PARSE_FAILED|INSTALL_FAILED/i, 'The phone refused to install the app. Check that the file is a valid APK and that install over USB is allowed in the phone developer options.'],
+  [/securityexception|permission denied|operation not permitted|not allowed to|requires android\.permission/i, 'The phone refused this action. Some phones need an extra developer option (such as USB debugging (Security settings)) before they allow it.'],
+  [/no such file or directory|does not exist|cannot stat|remote object .* does not exist/i, 'That file or folder was not found on the phone or the PC.'],
+  [/address already in use|port .* (busy|in use)|could not listen on port/i, 'The port is already used by another program. Change the backend port in Settings or close the other program.'],
+  [/encoder|mediacodec|codec/i, 'The phone could not start video capture with these settings. Try a lower resolution or the H.264 codec in Settings.'],
+  [/server connection failed|could not connect to the server|connection to the device server/i, 'scrcpy could not connect to the phone. Unlock it, check the cable, and try again.'],
+  [/device disconnected|disconnected/i, 'The phone was disconnected.'],
+  [/cannot reach the backend|failed to fetch|networkerror/i, 'The toolkit service is not answering right now. It restarts itself, so try again in a few seconds.'],
+  [/timed? ?out|timeout/i, 'The phone took too long to answer. Make sure it is unlocked and try again.'],
+  [/unexpected host|only accepts the local dashboard|missing request header/i, 'The request was blocked for safety. Open the dashboard from the address shown by Launch.bat.'],
+  [/unreadable answer/i, 'The toolkit service sent something unexpected. Restart it from Devices, Restart backend.']
+];
+const RAW_LOOK = /exception|traceback|\bat [\w.$]+\(|system\.|unexpected backend error|0x[0-9a-f]{4,}|[a-z]:\\[^ ]+\.ps1|java\.|android\.os|errno|stack ?trace|\.ps1|invalidoperation|nullreference|cannot (bind|index|convert)|the term '/i;
+STK.friendly = function (raw) {
+  const text = String(raw == null ? '' : raw).trim();
+  if (!text) return 'Something went wrong. Please try again.';
+  for (const [re, msg] of ERR_RULES) if (re.test(text)) return msg;
+  if (RAW_LOOK.test(text) || text.length > 220) return 'Something did not work as expected. The technical details were saved in Settings, Error log.';
+  return text;
+};
+const ERR_KEY = 'errlog';
+STK.errlog = (() => { const v = STK.store.get(ERR_KEY, []); return Array.isArray(v) ? v.slice(-100) : []; })();
+STK.logError = function (where, raw, extra) {
+  const text = String(raw == null ? '' : raw).trim(); if (!text) return;
+  const last = STK.errlog[STK.errlog.length - 1];
+  if (last && last.raw === text && last.where === where && Date.now() - new Date(last.t).getTime() < 60000) { last.count = (last.count || 1) + 1; last.t = new Date().toISOString(); }
+  else STK.errlog.push({ t: new Date().toISOString(), where: String(where || ''), raw: text.slice(0, 4000), friendly: STK.friendly(text), count: 1, ...(extra || {}) });
+  if (STK.errlog.length > 100) STK.errlog.splice(0, STK.errlog.length - 100);
+  STK.store.set(ERR_KEY, STK.errlog);
+  STK.emit('errlog', STK.errlog.length);
+};
+STK.clearErrorLog = function () { STK.errlog.length = 0; STK.store.set(ERR_KEY, []); STK.emit('errlog', 0); };
+
 /* ---------- API client ---------- */
 STK.api = async function api(path, opts = {}) {
   const method = opts.method || 'GET';
@@ -66,14 +110,20 @@ STK.api = async function api(path, opts = {}) {
   try { res = await fetch('/api' + path, { method, headers, body, signal: ctl.signal, cache: 'no-store', keepalive: !!opts.keepalive }); }
   catch (e) {
     clearTimeout(timer);
+    const rawNet = e.name === 'AbortError' ? 'Request to ' + path + ' timed out.' : 'Cannot reach the backend (' + path + '): ' + (e.message || e.name);
+    if (!path.startsWith('/state') && !path.startsWith('/ping')) STK.logError('/api' + path, rawNet, { network: true });
     const err = new Error(e.name === 'AbortError' ? 'The backend took too long to answer. If the phone is busy, try again.' : 'Cannot reach the backend right now.');
-    err.network = true;
+    err.network = true; err.raw = rawNet;
     throw err;
   }
   clearTimeout(timer);
   let data;
   try { data = await res.json(); } catch (e) { data = { error: 'The backend sent an unreadable answer.' }; }
-  if (!res.ok) { const err = new Error(data.error || 'The request failed.'); err.status = res.status; throw err; }
+  if (!res.ok) {
+    const rawMsg = data.error || 'The request failed (HTTP ' + res.status + ').';
+    if (!path.startsWith('/state')) STK.logError('/api' + path, rawMsg, { status: res.status });
+    const err = new Error(STK.friendly(rawMsg)); err.status = res.status; err.raw = rawMsg; throw err;
+  }
   return data;
 };
 STK.post = (path, body, opts = {}) => STK.api(path, { ...opts, method: 'POST', body });
@@ -106,7 +156,11 @@ STK.toast = function toast(message, kind = 'ok', action) {
   while ($('#toasts').children.length > 4) $('#toasts').firstElementChild.remove();
   setTimeout(() => el.remove(), kind === 'bad' ? 8000 : 4200);
 };
-STK.fail = e => STK.toast(e && e.message ? e.message : String(e), 'bad');
+STK.fail = e => {
+  const raw = e && e.raw ? e.raw : (e && e.message ? e.message : String(e));
+  if (!(e && e.raw)) STK.logError('app', raw);
+  STK.toast(e && e.raw ? e.message : STK.friendly(raw), 'bad', STK.errlog.length ? { label: 'Details', run: () => { STK.go('settings'); setTimeout(() => { const el = document.getElementById('errlog-panel'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 150); } } : undefined);
+};
 
 STK.confirm = function confirmDialog(title, bodyHtml, okLabel = 'Delete', danger = true) {
   return new Promise(resolve => {
@@ -247,7 +301,7 @@ function setConn() {
   chip.className = cls; chip.innerHTML = `<i class="dot"></i><b>${label}</b>`;
   dot.className = dcls;
 }
-STK.FRONT_VERSION = '3.5.0';
+STK.FRONT_VERSION = '3.6.0';
 { const av = document.getElementById('about-version'); if (av) av.textContent = 'v' + STK.FRONT_VERSION; }
 const stale = () => !!(state.online && state.data && state.data.version && state.data.version !== STK.FRONT_VERSION);
 function setBanner() {
@@ -274,21 +328,57 @@ document.addEventListener('click', e => {
   if (t.id === 'banner-retry') { pollNow(); }
   if (t.id === 'banner-adb') STK.busy(t, async () => { try { await STK.post('/wifi', { action: 'restart' }, { timeout: 40000 }); STK.toast('ADB was restarted.'); pollNow(); } catch (er) { STK.fail(er); } });
   if (t.id === 'banner-restart') STK.restartBackend(t);
-  if (t.id === 'banner-stale') STK.busy(t, async () => { try { await STK.post('/backend', { action: 'restart' }); STK.toast('Restarting the service...'); state.failures = 0; } catch (er) { STK.fail(er); } });
+  if (t.id === 'banner-stale') STK.restartService(t, { stale: true });
 });
 
+/* Restarts the background service and waits until the new one answers. Safe to click more than once. */
+let restarting = false;
+STK.restartService = async function (btn, opts = {}) {
+  if (restarting) { STK.toast('The service is already restarting. Please wait a moment.'); return; }
+  restarting = true;
+  const label = btn && btn.querySelector('span') ? btn.querySelector('span') : btn;
+  const oldText = label ? label.textContent : '';
+  if (btn) { btn.disabled = true; btn.classList.add('is-busy'); }
+  if (label) label.textContent = 'Restarting...';
+  STK.toast(opts.stale ? 'Restarting the service...' : 'Restarting the backend...');
+  let accepted = false;
+  try {
+    // The service may close the connection before it finishes answering. That still counts as accepted.
+    try { await STK.post('/backend', { action: 'restart' }, { timeout: 8000 }); accepted = true; }
+    catch (e) { if (!e.network) { STK.fail(e); return; } accepted = true; }
+    state.failures = 0;
+    const began = Date.now();
+    let came = false;
+    await STK.sleep(1200);
+    while (Date.now() - began < 60000) {
+      try {
+        const r = await fetch('/api/ping', { cache: 'no-store' });
+        if (r.ok) { const j = await r.json(); if (j && j.ok && (!j.uptime || j.uptime < 120 || Date.now() - began > 15000)) { came = true; break; } }
+      } catch (e) { /* still down */ }
+      await STK.sleep(700);
+    }
+    if (came) { STK.toast('The service is back.'); state.failures = 0; pollNow(); }
+    else STK.toast('The service did not come back in 60 seconds. Run Launch.bat again. Details are in Logs\\backend-error.log.', 'bad');
+  } finally {
+    restarting = false;
+    if (btn) { btn.disabled = false; btn.classList.remove('is-busy'); }
+    if (label) label.textContent = oldText;
+  }
+};
 STK.restartBackend = async function (btn) {
   if (!await STK.confirm('Restart the backend?', '<p>The dashboard disconnects for a few seconds. Running scrcpy windows keep going.</p>', 'Restart', false)) return;
-  STK.busy(btn, async () => {
-    try { await STK.post('/backend', { action: 'restart' }); STK.toast('Restarting the backend...'); state.failures = 0; } catch (e) { STK.fail(e); }
-  });
+  return STK.restartService(btn);
 };
 
 function handleEvents(d) {
   if (state.eventSeq === null) { state.eventSeq = d.eventSeq; return; }
   for (const ev of d.events || []) {
     if (state.ignoreSessions.has(ev.session)) continue;
-    if (ev.kind === 'failed') STK.toast('scrcpy closed right away' + (ev.reason ? ': ' + ev.reason : '. Check the cable and unlock the phone.'), 'bad');
+    if (ev.kind === 'failed') {
+      if (ev.reason) STK.logError('scrcpy', ev.reason, { mode: ev.mode });
+      const fr = ev.reason ? STK.friendly(ev.reason) : 'Check the cable and unlock the phone.';
+      STK.toast('The mirror window closed right away. ' + fr, 'bad', ev.reason ? { label: 'Details', run: () => { STK.go('settings'); setTimeout(() => { const el = document.getElementById('errlog-panel'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 150); } } : undefined);
+    }
     else if (ev.kind === 'job') STK.emit('job-event', ev);
     else if (ev.kind === 'ended') {
       if (ev.mode === 'record' && ev.file) STK.notify && STK.notify('Recording saved', ev.file + ' (' + STK.bytes(ev.size) + ')', 'rec');
@@ -325,7 +415,7 @@ function applyState(d) {
     let tried = false; try { tried = sessionStorage.getItem('stk-autorestart') === String(d.version); } catch (e) { tried = true; }
     if (!tried && !(d.sessions || []).length) {
       try { sessionStorage.setItem('stk-autorestart', String(d.version)); } catch (e) { /* ignore */ }
-      STK.post('/backend', { action: 'restart' }).then(() => { STK.toast('Updating the background service to ' + STK.FRONT_VERSION + '...'); state.failures = 0; }, () => {});
+      STK.restartService(null, { stale: true });
     }
   } else if ($('#banner') && $('#banner').classList.contains('stale')) setBanner();
   handleEvents(d);

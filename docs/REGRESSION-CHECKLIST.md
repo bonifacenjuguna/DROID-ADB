@@ -150,3 +150,13 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Delete `core/branding/`: mirroring still works (scrcpy falls back to its own icon).
 - [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 3.5.0).
 
+## 3.6 reliability and Studio gaming kit
+- [ ] Run an older service, open the 3.6 page: the "still the old version" banner appears. One click on Restart service now: the button shows Restarting..., a "service is back" notice appears, and the banner is gone. Repeat clicks during the restart do nothing harmful.
+- [ ] Devices, Restart backend: confirm, then the dashboard reconnects without further clicks. Start a slow action (for example a large file pull) first and restart during it: the service still returns within about 10 seconds.
+- [ ] Remote controls, Camera: the phone wakes and the camera app opens. Try on a phone with a locked screen and on one with no camera app (a clear message appears).
+- [ ] Trigger an error (unplug the phone, then press a key): a short sentence appears, with a Details button. Settings, Error log lists the original text. Copy all and Clear work.
+- [ ] Settings, Error log, Backend log and Log files tabs load, a session file opens, and Clear on the backend log asks first.
+- [ ] Settings at 1500, 1300 and 900 px wide: Command preview is above Backup every time, never beside it. About is centered.
+- [ ] Studio, Gaming kit: HUD shows battery, temperature, app in front. Each switch toggles on the phone and the label updates. Free memory, Performance mode on/off, Game Mode and frame stats give a result or a clear "not supported" message.
+- [ ] Game mode: add a game with Free memory and Game Mode ticked, open it on the phone, confirm they run, leave the game and confirm settings return and play time is added.
+- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 3.6.0).

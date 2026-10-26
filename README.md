@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/images/droid-adb-logo.jpg" alt="DROID ADB" width="320"></p>
 
-# DROID ADB 3.5
+# DROID ADB 3.6
 
 A portable Windows control center for your Android phone: mirror, record, screenshot, remote-control and manage it from a local dashboard.
 
@@ -12,6 +12,10 @@ DROID ADB is powered by [scrcpy](https://github.com/Genymobile/scrcpy) v5.0.1 (G
 3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
+
+## What changed in 3.6
+
+3.6 is a reliability and polish release. "Restart service" now restarts on the first click and waits until the new service is back (the old shutdown could hang). Errors are shown as plain sentences, and the original technical text is kept in Settings, Error log. The Remote controls Camera button now opens the phone camera. In Settings, Command preview sits above Backup and the About card is centered. Studio has a new Gaming kit: live battery and temperature, quick toggles, free memory, performance mode, Android Game Mode and frame stats. After updating, run Launch.bat once so the service loads the new version.
 
 ## What changed in 3.5
 

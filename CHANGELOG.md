@@ -1,5 +1,25 @@
 # Changelog
 
+## 3.6.0
+Reliability, clearer messages, Studio gaming tools.
+
+Fixed
+- "Restart service now" and "Restart backend" sometimes needed many clicks. Shutting down could hang while a worker was still waiting on a slow adb call, so the supervisor never started a new backend. The backend now leaves on its own after a few seconds if the clean shutdown stalls, and the supervisor restarts it as before. The dashboard also waits until the new service really answers, ignores repeat clicks while a restart is running, and tells you to run Launch.bat only if it does not return within 60 seconds.
+- Remote controls, Camera: the button only sent the hardware camera key, which most phones ignore. It now wakes the phone and opens the camera app (still-image intent, then image capture, then common camera apps), and only falls back to the old key if nothing else works.
+- Settings: Command preview and Backup were shown side by side on medium-width windows. They are now always stacked, Command preview first.
+- Settings: the About card is centered under the settings instead of sitting in the right column.
+
+New
+- Plain-language errors. Raw adb, scrcpy and backend messages are translated into a short explanation of what is happening and what to try. A "Details" button on error notices opens the log.
+- Settings, Error log: the original technical text for each problem (this session), the backend error log, and the other log files, each with Copy and Clear. New backend routes `GET /api/logs` (list or read, whitelisted file names only) and `POST /api/logs-clear` (backend error log only).
+- Studio, Gaming kit: live battery, temperature, foreground app and session time; one-tap switches for Do not disturb, Show touches, Stay awake, Animations, Auto-rotate and Auto brightness; Free memory; Performance mode on/off; Android Game Mode (performance); frame stats (janky frames, typical and slow frame time) with reset. New routes `POST /api/game-tools` and `GET /api/game-stats`.
+- Studio, Game mode: each game can now also free memory and switch Android Game Mode to performance when it starts (and back to standard when you leave). Play time per game is tracked. Warnings appear when the phone gets hot (43 °C or more) or the battery is 15% or lower and not charging.
+
+Compatibility
+- No settings keys, backup format or existing API routes changed. Backups from earlier versions import as before.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
+
 ## 3.5.0
 Branding polish. No feature changes.
 

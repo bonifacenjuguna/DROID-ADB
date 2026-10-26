@@ -127,7 +127,7 @@
     <button class="rail-btn rail-more" id="rail-more" aria-haspopup="dialog"><svg class="ic"><use href="#i-grid"/></svg><span>More</span></button>
     <div class="rail-foot" title="Local backend">
       <span class="dot" id="rail-dot"></span>
-      <span id="rail-version">v3.5</span>
+      <span id="rail-version">v3.6</span>
     </div>
   </nav>
 
@@ -453,14 +453,27 @@
                 <input type="file" id="settings-file" accept="application/json,.json" hidden>
               </div>
             </section>
-            <section class="panel about">
+          </aside>
+        </div>
+
+        <section class="panel errlog" id="errlog-panel">
+          <header class="panel-head"><h2>Error log</h2><span class="hint" id="errlog-count"></span></header>
+          <p class="hint lead">Messages on screen are written in plain language. The original technical text for anything that went wrong is kept here, newest first, so you can copy it when asking for help.</p>
+          <div class="row errlog-bar">
+            <div class="seg mini" id="errlog-tabs"><button class="is-active" data-errtab="app">This session</button><button data-errtab="backend">Backend log</button><button data-errtab="files">Log files</button></div>
+            <span class="grow"></span>
+            <button class="btn sm" id="errlog-refresh" type="button"><svg class="ic sm"><use href="#i-refresh"/></svg><span>Refresh</span></button>
+            <button class="btn sm" id="errlog-copy" type="button"><svg class="ic sm"><use href="#i-copy"/></svg><span>Copy all</span></button>
+            <button class="btn sm danger" id="errlog-clear" type="button"><svg class="ic sm"><use href="#i-trash"/></svg><span>Clear</span></button>
+          </div>
+          <div id="errlog-body" class="errlog-body"></div>
+        </section>
+        <section class="panel about" id="about-panel">
               <header class="panel-head"><h2>About</h2></header>
               <div class="about-logo"><img src="assets/droid-adb-logo.png" alt="DROID ADB" width="220"></div>
               <p class="hint lead"><b>DROID ADB</b> <span id="about-version"></span><br>Copyright &copy; 2026 DROID ADB (DROID ADB's own code).</p>
               <p class="hint">Powered by <b>scrcpy</b>, copyright &copy; Genymobile and Romain Vimont, used under the Apache License 2.0. Also bundles adb, FFmpeg (LGPL), SDL and libusb (LGPL). DROID ADB is an independent project and is not affiliated with or endorsed by Genymobile, Google or Microsoft. Android is a trademark of Google LLC. Windows is a trademark of Microsoft Corporation. See NOTICE.md and THIRD-PARTY-LICENSES.md.</p>
             </section>
-          </aside>
-        </div>
       </section>
     </main>
   </div>

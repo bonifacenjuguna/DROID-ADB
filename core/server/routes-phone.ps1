@@ -676,3 +676,67 @@ function Add-WifiHost {
         if ($list -notcontains $Address) { Set-StoreValue 'wifihosts' @(@($Address) + $list | Select-Object -First 12) }
     } catch {}
 }
+
+# ---------------------------------------------------------------------------
+# 3.6 Studio gaming tools: free memory, Android Game Mode / performance mode, frame stats.
+# Everything here is reversible and uses standard Android shell commands.
+# ---------------------------------------------------------------------------
+function Test-PackageName([string]$Pkg) { return [bool]($Pkg -match '^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$') }
+
+$Routes['POST /api/game-tools'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $serial = [string](Get-Prop $body 'serial' '')
+    $action = [string](Get-Prop $body 'action' '')
+    $pkg = [string](Get-Prop $body 'pkg' '')
+    $on = [bool](Get-Prop $body 'on' $true)
+    switch ($action) {
+        'freemem' {
+            $r = Invoke-DeviceShell $serial 'am kill-all' 20
+            if ($r.code -ne 0) { Fail ('The phone refused to free memory: ' + ($r.err + $r.out).Trim()) }
+            Add-Activity 'system' 'Freed background memory on the phone.'
+            Send-Json $Ctx @{ ok = $true; message = 'Background apps were closed to free memory.' }
+        }
+        'perfmode' {
+            $cmd = 'cmd power set-fixed-performance-mode-enabled ' + $(if ($on) { 'true' } else { 'false' })
+            $r = Invoke-DeviceShell $serial $cmd 15
+            $txt = ($r.out + ' ' + $r.err).Trim()
+            if ($r.code -ne 0 -or $txt -match '(?i)unknown|error|exception|not supported|unsupported') { Fail 'This phone does not allow fixed performance mode (it needs Android 12 or newer and manufacturer support).' }
+            Send-Json $Ctx @{ ok = $true; on = $on; message = $(if ($on) { 'Performance mode is on. The phone may run warmer.' } else { 'Performance mode is off.' }) }
+        }
+        'gamemode' {
+            if (-not (Test-PackageName $pkg)) { Fail 'Pick a valid game first.' }
+            $mode = [string](Get-Prop $body 'mode' 'performance')
+            if ($mode -notin @('performance', 'battery', 'standard')) { Fail 'Unknown game mode.' }
+            $r = Invoke-DeviceShell $serial ('cmd game set --mode ' + $mode + ' ' + $pkg) 15
+            $txt = ($r.out + ' ' + $r.err).Trim()
+            if ($r.code -ne 0 -or $txt -match '(?i)unknown|error|exception|invalid|not supported') {
+                $r = Invoke-DeviceShell $serial ('cmd game mode ' + $mode + ' ' + $pkg) 15
+                $txt = ($r.out + ' ' + $r.err).Trim()
+            }
+            if ($r.code -ne 0 -or $txt -match '(?i)unknown|error|exception|invalid|not supported') { Fail 'This phone does not support Android Game Mode for that app (it needs Android 12 or newer).' }
+            Send-Json $Ctx @{ ok = $true; message = ('Game Mode set to ' + $mode + '.') }
+        }
+        'resetstats' {
+            if (-not (Test-PackageName $pkg)) { Fail 'Pick a valid game first.' }
+            $r = Invoke-DeviceShell $serial ('dumpsys gfxinfo ' + $pkg + ' reset') 15
+            Send-Json $Ctx @{ ok = $true; message = 'Frame counters were reset.' }
+        }
+        default { Fail 'Unknown gaming tool.' }
+    }
+}
+
+$Routes['GET /api/game-stats'] = { param($Ctx)
+    $serial = Get-Query $Ctx 'id'
+    $pkg = Get-Query $Ctx 'pkg'
+    if (-not (Test-PackageName $pkg)) { Fail 'Pick a valid game first.' }
+    $r = Invoke-DeviceShell $serial ('dumpsys gfxinfo ' + $pkg) 20
+    $t = [string]$r.out
+    $o = @{ ok = $true; pkg = $pkg; frames = 0; janky = 0; jankyPct = 0.0; p50 = $null; p90 = $null; p95 = $null; p99 = $null; running = $false }
+    if ($t -match 'Total frames rendered:\s*(\d+)') { $o.frames = [int]$Matches[1]; $o.running = $true }
+    if ($t -match 'Janky frames:\s*(\d+)\s*\(([\d.]+)%\)') { $o.janky = [int]$Matches[1]; $o.jankyPct = [double]$Matches[2] }
+    if ($t -match '50th percentile:\s*(\d+)ms') { $o.p50 = [int]$Matches[1] }
+    if ($t -match '90th percentile:\s*(\d+)ms') { $o.p90 = [int]$Matches[1] }
+    if ($t -match '95th percentile:\s*(\d+)ms') { $o.p95 = [int]$Matches[1] }
+    if ($t -match '99th percentile:\s*(\d+)ms') { $o.p99 = [int]$Matches[1] }
+    Send-Json $Ctx $o
+}
