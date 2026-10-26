@@ -161,13 +161,11 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Game mode: add a game with Free memory and Game Mode ticked, open it on the phone, confirm they run, leave the game and confirm settings return and play time is added.
 - [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 3.6.0).
 
-## 3.7 Performance Studio
-- [ ] Studio opens on Overview with a phone connected: ring, six gauges, trends and suggestions fill within about 5 seconds. With no phone, the connect message shows.
-- [ ] Game Mode: Optimize, pick a game, press Game Mode: performance on an Android 13 phone. It either applies or shows the phone's real reply. It never says Android 12 or newer is needed on Android 13. Settings, Error log holds the reply.
-- [ ] Turbo on: each step reports done or skipped. Undo restores Do not disturb, animations, stay awake, battery saver and refresh rate. Reload the page while Turbo is on: Undo still works.
-- [ ] Cooling: temperature and trend update. Cool-down lowers brightness and turns on battery saver; Restore returns them. The notice appears at the target temperature.
-- [ ] Network check shows delay, loss and Wi-Fi band. With Wi-Fi off it says there is no internet.
-- [ ] Games: add a game with Free memory, Lock refresh rate and Game Mode. Play opens it. Leaving it restores settings and adds a session row with peak temperature.
-- [ ] Capture: demo mode on and off, presentation view and capture presets still work.
-- [ ] Opening any app route with a bad package name (for example from Apps) is still rejected with "not a valid app package name".
-
+## 4.0 Performance Studio
+- [ ] Studio opens on Overview with health score and live graphs; all six tabs load without errors.
+- [ ] Optimize, Compatibility check on an Android 13 phone lists Game Mode as supported; setting performance mode shows success or the phone's real reply (never "needs Android 12").
+- [ ] Apply Gaming profile, then Restore my settings: refresh rate, animations, brightness and switches return to the earlier values.
+- [ ] Games: launching a saved game applies its profile; leaving restores it and adds a session row.
+- [ ] Thermals: gauge, history and cool-down tracker update; threshold sliders persist.
+- [ ] Network test shows ping, jitter, loss and a verdict.
+- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 4.0.0).

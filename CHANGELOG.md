@@ -1,23 +1,26 @@
 # Changelog
 
-## 3.7.0
-Performance Studio, and the Game Mode fix.
+## 4.0.0
+Performance Studio: a new gaming and app performance center, plus the Game Mode fix.
 
 Fixed
-- Game Mode: "performance" was reported as not supported on Android 13. The check treated any text containing words such as "error" or "invalid" as a failure, and the fallback command overwrote the phone's real reply. It now reads the Android version, uses the current user, tries the named and numeric forms, and shows the phone's actual answer. Games that do not offer Performance mode get an honest message, and the Turbo profile still applies. Replies are saved in Settings, Error log.
-- A 3.6 helper named `Test-PackageName` replaced the original validator of the same name, which weakened the package-name check on routes that open or inspect apps. The original is back and the new boolean helper has its own name (`Test-PkgOk`).
+- Game Mode (performance) said the phone was not supported ("needs Android 12 or newer") on Android 13. The check was hard-coded and too strict. The service now reads the real Android version, tries the command forms used by Android 12, 13 and newer, and counts it as applied only when the phone accepts it. If the phone still refuses, the page shows the phone's own reply. Studio, Optimize, Compatibility check shows what your phone supports.
 
 New
-- Studio is now Performance Studio with five tabs: Overview, Optimize, Cooling, Games, Capture.
-- Overview: readiness score (0 to 100), live gauges (phone temperature, processor load, memory, battery, estimated frame rate, storage), trend charts and suggestions with one-tap fixes. Boost and play opens the chosen game after Turbo.
-- Turbo profile: Do not disturb, animations off, stay awake, battery saver off, free memory, locked high refresh rate, performance mode and Android Game Mode where the phone allows. Each step reports done or skipped with a reason. Undo restores the previous state, even after a page reload.
-- Cooling: big temperature with trend, processor and sensor temperatures, Android thermal status, a cool-down assistant (lower brightness, battery saver, free memory, notice at your target, one-tap restore), adjustable heat warning and tips ordered by what matters now.
-- Network check: delay, loss and Wi-Fi quality with plain advice.
-- Games: Play button, per-game options (free memory, lock refresh rate, Game Mode), play time, and session history with peak temperature, battery use and average frame rate.
-- New routes `GET /api/perf`, `GET /api/net-check`; `POST /api/game-tools` gained launch, refresh, getstate and setstate. Game Mode and performance mode answers now return `applied` plus the phone's reply instead of failing.
+- Studio is now Performance Studio with six pages: Overview, Optimize, Thermals, Games, Network, Capture.
+- Overview: health score, live CPU, memory, temperature, battery and refresh rate with history graphs, per-core clocks, smart suggestions, and one-tap profiles (Balanced, Gaming, Turbo, Cool, Battery saver, Record). Your earlier settings are saved and can be restored.
+- Optimize: Boost, trim caches, refresh rate, animation speed, brightness, quick switches, Game Mode modes, fixed performance mode, compatibility check.
+- Thermals: temperature gauge, zone readings, history with comfort bands, heat forecast, cool-down tracker, cooling techniques, custom warning limits.
+- Games: library with per-game profile, automatic game mode on launch with a saved session report, live frame monitor (fps, jank, p50/p95).
+- Network: Wi-Fi signal, ping, jitter and packet loss test with a plain verdict.
+- Capture: quick capture, demo mode, capture presets.
+- Command palette: Boost, Cool down, Gaming profile, Thermals, Network.
+- Routes: `GET /api/perf` and `POST /api/perf-tools` (freemem, boost, trimcaches, perfmode, gamemode, compat, refresh, animscale, lowpower, resetstats, dexopt, forcestop, launch, netcheck). `POST /api/game-tools` still works.
 
 Compatibility
-- No settings keys or backup format changed. Existing game profiles keep working. After updating, run Launch.bat again.
+- No settings keys, backup format or existing routes were removed. Backups from earlier versions import as before.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
 
 ## 3.6.0
 Reliability, clearer messages, Studio gaming tools.

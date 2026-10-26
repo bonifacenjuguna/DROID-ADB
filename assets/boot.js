@@ -36,7 +36,12 @@ if (window.matchMedia) window.matchMedia('(prefers-color-scheme: light)').addEve
 const need = fn => () => STK.sel() ? fn() : STK.toast('Connect a phone first.', 'bad');
 const COMMANDS = [
   { name: 'Go to Console', hint: '1', run: () => STK.go('console') },
-  { name: 'Go to Studio (game mode, demo mode)', hint: '2', run: () => STK.go('studio') },
+  { name: 'Go to Performance Studio (boost, cooling, games)', hint: '2', run: () => STK.go('studio') },
+  { name: 'Studio: boost phone memory', run: need(() => { STK.go('studio'); setTimeout(() => STK.studio && STK.studio.boost(), 200); }) },
+  { name: 'Studio: cool the phone down', run: need(() => { STK.go('studio'); setTimeout(() => STK.studio && STK.studio.cooldown(), 200); }) },
+  { name: 'Studio: apply Gaming profile', run: need(() => { STK.go('studio'); setTimeout(() => STK.studio && STK.studio.applyProfile('gaming'), 200); }) },
+  { name: 'Studio: thermals and temperature', run: () => { STK.go('studio'); setTimeout(() => STK.studio && STK.studio.go('thermals'), 100); } },
+  { name: 'Studio: network and ping check', run: () => { STK.go('studio'); setTimeout(() => STK.studio && STK.studio.go('network'), 100); } },
   { name: 'Go to Automation (macros, schedules)', hint: '3', run: () => STK.go('automation') },
   { name: 'Go to Phone tools', hint: '4', run: () => STK.go('phone') },
   { name: 'Go to Monitor', hint: '5', run: () => STK.go('monitor') },
