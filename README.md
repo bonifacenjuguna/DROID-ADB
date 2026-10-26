@@ -1,4 +1,4 @@
-# Scrcpy Toolkit 3.0
+# Scrcpy Toolkit 3.1
 
 A portable Windows control center for scrcpy: mirror, record, screenshot, remote-control and manage your Android phone from a local dashboard.
 
@@ -10,6 +10,10 @@ Helper project around scrcpy v5.0.1. The scrcpy binaries in `core/scrcpy/` are u
 3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
+
+## What changed in 3.1
+
+3.1 is a safety and fixes release on top of 3.0 (saved data cannot be wiped, macros stop when asked, scheduled tasks no longer get lost, Enter works in dialogs). See CHANGELOG.md.
 
 ## What changed in 3.0
 - Grouped navigation, new Studio, Automate, Monitor and Alerts pages, phone gallery and backups, macros and schedules, background jobs, inspector, insights, accent colours and more. See CHANGELOG.md.

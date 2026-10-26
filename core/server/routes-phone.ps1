@@ -252,14 +252,14 @@ function Convert-ToThumb {
     } finally { $img.Dispose(); $ms.Dispose() }
 }
 
+# Names a cached picture. SHA-256, so two different pictures can never end up with the same name.
 function Get-ShortHash {
     param([string]$Text)
-    $h1 = [long]2166136261; $h2 = [long]5381
-    foreach ($c in $Text.ToCharArray()) {
-        $h1 = (($h1 -bxor [long][int]$c) * 16777619) -band 4294967295
-        $h2 = (($h2 * 33) + [long][int]$c) -band 4294967295
-    }
-    return ($h1.ToString('x8') + $h2.ToString('x8'))
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $b = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Text)) } finally { $sha.Dispose() }
+    $sb = New-Object Text.StringBuilder
+    for ($i = 0; $i -lt 16; $i++) { [void]$sb.Append($b[$i].ToString('x2')) }
+    return $sb.ToString()
 }
 
 $Routes['GET /api/gallery/thumb'] = { param($Ctx)
@@ -275,14 +275,18 @@ $Routes['GET /api/gallery/thumb'] = { param($Ctx)
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     $hash = Get-ShortHash ($serial + '|' + $path + '|' + $size + '|' + $(if ($full) { 'f' } else { 't' }))
     $file = Join-Path $dir ($hash + '.jpg')
-    $raw = Join-Path $dir ($hash + '.raw')
     if (-not (Test-Path -LiteralPath $file)) {
+        # Forget pictures that were not looked at for a week, so the cache cannot grow forever.
+        if ((Get-Random -Maximum 25) -eq 0) { try { Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-7) } | Remove-Item -Force -ErrorAction SilentlyContinue } catch {} }
+        $part = $file + '.part'
         $got = Invoke-AdbBytes ((Resolve-Target $serial) + 'exec-out cat "' + $path + '"') 60
         $bytes = $got.bytes
         if ($got.code -ne 0 -or -not $bytes -or $bytes.Length -lt 16) { Fail 'The phone did not send that picture.' }
         $done = $false
-        if ($OnWindows) { try { $done = Convert-ToThumb $bytes $file $full } catch { $done = $false } }
-        if (-not $done) { [IO.File]::WriteAllBytes($file, $bytes) }
+        if ($OnWindows) { try { $done = Convert-ToThumb $bytes $part $full } catch { $done = $false } }
+        if (-not $done) { [IO.File]::WriteAllBytes($part, $bytes) }
+        # Write under a temporary name, then rename, so a half-written picture is never served from the cache.
+        Move-Item -LiteralPath $part -Destination $file -Force
     }
     $type = 'image/jpeg'
     $head = New-Object byte[] 4
@@ -306,8 +310,11 @@ $Routes['POST /api/gallery/pull'] = { param($Ctx)
 $Routes['POST /api/gallery/delete'] = { param($Ctx)
     $body = Read-JsonBody $Ctx
     $serial = [string](Get-Prop $body 'serial' '')
+    Test-Serial $serial
     $n = 0
-    foreach ($p in @(Get-Prop $body 'paths' @())) {
+    $todo = @(Get-Prop $body 'paths' @())
+    if ($todo.Count -gt 200) { Fail 'Delete up to 200 files at a time.' }
+    foreach ($p in $todo) {
         Test-GalleryPath ([string]$p)
         $r = Invoke-DeviceShell $serial ('rm -f ''' + $p + '''') 15
         if ($r.code -eq 0) { $n++ }

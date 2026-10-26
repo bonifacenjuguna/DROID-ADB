@@ -66,6 +66,7 @@ async function run(steps, name, btn) {
   await STK.busy(btn, async () => { try { await STK.jobs.start('/macro/run', { serial: id, name, steps, repeat: 1 }, 'Running "' + name + '".'); } catch (e) { STK.fail(e); } });
 }
 async function save(btn) {
+  if (!STK.kv.guard()) return;
   const name = await STK.prompt('Name this macro', 'For example: Open settings and turn off Wi-Fi', E.name, 'Save');
   if (!name) return;
   await STK.busy(btn, async () => {
@@ -73,6 +74,7 @@ async function save(btn) {
   });
 }
 async function newSchedule() {
+  if (!STK.kv.guard()) return;
   const ms = macros();
   const f = await STK.form('Add a scheduled task',
     STK.field('name', 'Name', 'Hourly screenshot') + STK.select('type', 'What to do', [['shot', 'Take a screenshot'], ...(ms.length ? [['macro', 'Run a macro']] : [])], 'shot') +
@@ -82,7 +84,7 @@ async function newSchedule() {
   const list = [...schedules(), { name: f.name.slice(0, 40), type: f.type, macro: f.macro || '', mode: f.mode, everyMin: Number(f.everyMin) || 60, at: f.at || '08:00', enabled: true, serial: '' }];
   try { await STK.post('/schedules', { schedules: list }); await STK.kv.load(); render(); STK.toast('Task added.'); } catch (e) { STK.fail(e); }
 }
-async function saveSchedules(list) { try { await STK.post('/schedules', { schedules: list }); await STK.kv.load(); render(); } catch (e) { STK.fail(e); } }
+async function saveSchedules(list) { if (!STK.kv.guard()) return; try { await STK.post('/schedules', { schedules: list }); await STK.kv.load(); render(); } catch (e) { STK.fail(e); } }
 
 document.addEventListener('click', async e => {
   const t = e.target.closest('#auto-root button'); if (!t) return;

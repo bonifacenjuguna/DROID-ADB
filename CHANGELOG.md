@@ -1,5 +1,33 @@
 # Changelog
 
+## 3.1.0
+Fixes from an independent review of 3.0.0. No new pages.
+
+Saved data
+- The saved-data file (Config\store.json) can no longer be wiped by a bad read. If it cannot be read, nothing is written; the last good copy is kept in store.json.bak and is used automatically.
+- Saving a macro is now one step (two quick saves can no longer overwrite each other).
+- The page refuses to save lists (macros, pins, tags, snippets, games, nicknames) until your saved data has really loaded, so a short list can no longer replace the real one. Edits still waiting are sent when you switch tabs or close the page.
+- The store stays under 1.5 MB, because Windows PowerShell 5.1 cannot read a bigger JSON text back. Import/export checks use the same limit.
+- Import skips lists that are not lists and reports how many items were skipped.
+
+Macros and schedules
+- Stop now works in the middle of a macro, including long waits, not only between repeats. Progress counts correctly across repeats.
+- A daily task is only counted as done once it was really queued, so a phone that is unplugged at 08:00 no longer loses the whole day.
+- A scheduled task does not start again while its previous run is still waiting or running.
+- Removed tasks are forgotten by the scheduler.
+
+Dialogs and pages
+- Pressing Enter in a form, prompt or confirm dialog now saves instead of cancelling.
+- When the phone in use changes by itself (unplugged, another phone takes over), every page clears what it kept for the old phone.
+
+Gallery and requests
+- Gallery picture cache names use SHA-256 (no mixed-up pictures), pictures are written under a temporary name first, and pictures not seen for a week are removed.
+- Gallery delete checks the phone id and takes at most 200 files per request.
+- Request bodies are read with a hard size limit even when the browser sends no length.
+
+Known limits (unchanged)
+- Stop on an ffmpeg conversion or a GIF capture only takes effect when that step ends.
+
 ## 3.0.0
 A big update: the dashboard is regrouped and many new tools were added.
 

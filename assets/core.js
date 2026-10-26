@@ -63,7 +63,7 @@ STK.api = async function api(path, opts = {}) {
     else { headers['Content-Type'] = 'application/json'; body = JSON.stringify(opts.body || {}); }
   }
   let res;
-  try { res = await fetch('/api' + path, { method, headers, body, signal: ctl.signal, cache: 'no-store' }); }
+  try { res = await fetch('/api' + path, { method, headers, body, signal: ctl.signal, cache: 'no-store', keepalive: !!opts.keepalive }); }
   catch (e) {
     clearTimeout(timer);
     const err = new Error(e.name === 'AbortError' ? 'The backend took too long to answer. If the phone is busy, try again.' : 'Cannot reach the backend right now.');
@@ -308,7 +308,10 @@ function applyState(d) {
   state.pollSeconds = d.pollSeconds || state.pollSeconds;
   const ready = STK.readyDevices();
   const saved = STK.store.get('device', '');
+  const wasSelected = state.selected;
   if (!ready.find(x => x.id === state.selected)) state.selected = (ready.find(x => x.id === saved) || ready[0] || {}).id || '';
+  // The phone in use changed on its own (unplugged, or another one took over): clear what each page kept for the old one.
+  if (wasSelected && state.selected !== wasSelected) STK.emit('device-changed');
   $('#rail-version').textContent = 'v' + String(d.version).split('.').slice(0, 2).join('.');
   handleEvents(d);
   const cur = STK.current();

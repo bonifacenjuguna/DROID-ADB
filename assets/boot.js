@@ -18,7 +18,7 @@ document.addEventListener('click', e => {
 $('#text-close').addEventListener('click', () => $('#dlg-text').close());
 $('#text-copy').addEventListener('click', () => navigator.clipboard.writeText($('#text-body').textContent).then(() => STK.toast('Copied.'), () => STK.toast('Copy was blocked by the browser.', 'bad')));
 $$('dialog').forEach(d => d.addEventListener('mousedown', e => { if (e.target === d && d.id !== 'dlg-confirm' && d.id !== 'dlg-prompt') d.close(); }));
-$('#countdown-cancel') && 0;
+$$('dialog button[value="cancel"]').forEach(btn => btn.addEventListener('click', () => btn.closest('dialog').close('cancel')));
 
 /* theme */
 const ORDER = ['auto', 'dark', 'light'];

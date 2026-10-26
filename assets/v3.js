@@ -4,22 +4,52 @@
 const { $, $$, esc, icon, bytes, state } = STK;
 
 /* ---------- saved data kept by the backend (Config\store.json) ---------- */
-const kvData = {}, kvTimers = {};
+const kvData = {}, kvTimers = {}, kvPending = {};
+let kvTries = 0, kvNext = 0, kvRun = null;
+function kvSend(key) {
+  clearTimeout(kvTimers[key]); delete kvTimers[key];
+  if (!(key in kvPending)) return Promise.resolve();
+  const value = kvPending[key];
+  let small = true; try { small = JSON.stringify(value).length < 60000; } catch (e) {}
+  return STK.post('/store', { key, value }, { keepalive: small }).then(() => { if (kvPending[key] === value) delete kvPending[key]; }).catch(e => { STK.fail(e); });
+}
 STK.kv = {
   loaded: false,
+  /* True once the saved data was really read. Until then nothing may be written, or a short list built
+     from "nothing loaded yet" would replace the real one. */
+  ready() { return STK.kv.loaded === true; },
+  guard() { if (STK.kv.ready()) return true; STK.toast('Your saved data is still loading. Try again in a moment.', 'bad'); if (!STK.kv.loaded) STK.kv.load(); return false; },
   get(key, d) { const v = kvData[key]; return v === undefined || v === null ? d : v; },
   set(key, value) {
-    kvData[key] = value;
+    if (!STK.kv.guard()) return false;
+    kvData[key] = value; kvPending[key] = value;
     clearTimeout(kvTimers[key]);
-    kvTimers[key] = setTimeout(() => STK.post('/store', { key, value }).catch(STK.fail), 250);
+    kvTimers[key] = setTimeout(() => kvSend(key), 250);
     STK.emit('kv', key);
+    return true;
   },
-  async load() {
-    try { const r = await STK.api('/store'); Object.assign(kvData, r.store || {}); STK.kv.loaded = true; applyNicks(); STK.emit('kv', '*'); } catch (e) { /* the dashboard works without it */ }
-  }
+  flush() { return Promise.all(Object.keys(kvPending).map(kvSend)); },
+  load() { if (!kvRun) kvRun = kvLoad().finally(() => { kvRun = null; }); return kvRun; }
 };
+async function kvLoad() {
+  {
+    const had = STK.kv.loaded === true;
+    if (!had) STK.kv.loaded = 'loading';
+    try {
+      const r = await STK.api('/store'), fresh = r.store || {};
+      for (const k of Object.keys(kvData)) if (!(k in kvPending)) delete kvData[k];   /* keep only what the backend has, except edits not sent yet */
+      for (const k of Object.keys(fresh)) if (!(k in kvPending)) kvData[k] = fresh[k];
+      STK.kv.loaded = true; kvTries = 0; applyNicks(); STK.emit('kv', '*');
+    } catch (e) {
+      if (!had) { STK.kv.loaded = false; kvTries++; kvNext = Date.now() + Math.min(60000, 2000 * kvTries); }   /* try again a little later */
+    }
+  }
+}
+/* send edits that are still waiting when the page is hidden or closed */
+document.addEventListener('visibilitychange', () => { if (document.hidden) STK.kv.flush(); });
+window.addEventListener('pagehide', () => { STK.kv.flush(); });
 function applyNicks() { const n = kvData.nicknames || {}; for (const id of Object.keys(n)) STK.store.set('nick:' + id, n[id]); }
-STK.saveNick = (id, name) => { const n = { ...(kvData.nicknames || {}) }; if (name) n[id] = name; else delete n[id]; STK.kv.set('nicknames', n); };
+STK.saveNick = (id, name) => { if (!STK.kv.guard()) return; const n = { ...(kvData.nicknames || {}) }; if (name) n[id] = name; else delete n[id]; STK.kv.set('nicknames', n); };
 STK.nickFor = id => STK.store.get('nick:' + id, '');
 
 /* ---------- small form dialog: STK.form(title, html, okLabel) -> object or null ---------- */
@@ -173,7 +203,7 @@ STK.demoToggle = async function () {
   try { const cur = await STK.api('/demo?id=' + encodeURIComponent(id)); const r = await STK.post('/demo', { serial: id, on: !cur.on }, { timeout: 40000 }); STK.toast(r.message); STK.emit('demo', r.on); } catch (e) { STK.fail(e); }
 };
 
-STK.on('state', () => { if (!STK.kv.loaded && state.online) { STK.kv.loaded = 'loading'; STK.kv.load(); } });
+STK.on('state', () => { if (!STK.kv.loaded && state.online && Date.now() >= kvNext) STK.kv.load(); });
 STK.on('offline', () => { if (STK.kv.loaded === 'loading') STK.kv.loaded = false; });
 jobsRefresh();
 })();

@@ -32,7 +32,7 @@ document.addEventListener('click', async e => {
   const t = e.target.closest('#dev-x button'); if (!t) return;
   if (t.dataset.wall) { state.selected = t.dataset.wall; STK.store.set('device', state.selected); STK.emit('device-changed'); if (STK.renderConsole) STK.renderConsole(); STK.go('console'); return; }
   if (t.dataset.wconnect) return STK.busy(t, async () => { try { await STK.post('/wifi', { action: 'connect', address: t.dataset.wconnect }, { timeout: 30000 }); STK.toast('Connected.'); STK.pollNow(); } catch (er) { STK.fail(er); } });
-  if (t.dataset.wforget) { try { await STK.post('/wifi-hosts', { hosts: STK.kv.get('wifihosts', []).filter(h => h !== t.dataset.wforget) }); await STK.kv.load(); render(); } catch (er) { STK.fail(er); } }
+  if (t.dataset.wforget) { if (!STK.kv.guard()) return; try { await STK.post('/wifi-hosts', { hosts: STK.kv.get('wifihosts', []).filter(h => h !== t.dataset.wforget) }); await STK.kv.load(); render(); } catch (er) { STK.fail(er); } }
 });
 STK.on('view', v => { if (v === 'device') { render(); start(); } else stop(); });
 STK.on('kv', k => { if (k === 'wifihosts' || k === '*' || k === 'nicknames') render(); });

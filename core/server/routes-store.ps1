@@ -4,15 +4,23 @@
 # ---------------------------------------------------------------------------
 # Store: small named JSON values kept in Config\store.json (nicknames, pins, tags, macros, ...)
 # ---------------------------------------------------------------------------
+# Reads one store file. Returns $null when it exists but cannot be understood.
+function Read-StoreFile {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return @{} }
+    $raw = [IO.File]::ReadAllText($Path)
+    if ([string]::IsNullOrWhiteSpace($raw)) { return @{} }
+    try { $h = ConvertTo-Hash ($raw | ConvertFrom-Json) } catch { return $null }
+    if ($h -isnot [hashtable]) { return $null }
+    return $h
+}
+
+# For reading. A damaged file falls back to the last good copy (store.json.bak), or to nothing.
 function Get-StoreAll {
-    $h = @{}
-    try {
-        if (Test-Path -LiteralPath $StoreFile) {
-            $raw = [IO.File]::ReadAllText($StoreFile)
-            if (-not [string]::IsNullOrWhiteSpace($raw)) { $h = ConvertTo-Hash ($raw | ConvertFrom-Json) }
-        }
-    } catch {}
-    if ($h -isnot [hashtable]) { $h = @{} }
+    $h = $null
+    try { $h = Read-StoreFile $StoreFile } catch {}
+    if ($null -eq $h) { try { $h = Read-StoreFile ($StoreFile + '.bak') } catch {} }
+    if ($null -eq $h) { $h = @{} }
     return $h
 }
 
@@ -21,18 +29,31 @@ function Test-StoreKey {
     if ($Key -notmatch '^[a-z][a-z0-9_]{0,30}$') { Fail 'That store name is not valid.' }
 }
 
+# Larger values are refused: Windows PowerShell 5.1 cannot read a JSON text over 2 MB back in.
+$StoreMaxChars = 1500000
+
 function Set-StoreValue {
     param([string]$Key, $Value)
     Test-StoreKey $Key
     Use-Lock {
-        $all = Get-StoreAll
+        # Never write on top of a file we could not read, or the saved data would be wiped.
+        $all = $null
+        try { $all = Read-StoreFile $StoreFile } catch { $all = $null }
+        $good = $true
+        if ($null -eq $all) {
+            $good = $false
+            try { $all = Read-StoreFile ($StoreFile + '.bak') } catch { $all = $null }
+            if ($null -eq $all) { Fail 'The saved data file could not be read, so nothing was changed. Close the toolkit and check Config\store.json (a copy may be in store.json.bak).' }
+            try { Copy-Item -LiteralPath $StoreFile -Destination ($StoreFile + '.damaged') -Force } catch {}
+        }
         if ($null -eq $Value) { [void]$all.Remove($Key) } else {
             $json = ConvertTo-Json -InputObject $Value -Depth 8 -Compress
             if ($json.Length -gt 400000) { Fail 'That is too much data to keep in one place.' }
             $all[$Key] = $Value
         }
         $text = ConvertTo-Json -InputObject $all -Depth 9
-        if ($text.Length -gt 3000000) { Fail 'The toolkit store is full. Remove some saved items.' }
+        if ($text.Length -gt $StoreMaxChars) { Fail 'The toolkit store is full. Remove some saved items.' }
+        if ($good -and (Test-Path -LiteralPath $StoreFile)) { try { Copy-Item -LiteralPath $StoreFile -Destination ($StoreFile + '.bak') -Force } catch {} }
         Write-TextAtomic $StoreFile $text
     }
 }
@@ -54,7 +75,7 @@ $Routes['GET /api/store'] = { param($Ctx)
     Send-Json $Ctx @{ key = $key; value = $v }
 }
 $Routes['POST /api/store'] = { param($Ctx)
-    $body = Read-JsonBody $Ctx
+    $body = Read-JsonBody $Ctx 524288
     $key = [string](Get-Prop $body 'key' '')
     $value = $null
     if ($body.ContainsKey('value')) { $value = $body['value'] }
@@ -305,7 +326,7 @@ function Test-MacroSteps {
 }
 
 function Invoke-MacroSteps {
-    param([string]$Serial, $Steps, [string]$JobId = '')
+    param([string]$Serial, $Steps, [string]$JobId = '', [long]$Base = 0)
     $n = 0
     foreach ($st in $Steps) {
         if ($JobId -and (Test-JobCancel $JobId)) { return $false }
@@ -320,7 +341,7 @@ function Invoke-MacroSteps {
             'open' { $r = Invoke-DeviceShell $Serial ('monkey -p ' + $st.package + ' -c android.intent.category.LAUNCHER 1') 20 }
         }
         if ($r.code -ne 0) { Fail ('Step ' + $n + ' (' + $st.t + ') failed: ' + ($r.err + $r.out).Trim()) }
-        if ($JobId) { Set-Job $JobId @{ done = [long]$n } }
+        if ($JobId) { Set-Job $JobId @{ done = [long]($Base + $n) } }
     }
     return $true
 }
@@ -335,9 +356,10 @@ function Invoke-MacroJob {
     if ($times -gt 100) { $times = 100 }
     Set-Job $Id @{ state = 'running'; total = [long]($steps.Count * $times); message = 'Running' }
     for ($i = 1; $i -le $times; $i++) {
-        $ok = Invoke-MacroSteps ([string]$p.serial) $steps ''
-        Set-Job $Id @{ done = [long]($steps.Count * $i); message = ('Run ' + $i + ' of ' + $times) }
-        if (Test-JobCancel $Id) { Set-Job $Id @{ state = 'cancelled'; message = 'Stopped'; finished = (Get-UtcNow) }; return }
+        Set-Job $Id @{ message = ('Run ' + $i + ' of ' + $times) }
+        $ok = Invoke-MacroSteps ([string]$p.serial) $steps $Id ([long]($steps.Count * ($i - 1)))
+        if (-not $ok -or (Test-JobCancel $Id)) { Set-Job $Id @{ state = 'cancelled'; message = 'Stopped'; finished = (Get-UtcNow) }; return }
+        Set-Job $Id @{ done = [long]($steps.Count * $i) }
     }
     Set-Job $Id @{ state = 'done'; message = 'Finished'; finished = (Get-UtcNow) }
 }
@@ -392,38 +414,53 @@ while (-not $Shared.stop) {
     try {
         $list = @(Get-StoreValue 'schedules' @())
         $now = Get-Date
+        $seenIds = @{}
         foreach ($sc in $list) {
-            if (-not [bool](Get-Prop $sc 'enabled' $true)) { continue }
             $id = [string](Get-Prop $sc 'id' '')
             if ($id -eq '') { continue }
+            $seenIds[$id] = $true
+            if (-not [bool](Get-Prop $sc 'enabled' $true)) { [void]$last.Remove($id); continue }
             $due = $false
+            $ranKey = ''
             $mode = [string](Get-Prop $sc 'mode' 'every')
             if ($mode -eq 'daily') {
                 $at = [string](Get-Prop $sc 'at' '')
                 if ($at -match '^(\d{1,2}):(\d{2})$') {
                     $target = Get-Date -Hour ([int]$Matches[1]) -Minute ([int]$Matches[2]) -Second 0
                     $key = $id + $now.ToString('yyyyMMdd')
-                    if ($now -ge $target -and $now -lt $target.AddMinutes(10) -and -not $ran.ContainsKey($key)) { $due = $true; $ran[$key] = $true }
+                    if ($now -ge $target -and $now -lt $target.AddMinutes(10) -and -not $ran.ContainsKey($key)) { $due = $true; $ranKey = $key }
                 }
             } else {
                 $every = [int](Get-Prop $sc 'everyMin' 0)
                 if ($every -lt 1) { continue }
                 if (-not $last.ContainsKey($id)) { $last[$id] = $now }
-                if (($now - $last[$id]).TotalMinutes -ge $every) { $due = $true; $last[$id] = $now }
+                if (($now - $last[$id]).TotalMinutes -ge $every) { $due = $true }
             }
             if (-not $due) { continue }
+            # Only count the run once it was really queued, so a phone that is unplugged at that moment does not use up the run for that day.
             $serial = [string](Get-Prop $sc 'serial' '')
             $ready = @($Shared.devices | Where-Object { $null -ne $_ -and $_.state -eq 'device' })
             if ($serial -eq '' -and $ready.Count -gt 0) { $serial = [string]$ready[0].id }
             if (-not ($ready | Where-Object { $_.id -eq $serial })) { continue }
+            # Do not pile up: skip while the previous run of this task is still waiting or running.
+            $busy = @(Use-Lock { @($Shared.jobs.Values | Where-Object { $_.params -is [hashtable] -and [string]$_.params.schedule -eq $id -and $_.state -in @('queued', 'running') }) })
+            if ($busy.Count -gt 0) { continue }
             try {
                 $type = [string](Get-Prop $sc 'type' 'shot')
+                $queued = $false
                 if ($type -eq 'macro') {
                     $macro = @(Get-StoreValue 'macros' @()) | Where-Object { [string](Get-Prop $_ 'id' '') -eq [string](Get-Prop $sc 'macro' '') } | Select-Object -First 1
-                    if ($macro) { [void](New-Job 'macro' ('Scheduled: ' + [string](Get-Prop $sc 'name' 'macro')) @{ serial = $serial; steps = (Test-MacroSteps (Get-Prop $macro 'steps' @())); repeat = 1 }) }
-                } else { [void](New-Job 'shot' ('Scheduled screenshot') @{ serial = $serial }) }
-            } catch { Write-BackendLog ('Schedule: ' + $_.Exception.Message) }
+                    if ($macro) { [void](New-Job 'macro' ('Scheduled: ' + [string](Get-Prop $sc 'name' 'macro')) @{ serial = $serial; steps = (Test-MacroSteps (Get-Prop $macro 'steps' @())); repeat = 1; schedule = $id }); $queued = $true }
+                } else { [void](New-Job 'shot' ('Scheduled screenshot') @{ serial = $serial; schedule = $id }); $queued = $true }
+                if ($queued) {
+                    if ($mode -eq 'daily') { $ran[$ranKey] = $true } else { $last[$id] = $now }
+                }
+            } catch {
+                Write-BackendLog ('Schedule: ' + $_.Exception.Message)
+                if ($mode -eq 'daily') { $ran[$ranKey] = $true } else { $last[$id] = $now }
+            }
         }
+        foreach ($k in @($last.Keys)) { if (-not $seenIds.ContainsKey($k)) { [void]$last.Remove($k) } }
         if ($ran.Count -gt 200) { $ran.Clear() }
     } catch { Write-BackendLog ('Scheduler: ' + $_.Exception.Message) }
     for ($i = 0; $i -lt 100 -and -not $Shared.stop; $i++) { Start-Sleep -Milliseconds 100 }
@@ -522,11 +559,13 @@ $Routes['POST /api/macros'] = { param($Ctx)
     $steps = Test-MacroSteps (Get-Prop $body 'steps' @())
     $id = [string](Get-Prop $body 'id' '')
     if ($id -notmatch '^[a-z0-9]{4,12}$') { $id = [guid]::NewGuid().ToString('N').Substring(0, 8) }
-    $list = @(Get-StoreValue 'macros' @())
-    $keep = @($list | Where-Object { [string](Get-Prop $_ 'id' '') -ne $id })
-    if ($keep.Count -ge 60) { Fail 'You can keep up to 60 macros.' }
-    $keep += , @{ id = $id; name = $name; steps = $steps }
-    Set-StoreValue 'macros' $keep
+    Use-Lock {
+        $list = @(Get-StoreValue 'macros' @())
+        $keep = @($list | Where-Object { [string](Get-Prop $_ 'id' '') -ne $id })
+        if ($keep.Count -ge 60) { Fail 'You can keep up to 60 macros.' }
+        $keep += , @{ id = $id; name = $name; steps = $steps }
+        Set-StoreValue 'macros' $keep
+    }
     Send-Json $Ctx @{ ok = $true; id = $id }
 }
 
@@ -559,10 +598,9 @@ $Routes['GET /api/export'] = { param($Ctx)
 }
 
 $Routes['POST /api/import'] = { param($Ctx)
-    if ($Ctx.Request.ContentLength64 -gt 262144) { Fail 'That file is too large to be a toolkit backup.' }
-    $body = Read-JsonBody $Ctx
+    $body = Read-JsonBody $Ctx 1900000
     if ([string](Get-Prop $body 'toolkit' '') -ne 'scrcpy-toolkit') { Fail 'That file is not a Scrcpy Toolkit backup.' }
-    $counts = @{ settings = 0; profiles = 0; store = 0 }
+    $counts = @{ settings = 0; profiles = 0; store = 0; skipped = 0 }
     $st = Get-Prop $body 'settings' $null
     if ($st -is [hashtable]) {
         $patch = @{}
@@ -582,7 +620,11 @@ $Routes['POST /api/import'] = { param($Ctx)
     }
     $store = Get-Prop $body 'store' $null
     if ($store -is [hashtable]) {
-        foreach ($k in $store.Keys) { try { Set-StoreValue ([string]$k) $store[$k]; $counts.store++ } catch {} }
+        foreach ($k in @($store.Keys)) {
+            # Lists must stay lists, so a damaged backup cannot turn saved macros or tasks into something else.
+            if ([string]$k -in @('macros', 'schedules', 'snippets', 'pins', 'games', 'intents', 'wifihosts') -and $store[$k] -isnot [array]) { $counts.skipped++; continue }
+            try { Set-StoreValue ([string]$k) $store[$k]; $counts.store++ } catch { $counts.skipped++ }
+        }
     }
     Add-Activity 'system' 'Imported a toolkit backup.'
     Send-Json $Ctx (@{ ok = $true; counts = $counts })

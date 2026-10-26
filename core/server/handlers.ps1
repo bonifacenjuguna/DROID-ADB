@@ -106,11 +106,20 @@ function Get-Query {
 }
 
 function Read-JsonBody {
-    param($Ctx)
+    param($Ctx, [int]$MaxBytes = 262144)
     $req = $Ctx.Request
-    if ($req.ContentLength64 -gt 262144) { Fail 'Request is too large.' }
-    $reader = New-Object IO.StreamReader($req.InputStream, [Text.Encoding]::UTF8)
-    try { $raw = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    if ($req.ContentLength64 -gt $MaxBytes) { Fail 'Request is too large.' }
+    # Read in pieces so a body sent without a length cannot grow past the limit.
+    $ms = New-Object IO.MemoryStream
+    try {
+        $buf = New-Object byte[] 16384
+        $inp = $req.InputStream
+        while (($n = $inp.Read($buf, 0, $buf.Length)) -gt 0) {
+            $ms.Write($buf, 0, $n)
+            if ($ms.Length -gt $MaxBytes) { Fail 'Request is too large.' }
+        }
+        $raw = [Text.Encoding]::UTF8.GetString($ms.ToArray()).TrimStart([char]0xFEFF)
+    } finally { $ms.Dispose() }
     if ([string]::IsNullOrWhiteSpace($raw)) { return @{} }
     try { $obj = $raw | ConvertFrom-Json } catch { Fail 'The request was not valid JSON.' }
     $h = ConvertTo-Hash $obj

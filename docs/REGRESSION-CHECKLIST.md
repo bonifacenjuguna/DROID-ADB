@@ -108,3 +108,12 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] ffmpeg trim, shrink and GIF work with ffmpeg in core\ffmpeg.
 - [ ] Auto reconnect: switch a phone to Wi-Fi, unplug, it comes back by itself.
 - [ ] Mobile layout (narrow window): bottom bar, More sheet, Library rows.
+
+## Added in 3.1.0 (real PC, Windows)
+- [ ] Start the toolkit, add a macro, close and reopen: it is still there. Open Config\store.json.bak after the second save.
+- [ ] Damage Config\store.json on purpose (add junk text), restart, try saving a pin: you get a clear message and the file is not replaced; the data from store.json.bak still shows.
+- [ ] Record a macro with a 20 second Wait, press Stop in Background jobs: it stops within about a second.
+- [ ] Schedule a daily task for 2 minutes ahead with the phone unplugged, plug it in within 10 minutes: it runs once.
+- [ ] Press Enter in Add a snippet, Name this macro and a Confirm dialog: each one saves/confirms.
+- [ ] Unplug the phone in use while a second phone is connected: Monitor, Phone tools and the gallery switch to the other phone.
+- [ ] Gallery thumbnails still show; a file in Config\..\Logs\thumbs has a 32 character name.
