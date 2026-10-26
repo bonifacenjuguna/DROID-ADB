@@ -118,11 +118,11 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Unplug the phone in use while a second phone is connected: Monitor, Phone tools and the gallery switch to the other phone.
 - [ ] Gallery thumbnails still show; a file in Config\..\Logs\thumbs has a 32 character name.
 
-## Added in 3.2.0 (real PC and phone, Windows)
-- [ ] Monitor > Usage: Screen time today lists apps with times and no "being used by another process" error. Press Reload a few times.
-- [ ] Usage: Battery use by app shows mAh after the phone has been unplugged for a while; while it sits at 100% on the charger it shows the explanation and a labelled estimate.
-- [ ] Monitor > Live: click each card. The big graph opens, range buttons work, moving over it shows red dotted guides with tags, Esc closes it.
-- [ ] Leave the dashboard on Console for 5 minutes, then open a big graph with 10 min: there are points from the time you were away.
-- [ ] Notifications: a chat app with several messages from one person shows one row, an "N earlier" button and an "N new" badge.
-- [ ] Console: the phone preview is at the top, details below. The pointer over the preview is small.
-- [ ] Battery ring: no white flashing while charging; colour is green when high and red when low (unplug the phone below 20%).
+## Added in 3.2.0 (real PC, Windows, real phone)
+- [ ] Monitor > Usage: open it five times in a row; no "being used by another process" error. Screen time and battery use list apps, or say plainly that the phone does not share them.
+- [ ] Monitor > Live: click each card; the big graph opens. Wait a few minutes, switch between 5 min and 24 hours, reload the page: history is still there.
+- [ ] Over the big graph: red dotted guide lines follow the mouse and the values on the axes match the tooltip. Esc closes.
+- [ ] Alerts: with an app that has more than two notifications, "Show N earlier" opens and closes the older ones.
+- [ ] Console: the phone preview starts near the top of its card, beside the details; the tap cursor looks small.
+- [ ] Battery ring: no white flashing while charging; at 15% or less it is red; at 100% it is green; bubbles rise inside the fill only.
+

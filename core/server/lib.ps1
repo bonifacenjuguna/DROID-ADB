@@ -398,22 +398,15 @@ function Resolve-Target {
     return ''
 }
 
-# Reads a text file even when another process (Defender, the adb helper) still has it open. Retries for about 4 seconds.
-function Read-TextShared {
+# Reads a text file even while another process (adb daemon, antivirus) still holds it open. Retries briefly.
+function Read-SharedText {
     param([string]$Path)
     $last = $null
-    for ($i = 0; $i -lt 40; $i++) {
-        $fs = $null
+    for ($i = 0; $i -lt 12; $i++) {
         try {
             $fs = New-Object IO.FileStream($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
-            $sr = New-Object IO.StreamReader($fs, (New-Object Text.UTF8Encoding($false)))
-            return [string]$sr.ReadToEnd()
-        } catch [IO.IOException] {
-            $last = $_
-            Start-Sleep -Milliseconds 100
-        } finally {
-            if ($fs) { $fs.Dispose() }
-        }
+            try { $sr = New-Object IO.StreamReader($fs, [Text.Encoding]::UTF8, $true); return [string]$sr.ReadToEnd() } finally { $fs.Dispose() }
+        } catch { $last = $_; Start-Sleep -Milliseconds (60 + 40 * $i) }
     }
     throw $last
 }
@@ -435,11 +428,11 @@ function Invoke-Native {
         $p.WaitForExit()
         $o = ''
         $e = ''
-        if (Test-Path -LiteralPath $stdoutFile) { $o = Read-TextShared $stdoutFile }
-        if (Test-Path -LiteralPath $stderrFile) { $e = Read-TextShared $stderrFile }
+        if (Test-Path -LiteralPath $stdoutFile) { $o = Read-SharedText $stdoutFile }
+        if (Test-Path -LiteralPath $stderrFile) { $e = Read-SharedText $stderrFile }
         return @{ code = [int]$p.ExitCode; out = $o; err = $e }
     } finally {
-        Remove-Item -LiteralPath $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
+        foreach ($f in @($stdoutFile, $stderrFile)) { try { Remove-Item -LiteralPath $f -Force -ErrorAction Stop } catch { try { Start-Sleep -Milliseconds 150; Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue } catch {} } }
     }
 }
 

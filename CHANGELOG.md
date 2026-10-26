@@ -1,30 +1,27 @@
 # Changelog
 
 ## 3.2.0
-Usage fixes, a calmer battery ring, grouped notifications and big live graphs.
+Fixes and polish from real-phone testing. No new pages.
 
-Monitor > Usage
-- Fixed the "The process cannot access the file ... stk-out-....txt because it is being used by another process" error that blanked Screen time. The backend now reads adb output with shared access and retries for a few seconds (antivirus or the adb helper can still hold the file for a moment).
-- Screen time now reads the newest day only, not the largest value from any day, so it really is "today".
-- Battery use by app: the phone's own search command used a pattern that Android's grep does not understand; it is fixed. When Android has no numbers (it erases them while the phone sits at 100% on the charger) the card now says so and shows a clearly labelled estimate from screen time. Unplug for a while and press Reload to get measured mAh.
-- Each card has its own Reload button. If a phone sends something the page cannot read, the message now says how many lines came back.
-
-Monitor > Live
-- Click Processor, Memory, Network or Temperature to open a big graph, the same way the phone preview opens big. Choose 2 min, 10 min, 1 hour, 4 hours or All.
-- Move or drag over the big graph for red dotted guide lines (a vertical one that snaps to the nearest reading and a horizontal one that follows the pointer) with value and time tags, like a trading chart. The exact values are shown above the graph.
-- Samples are now kept with their time (up to about 7 hours; older ones are thinned out). While another page is open the dashboard takes one slow sample every 30 s so the long graphs have no big gap. History is kept only while the dashboard page stays open.
-- The "phone is hot" warning also works when you are on another page.
-
-Console
-- The phone preview sits at the top of the card with the name, battery, details and buttons below it.
-- The pointer over the preview is about half the old size.
-- Battery ring: no more white flashing. The white streak, white bubbles and pulsing glow are gone; white is only the empty part of the ring. The colour follows the charge: green when full, through lime and amber to red when low, with a soft two-tone gradient that changes smoothly. The header battery uses the same colours.
+Monitor
+- Fixed: Usage ("Screen time today", "Battery use by app") showed "The process cannot access the file ...stk-out-....txt because it is being used by another process". adb can keep its temporary output file open for a moment, and the backend now reads it in shared mode and retries briefly instead of failing. This also protects every other page that talks to the phone.
+- Click or press Enter on any card (Processor, Memory, Network, Temperature) to open a large graph that pops up like the phone preview. Choose 5 min, 30 min, 1 hour, 6 hours or 24 hours.
+- Longer history: samples are kept for 24 hours (older than 1 hour are averaged into 30 second steps) and are saved in this browser, so the graph survives a page reload.
+- Trading-style guide: moving over the big graph draws red dotted horizontal and vertical lines, snaps to the nearest sample, and shows the exact value and time on the axes and in a small tooltip. Works with touch too. Esc closes.
+- Min / average / max are shown under each big graph.
 
 Notifications
-- Each app lists one line per chat (sender). Only the newest message shows; a button such as "3 earlier" opens the rest. The phone's own "5 new messages" line becomes a "5 new" badge. After three chats an app shows "N more chats".
+- When one app has more than two notifications, the two newest show and the rest fold under "Show N earlier". The count is shown next to the app name.
+- Earlier notifications are remembered on this PC (up to 40 per app, kept 3 days) so ones the phone has replaced with a summary such as "5 new messages" can still be read. They are marked "no longer on the phone".
+
+Console
+- The phone preview now sits higher: top spacing of the card is reduced and the preview and the details beside it are aligned to the top.
+- The tap cursor over the preview is about 40% smaller.
+- Battery ring: removed the white flashing travelling dash and the pulsing glow. White now only shows in the unfilled part of the ring. The colour follows the level smoothly (green when healthy, through amber, to red when low) with a soft gradient on the ring and the liquid, more bubbles that rise only inside the filled part, and calmer waves. The small battery in the header uses the same colour.
 
 Known limits
-- The Usage and notification changes read real phone output and were tested against fake adb output only. See docs/REGRESSION-CHECKLIST.md.
+- Screen time depends on what the phone shares through adb (dumpsys usagestats). If the phone hides it, the card says so instead of showing an error.
+- Notification history starts from the moment the Alerts page or "Mirror new ones" is first running; the phone does not give a past list.
 
 ## 3.1.0
 Fixes from an independent review of 3.0.0. No new pages.

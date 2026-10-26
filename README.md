@@ -1,4 +1,4 @@
-# Scrcpy Toolkit 3.1
+# Scrcpy Toolkit 3.2
 
 A portable Windows control center for scrcpy: mirror, record, screenshot, remote-control and manage your Android phone from a local dashboard.
 
@@ -11,9 +11,13 @@ Helper project around scrcpy v5.0.1. The scrcpy binaries in `core/scrcpy/` are u
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
 
+## What changed in 3.2
+
+3.2 fixes the Usage tab error (a temporary-file lock), adds enlargeable Monitor graphs with 24 hour history and a trading-style guide line, folds earlier notifications, moves the phone preview higher, shrinks the tap cursor and rebuilds the battery ring animation. See CHANGELOG.md.
+
 ## What changed in 3.1
 
-3.2 fixes Monitor > Usage and adds big live graphs, grouped notifications and a calmer battery ring (see CHANGELOG.md). 3.1 is a safety and fixes release on top of 3.0 (saved data cannot be wiped, macros stop when asked, scheduled tasks no longer get lost, Enter works in dialogs). See CHANGELOG.md.
+3.1 is a safety and fixes release on top of 3.0 (saved data cannot be wiped, macros stop when asked, scheduled tasks no longer get lost, Enter works in dialogs). See CHANGELOG.md.
 
 ## What changed in 3.0
 - Grouped navigation, new Studio, Automate, Monitor and Alerts pages, phone gallery and backups, macros and schedules, background jobs, inspector, insights, accent colours and more. See CHANGELOG.md.
