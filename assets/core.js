@@ -247,10 +247,15 @@ function setConn() {
   chip.className = cls; chip.innerHTML = `<i class="dot"></i><b>${label}</b>`;
   dot.className = dcls;
 }
+STK.FRONT_VERSION = '3.3.0';
+const stale = () => !!(state.online && state.data && state.data.version && state.data.version !== STK.FRONT_VERSION);
 function setBanner() {
   const b = $('#banner');
   let html = '', cls = 'banner';
-  if (!state.online && state.failures >= 3) {
+  if (stale()) {
+    cls += ' stale';
+    html = `${STK.icon('alert')}<p><b>The background service is still the old version (${String(state.data.version)}).</b> The page is new (${STK.FRONT_VERSION}) but the fixes run inside the service. Restart it once to load them. Running mirror windows keep going.</p><button class="btn sm primary" id="banner-stale" type="button">Restart service now</button>`;
+  } else if (!state.online && state.failures >= 3) {
     cls += ' bad';
     html = `${STK.icon('alert')}<p><b>The backend is not answering.</b> It restarts itself automatically, so this usually clears in a few seconds. Your controls stay as they were and the page keeps retrying. If it stays like this, run <b>Launch.bat</b> again.</p><button class="btn sm" id="banner-retry" type="button">Retry now</button>`;
   } else if (state.online && state.devicesAge > 30 && state.devices.length) {
@@ -268,6 +273,7 @@ document.addEventListener('click', e => {
   if (t.id === 'banner-retry') { pollNow(); }
   if (t.id === 'banner-adb') STK.busy(t, async () => { try { await STK.post('/wifi', { action: 'restart' }, { timeout: 40000 }); STK.toast('ADB was restarted.'); pollNow(); } catch (er) { STK.fail(er); } });
   if (t.id === 'banner-restart') STK.restartBackend(t);
+  if (t.id === 'banner-stale') STK.busy(t, async () => { try { await STK.post('/backend', { action: 'restart' }); STK.toast('Restarting the service...'); state.failures = 0; } catch (er) { STK.fail(er); } });
 });
 
 STK.restartBackend = async function (btn) {
@@ -313,6 +319,14 @@ function applyState(d) {
   // The phone in use changed on its own (unplugged, or another one took over): clear what each page kept for the old one.
   if (wasSelected && state.selected !== wasSelected) STK.emit('device-changed');
   $('#rail-version').textContent = 'v' + String(d.version).split('.').slice(0, 2).join('.');
+  if (stale()) {
+    setBanner();
+    let tried = false; try { tried = sessionStorage.getItem('stk-autorestart') === String(d.version); } catch (e) { tried = true; }
+    if (!tried && !(d.sessions || []).length) {
+      try { sessionStorage.setItem('stk-autorestart', String(d.version)); } catch (e) { /* ignore */ }
+      STK.post('/backend', { action: 'restart' }).then(() => { STK.toast('Updating the background service to ' + STK.FRONT_VERSION + '...'); state.failures = 0; }, () => {});
+    }
+  } else if ($('#banner') && $('#banner').classList.contains('stale')) setBanner();
   handleEvents(d);
   const cur = STK.current();
   if (cur && (!state.infoAt[cur.id] || Date.now() - state.infoAt[cur.id] > 45000)) STK.loadInfo(cur.id);

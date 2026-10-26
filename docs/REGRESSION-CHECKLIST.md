@@ -126,3 +126,9 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Console: the phone preview starts near the top of its card, beside the details; the tap cursor looks small.
 - [ ] Battery ring: no white flashing while charging; at 15% or less it is red; at 100% it is green; bubbles rise inside the fill only.
 
+## Added in 3.3.0 (real PC, Windows, real phone)
+- [ ] Copy 3.3 over an older folder and only refresh the browser: a banner offers "Restart service now" (or the service restarts by itself) and the banner disappears afterwards. Rail shows v3.3.
+- [ ] Monitor > Usage: open it ten times quickly; no "being used by another process" error; Screen time lists apps for today.
+- [ ] Alerts: a chat with several unread messages shows "Show N earlier messages"; opening it lists them with sender and time.
+- [ ] A notification the phone gives no text for shows the grey explanation line.
+

@@ -1,4 +1,4 @@
-# Scrcpy Toolkit 3.2
+# Scrcpy Toolkit 3.3
 
 A portable Windows control center for scrcpy: mirror, record, screenshot, remote-control and manage your Android phone from a local dashboard.
 
@@ -10,6 +10,10 @@ Helper project around scrcpy v5.0.1. The scrcpy binaries in `core/scrcpy/` are u
 3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
+
+## What changed in 3.3
+
+3.3 fixes the Usage errors for real, shows the individual messages inside a chat notification, and warns you (and restarts the service) when the background service is older than the page. IMPORTANT: after copying a new version over an old one, always run Launch.bat again; the page files update on refresh but the background service only changes when it restarts. See CHANGELOG.md.
 
 ## What changed in 3.2
 

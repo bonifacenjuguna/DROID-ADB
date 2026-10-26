@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.3.0
+Fixes after testing 3.2 on a real phone.
+
+Why 3.2 looked unchanged
+- The page files (HTML, JS, CSS) update as soon as you refresh, but the background service (PowerShell) keeps running the old code until it is restarted. After copying a new version over the old one without running Launch.bat again, Usage kept showing the old "process cannot access the file" error and notifications could not show new data. The page now compares its own version with the service. If they differ it shows a banner with "Restart service now", and when no mirror or recording is running it restarts the service once by itself. Launch.bat also always replaces the old service.
+
+Monitor
+- Usage: the lock fix (shared read with retries) is now in the version that gets loaded. Screen time is now worked out from today's foreground/background events (more reliable on Android 13 phones such as TECNO); the older summary is used only as a fallback. Battery use by app gets a second source (the checkin report) when the first is empty.
+
+Notifications
+- Messages inside a notification are now read from the phone (the list behind "10 new messages" and inbox style lines). Under the conversation you get "Show N earlier messages"; they open as small message cards with sender and time. The latest message that is already on screen is not repeated.
+- These messages are remembered on this PC (last 20 per conversation, kept 3 days) so they stay readable after the phone replaces them.
+- If a phone lists messages but gives no readable text, a short grey note says so instead of silently showing nothing.
+
+Known limits
+- Some phone makers hide message text from adb. In that case only the summary can be shown.
+
 ## 3.2.0
 Fixes and polish from real-phone testing. No new pages.
 

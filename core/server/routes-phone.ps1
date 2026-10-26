@@ -117,10 +117,55 @@ function Get-NotifText {
     return $v
 }
 
+# Reads the message list a notification carries (chat messages, inbox lines). Returns @(@{ text; sender; time }).
+function Get-NotifLines {
+    param([string]$Block)
+    $out = @()
+    $keys = @('android.historicMessages', 'android.messages', 'android.textLines')
+    foreach ($key in $keys) {
+        $pat = '(?ms)^[ \t]*' + [regex]::Escape($key) + '=[^\n]*\((\d+)\)[^\n]*\n(.*?)(?=^[ \t]*android\.[A-Za-z0-9_.]+=|^[ \t]*\}|\z)'
+        $m = [regex]::Match($Block, $pat)
+        if (-not $m.Success) { continue }
+        $entries = [regex]::Split($m.Groups[2].Value, '(?m)^[ \t]*\[\d+\][ \t]?')
+        foreach ($e in $entries) {
+            $e = $e.Trim()
+            if ($e -eq '') { continue }
+            $txt = ''
+            $sender = ''
+            $when = [long]0
+            $bm = [regex]::Match($e, '(?s)^Bundle\[\{(.*)\}\]$')
+            if ($bm.Success) {
+                $inner = $bm.Groups[1].Value
+                $stop = '(?=, (?:time|sender|sender_person|type|uri|extras|text)=|$)'
+                $tm = [regex]::Match($inner, '(?s)(?:^|, )text=(.*?)' + $stop)
+                if ($tm.Success) { $txt = (Get-NotifText $tm.Groups[1].Value) }
+                $sm = [regex]::Match($inner, '(?s)(?:^|, )sender=(.*?)' + $stop)
+                if ($sm.Success) { $sender = (Get-NotifText $sm.Groups[1].Value) }
+                if ($sender -eq '' -or $sender -eq 'null') {
+                    $pm = [regex]::Match($inner, 'name=([^,}]+)')
+                    if ($pm.Success) { $sender = $pm.Groups[1].Value.Trim() }
+                }
+                $wm = [regex]::Match($inner, '(?:^|, )time=(\d{10,})')
+                if ($wm.Success) { $when = [long]$wm.Groups[1].Value }
+            } elseif ($e -notmatch '^(Bundle|Parcelable|Person)\b') {
+                $txt = (Get-NotifText $e)
+            }
+            if ($txt -eq '' -or $txt -eq 'null') { continue }
+            if ($sender -eq 'null') { $sender = '' }
+            $out += , @{ text = $txt; sender = $sender; time = $when }
+        }
+    }
+    $seen = @{}
+    $uniq = @()
+    foreach ($x in $out) { $k = [string]$x.time + '|' + $x.sender + '|' + $x.text; if (-not $seen.ContainsKey($k)) { $seen[$k] = $true; $uniq += , $x } }
+    if ($uniq.Count -gt 30) { $uniq = @($uniq | Select-Object -Last 30) }
+    return @($uniq)
+}
+
 $Routes['GET /api/notifications'] = { param($Ctx)
     $serial = Get-Query $Ctx 'id'
-    $r = Invoke-DeviceShell $serial 'dumpsys notification --noredact 2>/dev/null | head -n 3000' 25
-    $text = $r.out
+    $r = Invoke-DeviceShell $serial 'dumpsys notification --noredact 2>/dev/null | head -n 8000' 30
+    $text = ([string]$r.out) -replace "`r", ''
     $items = @()
     $parts = [regex]::Split($text, '(?m)^\s*NotificationRecord\(')
     for ($i = 1; $i -lt $parts.Count; $i++) {
@@ -137,7 +182,18 @@ $Routes['GET /api/notifications'] = { param($Ctx)
         $key = ''
         if ($b -match 'key=([^\s)]+)') { $key = $Matches[1] }
         if ($title -eq '' -and $body -eq '' -and $big -eq '') { continue }
-        $items += , @{ key = $key; package = $pkg; title = $title; text = $(if ($big -ne '' -and $big.Length -gt $body.Length) { $big } else { $body }); when = $when; ongoing = $ongoing }
+        $lines = @()
+        $hint = ''
+        try {
+            $lines = @(Get-NotifLines $b)
+            if ($lines.Count -eq 0) {
+                $hm = [regex]::Matches($b, '(?m)^[ \t]*(android\.(?:messages|historicMessages|textLines))=([A-Za-z\[\]]+)[ \t]*\(?(\d*)')
+                $bits = @()
+                foreach ($h in $hm) { $bits += ($h.Groups[1].Value + ' ' + $h.Groups[3].Value) }
+                if ($bits.Count -gt 0) { $hint = 'The phone listed ' + ($bits -join ', ') + ' but gave no readable text.' }
+            }
+        } catch { $lines = @() }
+        $items += , @{ key = $key; package = $pkg; title = $title; text = $(if ($big -ne '' -and $big.Length -gt $body.Length) { $big } else { $body }); when = $when; ongoing = $ongoing; lines = @($lines); hint = $hint }
     }
     $seen = @{}
     $uniq = @()
@@ -398,21 +454,79 @@ $Routes['POST /api/intent'] = { param($Ctx)
 # ---------------------------------------------------------------------------
 # Insights: usage, battery by app, system access and permissions
 # ---------------------------------------------------------------------------
+function Add-UsageMs {
+    param([hashtable]$Totals, [string]$Pkg, [double]$Ms)
+    if ($Pkg -ne '' -and $Ms -gt 0 -and $Ms -lt 21600000) {
+        if ($Totals.ContainsKey($Pkg)) { $Totals[$Pkg] = [double]$Totals[$Pkg] + $Ms } else { $Totals[$Pkg] = [double]$Ms }
+    }
+}
+
+# Screen time from the foreground/background events the phone logged today.
+function Get-UsageFromEvents {
+    param([string]$Serial)
+    $totals = @{}
+    $r = Invoke-DeviceShell $Serial 'dumpsys usagestats 2>/dev/null | grep -E ''type=(ACTIVITY_RESUMED|ACTIVITY_PAUSED|ACTIVITY_STOPPED|MOVE_TO_FOREGROUND|MOVE_TO_BACKGROUND|SCREEN_NON_INTERACTIVE)'' | tail -n 5000' 45
+    $ev = @()
+    foreach ($line in (([string]$r.out) -split "`n")) {
+        $m = [regex]::Match($line, 'time="?([0-9][0-9:\-\. T]*?)"?\s+type=([A-Z_]+)(?:\s+package=([A-Za-z0-9._]+))?')
+        if (-not $m.Success) { continue }
+        $ts = $m.Groups[1].Value.Trim()
+        $ms = [double]0
+        $tod = [double]-1
+        if ($ts -match '^\d{10,}$') { $ms = [double]$ts }
+        else {
+            $dt = [datetime]::MinValue
+            if ([datetime]::TryParse($ts, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$dt)) { $ms = [double]($dt.Ticks / 10000.0); $tod = [double]$dt.TimeOfDay.TotalMilliseconds } else { continue }
+        }
+        $ev += , @{ ms = $ms; tod = $tod; type = $m.Groups[2].Value; pkg = [string]$m.Groups[3].Value }
+    }
+    if ($ev.Count -eq 0) { return $totals }
+    $ev = @($ev | Sort-Object { $_.ms })
+    $last = $ev[$ev.Count - 1]
+    $span = [double]86400000
+    if ($last.tod -ge 0) { $span = [double]$last.tod }
+    $cut = [double]$last.ms - $span
+    $cur = ''
+    $start = [double]0
+    foreach ($e in $ev) {
+        if ($e.ms -lt $cut) { continue }
+        $t = [string]$e.type
+        if ($t -eq 'ACTIVITY_RESUMED' -or $t -eq 'MOVE_TO_FOREGROUND') {
+            if ($cur -ne '' -and $cur -ne $e.pkg) { Add-UsageMs $totals $cur ($e.ms - $start) }
+            if ($cur -ne $e.pkg) { $cur = [string]$e.pkg; $start = [double]$e.ms }
+        }
+        elseif ($t -eq 'ACTIVITY_PAUSED' -or $t -eq 'ACTIVITY_STOPPED' -or $t -eq 'MOVE_TO_BACKGROUND') {
+            if ($cur -ne '' -and $cur -eq $e.pkg) { Add-UsageMs $totals $cur ($e.ms - $start); $cur = '' }
+        }
+        elseif ($t -eq 'SCREEN_NON_INTERACTIVE') {
+            if ($cur -ne '') { Add-UsageMs $totals $cur ($e.ms - $start); $cur = '' }
+        }
+    }
+    return $totals
+}
+
 $Routes['GET /api/insights/usage'] = { param($Ctx)
     $serial = Get-Query $Ctx 'id'
-    $r = Invoke-DeviceShell $serial 'dumpsys usagestats 2>/dev/null | sed -n ''/daily stats/,/weekly stats/p'' | grep -E ''package=.*(totalTimeUsed|totalTimeInForeground)'' | head -n 400' 40
     $totals = @{}
-    foreach ($line in ($r.out -split "`r?`n")) {
-        if ($line -match 'package=([A-Za-z0-9._]+)' ) {
-            $pkg = $Matches[1]
-            $ms = [long]0
-            if ($line -match 'totalTimeUsed="?([^"]*?)"?(?:\s+lastTime|\s+appLaunchCount|$)') { $ms = ConvertFrom-DurationText $Matches[1] }
-            elseif ($line -match 'totalTimeInForeground="?([^"\s]+)') { $ms = ConvertFrom-DurationText $Matches[1] }
-            if ($ms -gt 0) { if (-not $totals.ContainsKey($pkg) -or $totals[$pkg] -lt $ms) { $totals[$pkg] = $ms } }
+    $source = ''
+    try { $totals = Get-UsageFromEvents $serial; $source = 'events' } catch { $totals = @{} }
+    $big = 0
+    foreach ($k in @($totals.Keys)) { if ([double]$totals[$k] -lt 1000) { $totals.Remove($k) } }
+    if ($totals.Count -eq 0) {
+        $source = 'summary'
+        $r = Invoke-DeviceShell $serial 'dumpsys usagestats 2>/dev/null | sed -n ''/daily stats/,/weekly stats/p'' | grep -E ''package=.*(totalTimeUsed|totalTimeInForeground)'' | head -n 400' 40
+        foreach ($line in (([string]$r.out) -split "`n")) {
+            if ($line -match 'package=([A-Za-z0-9._]+)' ) {
+                $pkg = $Matches[1]
+                $ms = [long]0
+                if ($line -match 'totalTimeUsed="?([^"]*?)"?(?:\s+lastTime|\s+appLaunchCount|$)') { $ms = ConvertFrom-DurationText $Matches[1] }
+                elseif ($line -match 'totalTimeInForeground="?([^"\s]+)') { $ms = ConvertFrom-DurationText $Matches[1] }
+                if ($ms -gt 0) { if (-not $totals.ContainsKey($pkg) -or $totals[$pkg] -lt $ms) { $totals[$pkg] = $ms } }
+            }
         }
     }
     $apps = @($totals.Keys | ForEach-Object { @{ package = $_; ms = [long]$totals[$_] } } | Sort-Object { $_.ms } -Descending | Select-Object -First 25)
-    Send-Json $Ctx @{ apps = $apps; note = $(if ($apps.Count -eq 0) { 'This phone did not share usage times. Some makers hide them from adb.' } else { '' }) }
+    Send-Json $Ctx @{ apps = $apps; source = $source; note = $(if ($apps.Count -eq 0) { 'This phone did not share usage times. Some makers hide them from adb.' } else { '' }) }
 }
 
 $Routes['GET /api/insights/battery'] = { param($Ctx)
@@ -438,6 +552,20 @@ $Routes['GET /api/insights/battery'] = { param($Ctx)
             $name = $u
             if ($uidNum -ne '' -and $uidMap.ContainsKey($uidNum)) { $name = $uidMap[$uidNum] } elseif ($u -eq '1000') { $name = 'Android system' }
             $rows += , @{ uid = $u; package = $name; mah = [math]::Round($mah, 1) }
+        }
+    }
+    if ($rows.Count -eq 0) {
+        # Second source: the machine readable battery report (lines like 9,10123,l,pwi,uid,12.5,...).
+        $c = Invoke-DeviceShell $serial 'dumpsys batterystats --checkin 2>/dev/null | grep -E '',pwi,uid,'' | head -n 120' 40
+        foreach ($line in (([string]$c.out) -split "`n")) {
+            $cm = [regex]::Match($line, '^\s*\d+,(\d+),[a-z],pwi,uid,([0-9.]+)')
+            if (-not $cm.Success) { continue }
+            $uidNum = $cm.Groups[1].Value
+            $mah = [double]::Parse($cm.Groups[2].Value, [Globalization.CultureInfo]::InvariantCulture)
+            if ($mah -le 0) { continue }
+            $name = $uidNum
+            if ($uidMap.ContainsKey($uidNum)) { $name = $uidMap[$uidNum] } elseif ($uidNum -eq '1000') { $name = 'Android system' }
+            $rows += , @{ uid = $uidNum; package = $name; mah = [math]::Round($mah, 1) }
         }
     }
     $rows = @($rows | Sort-Object { $_.mah } -Descending | Select-Object -First 15)
