@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/images/droid-adb-logo.jpg" alt="DROID ADB" width="320"></p>
 
-# DROID ADB 4.0
+# DROID ADB 4.1
 
 A portable Windows control center for your Android phone: mirror, record, screenshot, remote-control and manage it from a local dashboard.
 
@@ -12,6 +12,10 @@ DROID ADB is powered by [scrcpy](https://github.com/Genymobile/scrcpy) v5.0.1 (G
 3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
+
+## What changed in 4.1
+
+4.1 adds four audio modes (Video only, Copy to recording, Copy and play on PC, Reroute audio to PC), a check that a saved recording really has sound, and a streaming section for OBS. Video only is the default. See `docs/AUDIO.md` for what each mode does, the OBS setup and the tests to run on your phone. After updating, run Launch.bat once so the service loads the new version.
 
 ## What changed in 4.0
 

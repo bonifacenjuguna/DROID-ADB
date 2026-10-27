@@ -169,3 +169,15 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Thermals: gauge, history and cool-down tracker update; threshold sliders persist.
 - [ ] Network test shows ping, jitter, loss and a verdict.
 - [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 4.0.0).
+
+## 4.1 Audio modes (real device)
+Full steps are in docs/AUDIO.md.
+- [ ] Settings, Audio shows four cards; Video only is selected on a fresh settings file; the choice survives restarting the service.
+- [ ] Video only: mirror and recording behave as in 4.0; the recording has no sound track.
+- [ ] Copy to recording: phone plays, PC silent, Library, More, Check sound reports a sound track (and audible if ffmpeg is present).
+- [ ] Copy and play on PC: phone and PC both play; the recording has exactly one sound track.
+- [ ] Reroute: phone silent, PC plays; recording result is what Check sound reports.
+- [ ] Unplug during a session, replug, start again: the selected mode is applied; the status shows the mode that is really active.
+- [ ] Android 12 or older phone (if available): a Copy mode shows a warning and starts as Video only, or refuses the recording.
+- [ ] Streaming audio plans show the correct status for each mode; starting or stopping OBS does not stop the mirror or a recording.
+- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 4.1.0).

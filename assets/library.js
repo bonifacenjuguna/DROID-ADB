@@ -171,6 +171,7 @@ document.addEventListener('click', e => {
       { label: 'Tags', icon: 'tag', run: () => X().editTags(n) },
       { label: 'Trim or shrink', icon: 'scissors', run: () => X().convert(n, 'trim'), disabled: f && f.live },
       { label: 'Make a GIF', icon: 'image', run: () => X().convert(n, 'gif'), disabled: f && f.live },
+      { label: 'Check sound', icon: 'play', run: () => STK.audioCheck && STK.audioCheck(n), disabled: (f && f.live) || /\.gif$/i.test(n) },
       '-',
       { label: 'Delete', icon: 'trash', danger: true, run: () => del('recordings', n) }
     ].filter(i => !i.disabled));

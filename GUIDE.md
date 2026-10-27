@@ -36,6 +36,9 @@ Everything is configurable: quality presets, saved profiles, folders, file name 
 - scrcpy closes immediately: the toast shows the reason; full output is in `Logs/session-<id>.log`.
 - Port busy: change the port in Settings (restart needed) or close the other instance.
 
+## New in 4.1
+Open Settings, Audio and pick a mode. Video only: no phone sound. Copy to recording: the file gets the game sound, the PC stays silent, the phone keeps playing (Android 13). Copy and play on PC: the same, and the PC plays it too. Reroute: the sound moves to the PC and the phone goes quiet. Library, More, Check sound tells you whether a recording really has sound. For OBS, use the Streaming audio section.
+
 ## New in 4.0
 Open Studio (the rocket icon) for the Performance Studio. Pick a profile on Overview, use Boost before a game, watch Thermals while you play, and add games on the Games page so the right profile starts automatically.
 

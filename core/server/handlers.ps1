@@ -451,7 +451,7 @@ $Routes['GET /api/status'] = { param($Ctx)
 }
 
 $Routes['GET /api/schema'] = { param($Ctx)
-    Send-Json $Ctx @{ groups = $SettingGroups; fields = $Schema; presets = $Presets; defaults = (Get-Defaults) }
+    Send-Json $Ctx @{ groups = $SettingGroups; fields = $Schema; presets = $Presets; defaults = (Get-Defaults); audioModes = $AudioModes; streamModes = $StreamAudioChoices }
 }
 
 $Routes['GET /api/settings'] = { param($Ctx)
@@ -532,7 +532,7 @@ $Routes['POST /api/preview'] = { param($Ctx)
     if ($mode -notin @('mirror', 'record')) { Fail 'Unknown mode.' }
     $over = Get-Prop $body 'settings' @{}
     $s = ConvertTo-Settings $over (Get-Settings)
-    $cmd = New-ScrcpyArgs -S $s -Mode $mode -Serial ([string](Get-Prop $body 'serial' '')) -OutFile (Join-Path (Get-Dir 'recordings') ('Phone-<time>.' + $s.recordFormat)) -Once @{}
+    $cmd = New-ScrcpyArgs -S $s -Mode $mode -Serial ([string](Get-Prop $body 'serial' '')) -OutFile (Join-Path (Get-Dir 'recordings') ('Phone-<time>.' + $s.recordFormat)) -Once @{} -Probe $false
     Send-Json $Ctx @{ command = ('scrcpy ' + $cmd) }
 }
 
@@ -561,10 +561,12 @@ $Routes['POST /api/action'] = { param($Ctx)
             Start-Sleep -Milliseconds 1200
             $live = @(Get-LiveSessions)
             $alive = @($live | Where-Object { $_.id -eq $started.id }).Count -gt 0
+            $au = $started.audio
+            if ($au -and $au.fallback) { Add-Activity 'error' ('Audio: ' + [string]$au.reason + ' Requested ' + [string]$au.requested + ', active video_only.') }
             if ($alive) {
                 if ($action -eq 'record') { Add-Activity 'record' ('Recording started: ' + $started.fileName + $(if ($started.companion) { ' (alongside the mirror window)' } else { '' })); $msg = 'Recording to ' + $started.fileName + '.' } else { Add-Activity 'mirror' 'Mirror window opened.'; $msg = 'Mirror window opened.' }
             } else { $msg = ''; $reason = Get-LogReason $started.log }
-            Send-Json $Ctx @{ ok = $true; started = $alive; companion = [bool]$started.companion; message = $msg; reason = [string]$reason; session = $started.id; file = $started.fileName; sessions = @($live | ForEach-Object { Get-SessionView $_ }) }
+            Send-Json $Ctx @{ ok = $true; started = $alive; companion = [bool]$started.companion; message = $msg; reason = [string]$reason; session = $started.id; file = $started.fileName; audio = $au; sessions = @($live | ForEach-Object { Get-SessionView $_ }) }
         }
         'screenshot' {
             $path = Save-Screenshot $serial
@@ -1202,6 +1204,82 @@ $Routes['POST /api/cleanup'] = { param($Ctx)
     Send-Json $Ctx @{ ok = $true; deleted = $deleted; freed = $freed }
 }
 
+# ---- audio modes (4.1.0) ----
+# What the audio mode will do right now, what is running, and what OBS can hear. Reads the phone's Android version
+# through adb, so it runs in the normal lane, never the fast one.
+$Routes['GET /api/audio-status'] = { param($Ctx)
+    $s = Get-Settings
+    $serial = Get-Query $Ctx 'serial'
+    Test-Serial $serial
+    if ($serial -eq '') {
+        $ready = @($Shared.devices | Where-Object { $null -ne $_ -and $_.state -eq 'device' })
+        if ($ready.Count -ge 1) { $serial = [string]$ready[0].id }
+    }
+    $caps = Get-ScrcpyAudioCaps $true
+    $dev = $null
+    if ($serial -ne '') { $dev = Get-DeviceAudioInfo $serial $true }
+    $plans = @{}
+    foreach ($def in @(@('mirror', 'mirror', $false, $false), @('record', 'record', $false, $false), @('companion', 'record', $true, $true))) {
+        $p = Resolve-AudioPlan -S $s -Mode $def[1] -Serial $serial -Companion $def[2] -Headless $def[3] -Probe $true
+        $v = ConvertTo-AudioView $p
+        $v.argv = ($p.argv -join ' ')
+        $plans[$def[0]] = $v
+    }
+    $req = Get-AudioModeId $s
+    $live = @(Get-LiveSessions | ForEach-Object { Get-SessionView $_ })
+    $pending = @($live | Where-Object { $_.audio -and [string]$_.audio.requested -ne $req }).Count
+    $warn = @()
+    foreach ($k in @('mirror', 'record')) { foreach ($w in @($plans[$k].warnings)) { if ($w -and ($warn -notcontains $w)) { $warn += $w } } }
+    Send-Json $Ctx @{
+        ok = $true; requested = $req; label = (Get-AudioModeInfo $req).label
+        scrcpy = @{ version = $caps.version; ok = [bool]$caps.ok; error = [string]$caps.error; flags = $caps.flags }
+        device = $(if ($dev) { @{ serial = $serial; ok = [bool]$dev.ok; sdk = [int]$dev.sdk; release = [string]$dev.release; model = [string]$dev.model; manufacturer = [string]$dev.manufacturer; error = [string]$dev.error } } else { $null })
+        plans = $plans; sessions = $live; pending = $pending; warnings = @($warn)
+        stream = (Get-StreamAudioPlan $s)
+    }
+}
+
+$Routes['POST /api/audio-mode'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $mode = [string](Get-Prop $body 'mode' '')
+    if ($AudioModeIds -notcontains $mode) { Fail 'That audio mode does not exist.' }
+    $r = Save-SettingsPatch @{ audioMode = $mode }
+    $info = Get-AudioModeInfo $mode
+    Add-Activity 'system' ('Audio mode set to ' + $info.label + '.')
+    $restarted = 0
+    $restartError = ''
+    $keptRecordings = 0
+    if ([bool](Get-Prop $body 'apply' $false)) {
+        $grace = [int](Get-Settings).stopGraceSeconds
+        foreach ($t in @(Get-LiveSessions | Where-Object { $_.mode -eq 'mirror' })) {
+            $au = Get-Prop $t 'audio' $null
+            if ($au -and [string](Get-Prop $au 'requested' '') -eq $mode) { continue }
+            $serial = [string]$t.serial
+            [void](Stop-ToolkitSession $t $grace)
+            try { [void](Start-ToolkitScrcpy -Mode 'mirror' -Serial $serial -Once @{}); $restarted++ } catch { $restartError = $_.Exception.Message }
+        }
+    }
+    foreach ($t in @(Get-LiveSessions | Where-Object { $_.mode -eq 'record' })) {
+        $au = Get-Prop $t 'audio' $null
+        if ($au -and [string](Get-Prop $au 'requested' '') -ne $mode) { $keptRecordings++ }
+    }
+    Send-Json $Ctx @{ ok = $true; settings = $r.settings; mode = $mode; label = $info.label; restartedMirrors = $restarted; restartError = $restartError; recordingsKeepOldMode = $keptRecordings; sessions = @(Get-LiveSessions | ForEach-Object { Get-SessionView $_ }) }
+}
+
+# Does a saved recording really have sound? Container check always; ?deep=1 also measures loudness when ffmpeg exists.
+$Routes['GET /api/audio-check'] = { param($Ctx)
+    $name = Get-Query $Ctx 'name'
+    $path = Get-SafeFile 'recordings' $name
+    if (Test-InProgress $name) { Send-Json $Ctx @{ ok = $true; report = @{ file = $name; state = 'in_progress'; verified = $false; summary = 'This recording is still running. Stop it, then check it.' } }; return }
+    $deep = ((Get-Query $Ctx 'deep') -eq '1')
+    Send-Json $Ctx @{ ok = $true; report = (Test-RecordingAudio $path $deep); ffmpeg = ((Get-FfmpegPath) -ne '') }
+}
+
+# Read-only Windows audio and OBS facts for the streaming section.
+$Routes['GET /api/audio-env'] = { param($Ctx)
+    Send-Json $Ctx @{ ok = $true; env = (Get-AudioEnvironment); stream = (Get-StreamAudioPlan (Get-Settings)) }
+}
+
 # ---- diagnostics and logs ----
 $Routes['GET /api/activity'] = { param($Ctx) Send-Json $Ctx @{ items = @(Use-Lock { $Shared.activity.ToArray() }) } }
 
@@ -1274,6 +1352,8 @@ $Routes['GET /api/diagnostics'] = { param($Ctx)
     $scr = Get-ScrcpyPath
     $checks += , @{ name = 'ADB'; ok = [bool]((Test-Tool $adb) -or -not $OnWindows); detail = $(if ($Shared.versions.adb) { 'Version ' + $Shared.versions.adb + ' at ' + $adb } else { $adb }) }
     $checks += , @{ name = 'scrcpy'; ok = [bool]((Test-Tool $scr) -or -not $OnWindows); detail = $(if ($Shared.versions.scrcpy) { 'Version ' + $Shared.versions.scrcpy + ' at ' + $scr } else { $scr }) }
+    $am = Get-AudioModeInfo (Get-AudioModeId (Get-Settings))
+    $checks += , @{ name = 'Audio mode'; ok = $true; detail = ($am.label + ' (phone: ' + $am.phone + ', PC: ' + $am.pc + ', recording: ' + $am.recording + ')') }
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $devs = @()
     try { $devs = @(Get-DevicesRaw) } catch { $checks += , @{ name = 'ADB server'; ok = $false; detail = $_.Exception.Message } }

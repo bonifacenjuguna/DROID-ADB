@@ -301,7 +301,7 @@ function setConn() {
   chip.className = cls; chip.innerHTML = `<i class="dot"></i><b>${label}</b>`;
   dot.className = dcls;
 }
-STK.FRONT_VERSION = '4.0.0';
+STK.FRONT_VERSION = '4.1.0';
 { const av = document.getElementById('about-version'); if (av) av.textContent = 'v' + STK.FRONT_VERSION; }
 const stale = () => !!(state.online && state.data && state.data.version && state.data.version !== STK.FRONT_VERSION);
 function setBanner() {
@@ -379,11 +379,13 @@ function handleEvents(d) {
       const fr = ev.reason ? STK.friendly(ev.reason) : 'Check the cable and unlock the phone.';
       STK.toast('The mirror window closed right away. ' + fr, 'bad', ev.reason ? { label: 'Details', run: () => { STK.go('settings'); setTimeout(() => { const el = document.getElementById('errlog-panel'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 150); } } : undefined);
     }
+    else if (ev.kind === 'audio') STK.emit('audio-problem', ev);
     else if (ev.kind === 'job') STK.emit('job-event', ev);
     else if (ev.kind === 'ended') {
       if (ev.mode === 'record' && ev.file) STK.notify && STK.notify('Recording saved', ev.file + ' (' + STK.bytes(ev.size) + ')', 'rec');
       if (ev.mode === 'record' && ev.file) STK.toast('Recording saved: ' + ev.file + ' (' + STK.bytes(ev.size) + ', ' + STK.dur(ev.seconds) + ')', 'ok', { label: 'Library', run: () => STK.go('library') });
       else STK.toast('Mirror window closed.');
+      if (ev.mode === 'record' && ev.file && ev.audioExpected && STK.audioAfterRecording) STK.audioAfterRecording(ev);
       STK.emit('library-changed');
     }
   }

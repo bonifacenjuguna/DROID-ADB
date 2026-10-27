@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.1.0
+Audio modes, recording sound and OBS streaming guidance.
+
+New
+- Four audio modes in Settings, Audio, stored as `audioMode`: `video_only` (default), `record_only` (Copy to recording), `copy_play` (Copy and play on PC), `reroute` (Reroute audio to PC). One controller (`Resolve-AudioPlan` in lib.ps1) builds every audio option of every scrcpy process, and reports what each session really does.
+- Options were checked against the bundled scrcpy 5.0.1: `--audio-source=playback --audio-dup` (copy, phone keeps playing), `--no-audio-playback` (PC silent while recording), `--audio-source=output` (reroute, scrcpy's default), `--require-audio`. The controller also reads `scrcpy --help` and the phone's Android version at start. Copy modes need Android 13, Reroute needs Android 11.
+- Requested and active are shown separately. If the phone or scrcpy cannot do a mode, the session starts as video only and says so; a recording is refused instead when "Stop a recording if its sound cannot be captured" is on (default).
+- Sound problems that scrcpy logs are reported as soon as they happen. After a recording ends its container is checked for a sound track; Library, More, Check sound also measures loudness when ffmpeg is present.
+- Streaming audio (OBS): a plan selector (no game sound, listen on the PC, silent PC speakers) checked against the audio mode, with the OBS and Windows steps, and a read-only Windows audio check. DROID ADB does not configure OBS or install audio drivers. It never changes the phone, the mirror or a recording because of this choice.
+- Routes: `GET /api/audio-status`, `POST /api/audio-mode`, `GET /api/audio-check`, `GET /api/audio-env`. `/api/schema` also lists the modes. Mirror and recording sessions carry an `audio` object and `audioState`.
+- Docs: `docs/AUDIO.md` (modes, OBS setup, real-device test matrix) and `core/scripts/audio-selftest.ps1`.
+
+Changed
+- Default is Video only. Before 4.1 the saved `audio` setting was on by default, which sent sound to the PC and silenced the phone. If you relied on that, pick Reroute audio to PC once. The old `audio` and `audioDup` keys are kept so backups import, but they are no longer used.
+- Presets: Low latency sets Video only, Screen recorder sets Copy to recording.
+- With Reroute, "Sound in companion recordings" still controls whether a recorder started next to the mirror captures sound.
+
+Not verified
+- Written and statically checked without a Windows PC or phone. Audio on the TECNO KJ5, PUBG Mobile capture, two simultaneous captures, and OBS routing still need the manual tests in docs/AUDIO.md.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
+
 ## 4.0.0
 Performance Studio: a new gaming and app performance center, plus the Game Mode fix.
 
