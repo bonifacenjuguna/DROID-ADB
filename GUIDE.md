@@ -36,14 +36,29 @@ Everything is configurable: quality presets, saved profiles, folders, file name 
 - scrcpy closes immediately: the toast shows the reason; full output is in `Logs/session-<id>.log`.
 - Port busy: change the port in Settings (restart needed) or close the other instance.
 
-## New in 4.1
-Open Settings, Audio and pick a mode. Video only: no phone sound. Copy to recording: the file gets the game sound, the PC stays silent, the phone keeps playing (Android 13). Copy and play on PC: the same, and the PC plays it too. Reroute: the sound moves to the PC and the phone goes quiet. Library, More, Check sound tells you whether a recording really has sound. For OBS, use the Streaming audio section.
-
-## New in 4.0
-Open Studio (the rocket icon) for the Performance Studio. Pick a profile on Overview, use Boost before a game, watch Thermals while you play, and add games on the Games page so the right profile starts automatically.
-
 ## New in 3.6
 - **Restart service / Restart backend** now waits for the new service and works on the first click. If it does not return in 60 seconds, run `Launch.bat`.
 - **Error messages** are short sentences. For the original technical text open **Settings, Error log** (or press **Details** on an error notice).
 - **Camera** (Remote controls) wakes the phone and opens its camera app.
 - **Studio, Gaming kit**: live battery and temperature, quick switches, Free memory, Performance mode, Android Game Mode and frame stats. Games in Game mode can also free memory and use Game Mode automatically.
+
+## New in 3.9: Audio modes
+- **Studio, Capture, Audio**: pick Video only, Copy to recording (PUBG recording with a silent PC), Copy and play on PC, or Reroute audio to PC. The change applies the next time you start a mirror or recording.
+- Under each card you see what the phone, the PC and the saved file do. The "Running now" box shows what each session really uses, and warns if it differs from your choice.
+- **Game sound for OBS**: turn on, restart the mirror, then in OBS add Window Capture for video and Application Audio Capture for scrcpy.exe. Off means OBS gets no game sound.
+- **Check a recording** tells you if the last file has sound.
+- If a game blocks capture the file stays silent: use Reroute, or record with the phone's own screen recorder.
+
+## New in 3.8: Studio rebuilt
+- Seven tabs: **Overview, Performance, Optimize, Cooling, Battery, Games, Capture**. The LIVE pill shows when data last arrived; pick the refresh rate or pause it (key `P`). `[` and `]` change tab.
+- **Click any card** to open a big graph. Pick a period (5 min to 24 h), hover to read values, drag to zoom, double-click to reset, click a series name to hide it, **CSV** exports the data.
+- **Optimize** profiles show each step as it runs and **Undo** restores your previous settings. Save your current settings as a custom profile.
+- **Performance** has per-core load, busiest apps (stop button), frame stats with a histogram, and a recorder whose runs appear in Games, Session history.
+- **Install as an app**: in Chrome use the Install button in the address bar (or the Install button in the dashboard).
+
+## New in 3.7: Performance Studio
+- **Overview** shows how ready the phone is, live gauges and suggestions. **Turbo boost** sets up a gaming environment in one tap and **Undo** restores it.
+- **Cooling** shows temperatures and runs the cool-down assistant. Set your own warning limit.
+- **Optimize** has quick switches, memory, performance mode, Game Mode, frame stats and a network check.
+- **Games** holds game profiles, a Play button and session history. **Capture** has demo mode and capture presets.
+- If the phone declines Game Mode or performance mode, the message shows what it answered. The technical reply is in Settings, Error log.

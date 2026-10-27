@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '4.1.0'
+$ToolkitVersion = '3.9.0'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -125,13 +125,13 @@ function Write-BackendLog {
 # ---------------------------------------------------------------------------
 function C { param($v, $l) return @{ v = $v; l = $l } }
 function F {
-    param([string]$Key, [string]$Group, [string]$Type, $Default, [string]$Label, [string]$Help = '', $Min = $null, $Max = $null, $Choices = $null, $Picks = $null, [string]$Unit = '', $Show = $null, [string]$Pattern = '', [bool]$Restart = $false, [string]$Placeholder = '', [bool]$Hidden = $false)
-    return @{ key = $Key; group = $Group; type = $Type; default = $Default; label = $Label; help = $Help; min = $Min; max = $Max; choices = $Choices; picks = $Picks; unit = $Unit; show = $Show; pattern = $Pattern; restart = $Restart; placeholder = $Placeholder; hidden = $Hidden }
+    param([string]$Key, [string]$Group, [string]$Type, $Default, [string]$Label, [string]$Help = '', $Min = $null, $Max = $null, $Choices = $null, $Picks = $null, [string]$Unit = '', $Show = $null, [string]$Pattern = '', [bool]$Restart = $false, [string]$Placeholder = '')
+    return @{ key = $Key; group = $Group; type = $Type; default = $Default; label = $Label; help = $Help; min = $Min; max = $Max; choices = $Choices; picks = $Picks; unit = $Unit; show = $Show; pattern = $Pattern; restart = $Restart; placeholder = $Placeholder }
 }
 
 $SettingGroups = @(
     @{ id = 'video'; title = 'Video'; note = 'What scrcpy captures from the phone.' },
-    @{ id = 'audio'; title = 'Audio'; note = 'Phone sound, recordings and streaming. Needs Android 11 or newer; the Copy modes need Android 13.' },
+    @{ id = 'audio'; title = 'Audio'; note = 'Sound forwarding needs Android 11 or newer. Open Studio, Capture for the full audio and streaming guide with live status.' },
     @{ id = 'control'; title = 'Input and phone'; note = 'How the PC controls the phone while a window is open.' },
     @{ id = 'window'; title = 'Mirror window'; note = 'Look and behaviour of the scrcpy window.' },
     @{ id = 'recording'; title = 'Recording and screenshots'; note = 'File naming, format and limits.' },
@@ -140,19 +140,10 @@ $SettingGroups = @(
     @{ id = 'advanced'; title = 'Advanced'; note = 'Custom tools and raw scrcpy options.' }
 )
 
+$AudioModes = @((C 'video-only' 'Video only'), (C 'copy-record' 'Copy to recording'), (C 'copy-play' 'Copy and play on PC'), (C 'reroute' 'Reroute audio to PC'))
+$StreamAudioChoices = @((C 'off' 'No game sound for OBS'), (C 'game' 'Game sound for OBS (mirror plays on PC)'))
 $AudioSources = @((C 'output' 'Phone sound (output)'), (C 'playback' 'Playback capture'), (C 'mic' 'Microphone'), (C 'mic-unprocessed' 'Microphone (raw)'), (C 'mic-voice-communication' 'Microphone (voice call)'))
 $AudioCodecs = @((C '' 'scrcpy default'), (C 'opus' 'Opus'), (C 'aac' 'AAC'), (C 'flac' 'FLAC'), (C 'raw' 'Raw'))
-# Audio modes (4.1.0). The ids are stored in settings and checked against this list.
-$AudioModeIds = @('video_only', 'record_only', 'copy_play', 'reroute')
-$AudioModeChoices = @((C 'video_only' 'Video only'), (C 'record_only' 'Copy to recording'), (C 'copy_play' 'Copy and play on PC'), (C 'reroute' 'Reroute audio to PC'))
-$AudioModes = @(
-    @{ id = 'video_only'; label = 'Video only'; summary = 'Mirror and record the screen without phone sound. Nothing changes on the phone.'; phone = 'Plays normally'; pc = 'Silent'; recording = 'Video only'; needs = 'Any phone' },
-    @{ id = 'record_only'; label = 'Copy to recording'; summary = 'The recording gets the phone sound. The PC stays silent, the phone keeps playing. Made for game recording.'; phone = 'Plays normally'; pc = 'Silent'; recording = 'Video and sound'; needs = 'Android 13 or newer' },
-    @{ id = 'copy_play'; label = 'Copy and play on PC'; summary = 'The phone keeps playing, the PC plays the sound too, and the recording has it.'; phone = 'Plays normally'; pc = 'Plays the sound'; recording = 'Video and sound'; needs = 'Android 13 or newer' },
-    @{ id = 'reroute'; label = 'Reroute audio to PC'; summary = 'The sound moves to the PC. The phone goes quiet for the sound that is rerouted. Whether a recording gets the sound depends on how you record, so it is checked and reported.'; phone = 'Silent'; pc = 'Plays the sound'; recording = 'Checked after each recording'; needs = 'Android 11 or newer' }
-)
-$StreamAudioIds = @('none', 'silent_pc', 'listen')
-$StreamAudioChoices = @((C 'none' 'Stream without game sound'), (C 'silent_pc' 'Stream, PC speakers stay silent'), (C 'listen' 'Stream and listen on the PC'))
 $InputModes = @((C '' 'Default'), (C 'sdk' 'Android SDK'), (C 'uhid' 'Simulated USB (uhid)'), (C 'aoa' 'USB accessory (aoa)'), (C 'disabled' 'Disabled'))
 $Orientations = @((C '' 'Automatic'), (C '0' 'Natural'), (C '90' '90 degrees'), (C '180' '180 degrees'), (C '270' '270 degrees'), (C '@0' 'Lock natural'), (C '@90' 'Lock 90'), (C '@180' 'Lock 180'), (C '@270' 'Lock 270'))
 
@@ -173,18 +164,16 @@ $Schema = @(
     (F 'cameraId' 'video' 'text' '' 'Camera id' 'Overrides the facing choice. Use scrcpy --list-cameras to find ids.' -Pattern '^[0-9]{0,3}$' -Show @{ source = 'camera' } -Placeholder 'Automatic'),
     (F 'cameraSize' 'video' 'text' '' 'Camera size' 'Example 1920x1080.' -Pattern '^(\d{3,5}x\d{3,5})?$' -Show @{ source = 'camera' } -Placeholder 'Automatic'),
     (F 'videoBuffer' 'video' 'int' 0 'Video buffer' 'Adds delay to smooth playback. 0 gives the lowest latency.' -Min 0 -Max 5000 -Picks @(0, 50, 100, 200) -Unit 'ms'),
-    # audio. The Audio mode controller (Resolve-AudioPlan) decides every audio option. The keys audio, audioSource
-    # and audioDup are kept so older backups still import; audio and audioDup are no longer used.
-    (F 'audioMode' 'audio' 'choice' 'video_only' 'Audio mode' 'Choose with the cards at the top of this section.' -Choices $AudioModeChoices -Hidden $true),
-    (F 'streamAudio' 'audio' 'choice' 'none' 'Streaming audio plan' 'What you want OBS to hear. DROID ADB only checks it against the audio mode; it never changes OBS or the phone.' -Choices $StreamAudioChoices -Hidden $true),
-    (F 'audio' 'audio' 'bool' $true 'Capture phone audio (old setting)' 'Replaced by Audio mode. Kept so old backups import.' -Hidden $true),
-    (F 'audioRequire' 'audio' 'bool' $true 'Stop a recording if its sound cannot be captured' 'Stops DROID ADB from quietly saving a silent video. It then tells you why. Applies to Copy to recording, Copy and play, and Reroute.' -Show @{ audioMode = @('record_only', 'copy_play', 'reroute') }),
-    (F 'audioSource' 'audio' 'choice' 'output' 'Audio source (Reroute only)' 'Phone sound (output) is the normal choice. A microphone source forwards your voice instead and the phone keeps its own sound.' -Choices $AudioSources -Show @{ audioMode = 'reroute' }),
-    (F 'audioDup' 'audio' 'bool' $false 'Keep sound on the phone too (old setting)' 'Replaced by the two Copy modes.' -Hidden $true),
-    (F 'audioCodec' 'audio' 'choice' '' 'Audio codec (mirror)' 'Codec used while only mirroring.' -Choices $AudioCodecs -Show @{ audioMode = @('copy_play', 'reroute') }),
-    (F 'recordAudioCodec' 'audio' 'choice' 'aac' 'Audio codec (recording)' 'AAC is the safest choice for recordings.' -Choices $AudioCodecs -Show @{ audioMode = @('record_only', 'copy_play', 'reroute') }),
-    (F 'audioBitrate' 'audio' 'int' 0 'Audio bitrate' '0 uses the scrcpy default.' -Min 0 -Max 512 -Picks @(0, 64, 128, 192, 256) -Unit 'kbps' -Show @{ audioMode = @('record_only', 'copy_play', 'reroute') }),
-    (F 'audioBuffer' 'audio' 'int' 0 'Audio buffer' '0 uses the scrcpy default.' -Min 0 -Max 2000 -Picks @(0, 50, 100, 200) -Unit 'ms' -Show @{ audioMode = @('copy_play', 'reroute') }),
+    # audio
+    (F 'audioMode' 'audio' 'choice' 'video-only' 'Audio mode' 'Video only keeps the phone as it is and records no sound. Copy to recording saves the phone sound while the PC stays silent. Copy and play also plays it on the PC. Reroute moves the sound to the PC and silences the phone.' -Choices $AudioModes),
+    (F 'streamAudio' 'audio' 'choice' 'off' 'Game sound for OBS' 'Off leaves the mirror silent. Game makes the mirror play the phone sound on the PC (the phone keeps playing) so OBS can capture scrcpy.exe with Application Audio Capture. This never changes the recording mode.' -Choices $StreamAudioChoices),
+    (F 'audio' 'audiolegacy' 'bool' $true 'Capture phone audio (older setting)' 'Replaced by Audio mode.'),
+    (F 'audioSource' 'audiolegacy' 'choice' 'output' 'Audio source (older setting)' 'Replaced by Audio mode.' -Choices $AudioSources),
+    (F 'audioDup' 'audiolegacy' 'bool' $false 'Keep sound on the phone too (older setting)' 'Replaced by Audio mode.'),
+    (F 'audioCodec' 'audio' 'choice' '' 'Audio codec (mirror)' 'Codec used while only mirroring.' -Choices $AudioCodecs),
+    (F 'recordAudioCodec' 'audio' 'choice' 'aac' 'Audio codec (recording)' 'AAC is the safest choice for recordings.' -Choices $AudioCodecs),
+    (F 'audioBitrate' 'audio' 'int' 0 'Audio bitrate' '0 uses the scrcpy default.' -Min 0 -Max 512 -Picks @(0, 64, 128, 192, 256) -Unit 'kbps'),
+    (F 'audioBuffer' 'audio' 'int' 0 'Audio buffer' '0 uses the scrcpy default.' -Min 0 -Max 2000 -Picks @(0, 50, 100, 200) -Unit 'ms'),
     # control
     (F 'viewOnly' 'control' 'bool' $false 'View only' 'Block mouse and keyboard control of the phone.'),
     (F 'keyboard' 'control' 'choice' '' 'Keyboard mode' 'uhid works in games and with any language. aoa needs USB.' -Choices $InputModes -Show @{ viewOnly = $false }),
@@ -216,7 +205,7 @@ $Schema = @(
     (F 'recordWhileMirroring' 'recording' 'choice' 'companion' 'Record while mirroring' 'Companion starts a hidden second scrcpy recorder so the mirror window stays open. Block keeps one session per phone.' -Choices @((C 'companion' 'Hidden companion recorder'), (C 'block' 'Block (stop mirror first)'))),
     (F 'autoRecordWithMirror' 'recording' 'bool' $false 'Record whenever I mirror' 'Starts a background recording together with every mirror window. Stopping the mirror also stops that recording.'),
     (F 'showRecBadge' 'recording' 'bool' $true 'Show recording badge on the phone picture' 'Shows REC with a timer on the dashboard phone picture while recording.'),
-    (F 'companionAudio' 'recording' 'bool' $true 'Sound in companion recordings (Reroute only)' 'With Reroute, a second capture of the rerouted sound can silence the mirror on some phones. Turn this off to record video only while mirroring. The two Copy modes always record their sound.' -Show @{ audioMode = 'reroute' }),
+    (F 'companionAudio' 'audiolegacy' 'bool' $true 'Sound in companion recordings (older setting)' 'Replaced by Audio mode.')
     (F 'recordCountdown' 'recording' 'int' 0 'Start countdown' 'Seconds to count down in the dashboard before recording begins.' -Min 0 -Max 10 -Picks @(0, 3, 5) -Unit 'sec'),
     (F 'nameByApp' 'recording' 'bool' $true 'Add the app name to file names' 'Adds the app that was in front on the phone, like Shot-2026-10-24_12-00-00-Chrome. Skipped when the name template already has {app}.'),
     (F 'screenshotTemplate' 'recording' 'text' 'Shot-{date}_{time}' 'Screenshot file name' 'Tokens: {date} {time} {serial} {model} {app}.' -Pattern '^[A-Za-z0-9 ._\-{}]{1,80}$'),
@@ -263,8 +252,8 @@ $Presets = @(
     @{ id = 'balanced'; name = 'Balanced'; note = 'Good for most phones'; v = @{ maxSize = 1280; maxFps = 30; bitrateMbps = 8 } },
     @{ id = 'quality'; name = 'Quality'; note = 'Sharper and smoother'; v = @{ maxSize = 1600; maxFps = 45; bitrateMbps = 12 } },
     @{ id = 'max'; name = 'Maximum'; note = 'Native size, needs a strong PC'; v = @{ maxSize = 0; maxFps = 60; bitrateMbps = 16 } },
-    @{ id = 'latency'; name = 'Low latency'; note = 'Gaming and quick taps, video only'; v = @{ maxSize = 1024; maxFps = 60; bitrateMbps = 6; videoBuffer = 0; audioMode = 'video_only' } },
-    @{ id = 'screencast'; name = 'Screen recorder'; note = 'Clean 1080p capture, sound in the recording'; v = @{ maxSize = 1920; maxFps = 30; bitrateMbps = 12; audioMode = 'record_only'; recordAudioCodec = 'aac' } }
+    @{ id = 'latency'; name = 'Low latency'; note = 'Gaming and quick taps, no sound'; v = @{ maxSize = 1024; maxFps = 60; bitrateMbps = 6; videoBuffer = 0; audioMode = 'video-only' } },
+    @{ id = 'screencast'; name = 'Screen recorder'; note = 'Clean 1080p capture with sound'; v = @{ maxSize = 1920; maxFps = 30; bitrateMbps = 12; audioMode = 'copy-record'; recordAudioCodec = 'aac' } }
 )
 
 function Get-Defaults {
@@ -521,566 +510,177 @@ function Get-DeviceModelHint {
 }
 
 # ---------------------------------------------------------------------------
-# Audio modes (4.1.0)
-# One controller decides every audio option of every scrcpy process. Nothing else builds audio flags.
-#   Phone policy   : does the phone keep playing, or is its sound moved to the PC?   (the mode)
-#   Mirror playback: does this scrcpy process play the sound on the PC?              (window or no window)
-#   Recording audio: does the saved file get the sound?                              (record role)
-#   Streaming audio: what OBS can hear. OBS is outside this program; see Get-StreamAudioPlan.
-# Every plan reports what will really happen. A mode that cannot work is never shown as active.
+# Audio mode engine. ONE place decides which scrcpy audio flags a session gets.
+# Phone sound policy, PC playback, recording sound and OBS sound are separate:
+#   video-only   : no audio stream at all. Phone unchanged, PC silent, no sound in files.
+#   copy-record  : playback capture + --audio-dup. Phone keeps playing, PC silent, sound in files.
+#   copy-play    : playback capture + --audio-dup, played on the PC. Phone keeps playing.
+#   reroute      : output capture. scrcpy forwards the phone output to the PC and the phone is silent.
+# Game sound for OBS (streamAudio=game) only makes the MIRROR process play on the PC; it never
+# changes the phone policy chosen by the mode (the phone keeps playing unless reroute is selected).
 # ---------------------------------------------------------------------------
-function Get-AudioModeId {
-    param($S)
-    $id = [string]$S.audioMode
-    if ($AudioModeIds -contains $id) { return $id }
-    return 'video_only'
+$AudioModeIds = @('video-only', 'copy-record', 'copy-play', 'reroute')
+$AudioModeInfo = @{
+    'video-only'  = @{ label = 'Video only'; text = 'Mirror and record the screen without phone sound. The phone keeps playing its own sound and the PC stays silent.'; phone = 'Plays normally'; pc = 'Silent'; rec = 'No sound in the file' }
+    'copy-record' = @{ label = 'Copy to recording'; text = 'Save the phone sound in the recording while the PC stays silent. Made for gameplay recording.'; phone = 'Plays normally'; pc = 'Silent'; rec = 'Sound and video' }
+    'copy-play'   = @{ label = 'Copy and play on PC'; text = 'The phone keeps playing and the same sound also plays on the PC. The recording has the sound once.'; phone = 'Plays normally'; pc = 'Plays'; rec = 'Sound and video' }
+    'reroute'     = @{ label = 'Reroute audio to PC'; text = 'The sound moves to the PC and the phone goes silent for what is rerouted. Needs Android 11 or newer.'; phone = 'Silent'; pc = 'Plays'; rec = 'Sound, when no second recorder' }
 }
 
-function Get-AudioModeInfo {
-    param([string]$Id)
-    foreach ($m in $AudioModes) { if ($m.id -eq $Id) { return $m } }
-    return $AudioModes[0]
-}
-
-# Which audio options this scrcpy really has. Read from its own --help, cached, never assumed.
-function Get-ScrcpyAudioCaps {
-    param([bool]$Probe = $true)
-    $scr = Get-ScrcpyPath
-    $hit = $Shared.audioScrcpy
-    if ($hit -and $hit.path -eq $scr) {
-        $age = ((Get-Date) - $hit.at).TotalSeconds
-        $ttl = $(if ($hit.ok) { 900 } else { 20 })
-        if ($age -lt $ttl -or -not $Probe) { return $hit }
-    }
-    if (-not $Probe) { return @{ path = $scr; ok = $false; unknown = $true; version = ''; flags = @{}; error = 'Not checked yet.'; at = (Get-Date) } }
-    $caps = @{ path = $scr; ok = $false; unknown = $false; version = ''; flags = @{}; error = ''; at = (Get-Date) }
+# What the bundled scrcpy really supports, read from its own --help (cached for the session).
+function Get-ScrcpyCaps {
+    $c = $Shared.scrcpyCaps
+    if ($c) { return $c }
+    $caps = @{ version = ''; known = $false; flags = @{ 'audio-dup' = $true; 'no-audio-playback' = $true; 'no-video-playback' = $true; 'audio-source' = $true; 'no-audio' = $true; 'no-playback' = $true } }
     try {
-        $dir = ''
-        if (Test-Path -LiteralPath $BundledDir) { $dir = $BundledDir }
-        $v = Invoke-Native $scr '--version' 10 $dir
-        if ((($v.out + "`n" + $v.err) -split "`r?`n")[0] -match 'scrcpy\s+([\d.]+)') { $caps.version = $Matches[1] }
-        $h = Invoke-Native $scr '--help' 15 $dir
-        $text = $h.out + "`n" + $h.err
-        foreach ($f in @('--audio-dup', '--audio-source', '--audio-codec', '--no-audio', '--no-audio-playback', '--no-playback', '--require-audio')) {
-            $caps.flags[$f] = [bool]([regex]::IsMatch($text, '(?m)(^|\s)' + [regex]::Escape($f) + '(\s|=|$)'))
+        $scr = Get-ScrcpyPath
+        if (Test-Tool $scr) {
+            $dir = ''
+            if (Test-Path -LiteralPath $BundledDir) { $dir = $BundledDir }
+            $r = Invoke-Native $scr '--help' 12 $dir
+            $t = [string]$r.out + "`n" + [string]$r.err
+            if ($t -match '--audio-source' ) {
+                $caps.known = $true
+                foreach ($k in @($caps.flags.Keys)) { $caps.flags[$k] = ($t.IndexOf('--' + $k) -ge 0) }
+            }
+            $v = Invoke-Native $scr '--version' 8 $dir
+            if (([string]$v.out -split "`r?`n")[0] -match 'scrcpy\s+([\d.]+)') { $caps.version = $Matches[1] }
         }
-        $caps.ok = ($text.Length -gt 200)
-        if (-not $caps.ok) { $caps.error = 'scrcpy did not print its option list.' }
-    } catch { $caps.error = $_.Exception.Message }
-    $Shared.audioScrcpy = $caps
+    } catch {}
+    Use-Lock { $Shared.scrcpyCaps = $caps }
     return $caps
 }
 
-# Android version of the phone, read through adb and cached briefly.
-function Get-DeviceAudioInfo {
-    param([string]$Serial, [bool]$Probe = $true)
-    if (-not $Shared.audioDev) { $Shared.audioDev = [hashtable]::Synchronized(@{}) }
-    $key = $(if ($Serial) { $Serial } else { '_default' })
-    $hit = $Shared.audioDev[$key]
-    if ($hit) {
-        $age = ((Get-Date) - $hit.at).TotalSeconds
-        $ttl = $(if ($hit.ok) { 300 } else { 10 })
-        if ($age -lt $ttl -or -not $Probe) { return $hit }
-    }
-    if (-not $Probe) { return @{ serial = $Serial; ok = $false; unknown = $true; sdk = 0; release = ''; model = ''; manufacturer = ''; error = 'Not read yet.'; at = (Get-Date) } }
-    $info = @{ serial = $Serial; ok = $false; unknown = $false; sdk = 0; release = ''; model = ''; manufacturer = ''; error = ''; at = (Get-Date) }
+# Android API level of the phone from the cached device info, or 0 when unknown.
+function Get-AudioSdk {
+    param([string]$Serial, [bool]$Probe = $false)
     try {
-        $r = Invoke-DeviceShell $Serial 'getprop ro.build.version.sdk; getprop ro.build.version.release; getprop ro.product.model; getprop ro.product.manufacturer' 8
-        $lines = @(($r.out -split "`r?`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
-        $n = 0
-        if ($lines.Count -ge 1 -and [int]::TryParse($lines[0], [ref]$n) -and $n -gt 0) {
-            $info.sdk = $n
-            $info.ok = $true
-            if ($lines.Count -ge 2) { $info.release = $lines[1] }
-            if ($lines.Count -ge 3) { $info.model = $lines[2] }
-            if ($lines.Count -ge 4) { $info.manufacturer = $lines[3] }
-        } else { $info.error = 'The phone did not report its Android version.' }
-    } catch { $info.error = $_.Exception.Message }
-    $Shared.audioDev[$key] = $info
-    return $info
+        $key = $Serial
+        if (-not $key) { $key = '_default' }
+        $cached = $Shared.info[$key]
+        if ($cached -and $cached.data -and [int]$cached.data.sdk -gt 0) { return [int]$cached.data.sdk }
+        if ($Probe) { $i = Get-DeviceInfo $Serial $false; if ($i -and [int]$i.sdk -gt 0) { return [int]$i.sdk } }
+    } catch {}
+    return 0
 }
 
-# The audio plan for one scrcpy process. Returns a hashtable; plan.argv holds the scrcpy options.
-#   requested : the mode the user chose
-#   effective : what this process really does (differs only when the phone or setup cannot do the mode)
-#   capture   : this process asks the phone for sound
-#   playsOnPc : this process plays the sound on the PC
-#   recordsAudio : the file this process saves gets the sound
-#   phone     : 'plays' or 'silent' (phone speaker while this process captures)
-function Resolve-AudioPlan {
-    param($S, [string]$Mode, [string]$Serial, [bool]$Companion = $false, [bool]$Headless = $false, [bool]$Probe = $true)
-    $req = Get-AudioModeId $S
-    $isRec = ($Mode -eq 'record')
+# Decides the audio setup for one scrcpy process.
+#   Role: 'mirror' (window, no recording), 'viewer' (window that also records), 'solo' (windowless recorder,
+#   nothing else running) or 'companion' (hidden second recorder next to a mirror window).
+function Get-AudioPlan {
+    param($S, [string]$Role, [int]$Sdk = 0, $Caps = $null, [string]$ViewerMode = '')
+    $req = [string]$S.audioMode
+    if ($req -notin $AudioModeIds) { $req = 'video-only' }
+    $stream = ([string]$S.streamAudio -eq 'game')
     $warn = New-Object System.Collections.ArrayList
-    $argv = New-Object System.Collections.ArrayList
-    $plan = @{ requested = $req; effective = $req; role = $Mode; companion = $Companion; headless = $Headless; capture = $false; playsOnPc = $false; recordsAudio = $false; phone = 'plays'; fallback = $false; reason = ''; note = ''; warnings = @(); argv = $argv; probed = $Probe }
-
-    $want = $false
-    $dup = $false
-    switch ($req) {
-        'record_only' { $want = $isRec; $dup = $true }
-        'copy_play' { $want = $true; $dup = $true }
-        'reroute' { $want = $true }
+    $plan = @{ requested = $req; effective = $req; role = $Role; capture = 'none'; dup = $false; pcPlay = $false; phoneSilent = $false; recordsAudio = $false; degraded = $false; warnings = $warn; streamAudio = $stream }
+    $recording = ($Role -in @('viewer', 'solo', 'companion'))
+    $unsup = ''
+    $need = $req
+    if ($S.source -eq 'camera') {
+        if ($req -ne 'video-only') { $unsup = 'Audio modes apply to screen mirroring. The camera source uses its own sound, so no phone sound is captured.' }
+        $need = 'video-only'
     }
-    if ($req -eq 'record_only' -and -not $isRec) { $plan.note = 'This mirror has no sound. Recordings made in this mode carry the sound.' }
-
-    # Is this phone and this scrcpy able to do it? Only checked when the plan will really be used.
-    $problem = ''
-    if ($want -and $Probe) {
-        $caps = Get-ScrcpyAudioCaps $true
-        $dev = Get-DeviceAudioInfo $Serial $true
-        if (-not $caps.ok) { $problem = 'scrcpy did not list its audio options (' + $caps.error + '), so the audio mode cannot be checked.' }
-        elseif (-not $caps.flags['--audio-source']) { $problem = 'This scrcpy has no audio support.' }
-        elseif ($dup -and -not $caps.flags['--audio-dup']) { $problem = 'This scrcpy does not support copying phone sound (--audio-dup). Use the bundled scrcpy 3.x or newer.' }
-        elseif ($req -eq 'record_only' -and $isRec -and -not $Headless -and -not $caps.flags['--no-audio-playback']) { $problem = 'This scrcpy cannot keep the PC silent while recording (--no-audio-playback).' }
-        elseif ($dev.ok -and $dev.sdk -lt 30) { $problem = 'The phone runs Android ' + $dev.release + '. Sending phone sound to the PC needs Android 11 or newer.' }
-        elseif ($dev.ok -and $dup -and $dev.sdk -lt 33) { $problem = 'The phone runs Android ' + $dev.release + '. Copying phone sound while it keeps playing needs Android 13 or newer.' }
-        elseif (-not $dev.ok) { [void]$warn.Add('The phone did not report its Android version (' + $dev.error + '), so support for this mode could not be checked.') }
+    if ($need -ne 'video-only' -and $Sdk -gt 0 -and $Sdk -lt 30) { $unsup = 'This phone reports Android API level ' + $Sdk + '. Sound forwarding needs Android 11 or newer.'; $need = 'video-only' }
+    if ($need -in @('copy-record', 'copy-play') -and $Sdk -gt 0 -and $Sdk -lt 33) { $unsup = 'Copying sound while the phone keeps playing needs Android 13 or newer. This phone is below that, so no sound is captured. Reroute works from Android 11.'; $need = 'video-only' }
+    if ($Caps -and $Caps.known) {
+        if ($need -in @('copy-record', 'copy-play') -and -not $Caps.flags['audio-dup']) { $unsup = 'The bundled scrcpy does not support --audio-dup, so copying sound is unavailable.'; $need = 'video-only' }
     }
-    if ($problem -ne '') {
-        $plan.effective = 'video_only'
-        $plan.fallback = $true
-        $plan.reason = $problem
-        [void]$warn.Add($problem + ' This session has no phone sound.')
-        $want = $false
-    }
+    if ($stream -and $S.source -eq 'camera') { $stream = $false }
+    $plan.streamAudio = $stream
+    if ($unsup -ne '') { [void]$warn.Add($unsup); $plan.degraded = ($need -ne $req) -or ($req -ne 'video-only'); if ($need -ne $req) { $plan.effective = 'video-only' } }
+    if ($Sdk -eq 0 -and $need -ne 'video-only') { [void]$warn.Add('The Android version of the phone could not be read yet. The settings are applied and scrcpy reports any problem in the session log.') }
 
-    if (-not $want) {
-        [void]$argv.Add('--no-audio')
-        $plan.warnings = @($warn)
-        return $plan
-    }
-
-    $plan.capture = $true
-    $viewer = -not $Headless
-    if ($dup) {
-        [void]$argv.Add('--audio-source=playback')
-        [void]$argv.Add('--audio-dup')
-        $plan.phone = 'plays'
-        if ($req -eq 'record_only') {
-            if ($viewer) { [void]$argv.Add('--no-audio-playback') }
-            $plan.playsOnPc = $false
-        } else { $plan.playsOnPc = $viewer }
-    } else {
-        $src = [string]$S.audioSource
-        if ($src -eq 'playback') { [void]$warn.Add('Playback capture belongs to the two Copy modes. Reroute uses the phone sound output instead.'); $src = 'output' }
-        if ($src -ne 'output') {
-            [void]$argv.Add('--audio-source=' + $src)
-            $plan.phone = 'plays'
-            [void]$warn.Add('A microphone source is selected, so the phone keeps its own sound and nothing is rerouted.')
-        } else { $plan.phone = 'silent' }
-        $plan.playsOnPc = $viewer
-        # The old rule, kept: a second capture of rerouted sound can silence the mirror on some phones.
-        if ($Companion -and -not [bool]$S.companionAudio) {
-            $argv.Clear()
-            [void]$argv.Add('--no-audio')
-            $plan.capture = $false
-            $plan.phone = 'plays'
-            $plan.playsOnPc = $false
-            [void]$warn.Add('This recording has no sound: "Sound in companion recordings" is off, so the mirror keeps the sound.')
-            $plan.warnings = @($warn)
-            return $plan
+    # which stream this process opens
+    $capture = 'none'; $dup = $false; $pcPlay = $false
+    switch ($need) {
+        'copy-record' {
+            if ($Role -eq 'mirror') { if ($stream) { $capture = 'playback'; $dup = $true; $pcPlay = $true } }
+            else { $capture = 'playback'; $dup = $true; $pcPlay = ($stream -and $Role -eq 'viewer') }
         }
-        if ($Companion) { [void]$warn.Add('The mirror and this recording both capture the rerouted sound. If the mirror goes quiet when recording starts, turn off "Sound in companion recordings".') }
+        'copy-play' {
+            $capture = 'playback'; $dup = $true; $pcPlay = ($Role -ne 'companion')
+        }
+        'reroute' {
+            $capture = 'output'; $pcPlay = ($Role -ne 'companion')
+            if ($Role -eq 'companion') {
+                $capture = 'none'
+                [void]$warn.Add('Reroute is active in the mirror window. A second recorder cannot capture the same output without fighting it, so this recording has no sound. Stop the mirror and record alone, or use Copy and play on PC.')
+            }
+        }
+        default {
+            if ($stream -and $Role -eq 'mirror') { $capture = 'playback'; $dup = $true; $pcPlay = $true }
+            elseif ($stream -and $Role -eq 'viewer') { [void]$warn.Add('Game sound for OBS is skipped in a recording window under Video only, because the file would then contain sound. Open the mirror first, then record.') }
+        }
     }
-
-    $plan.recordsAudio = $isRec
-    if ($isRec -and $Headless -and -not $Companion -and ($req -eq 'copy_play' -or $req -eq 'reroute')) {
-        # Windowless background recording: there is no window to play the sound.
-        [void]$warn.Add('Background recording has no window, so the sound is saved but not played on the PC.')
-        if ($req -eq 'copy_play') { $plan.effective = 'record_only'; $plan.reason = 'Background recording has no window to play the sound on the PC.' }
-        if ($req -eq 'reroute' -and $plan.phone -eq 'silent') { [void]$warn.Add('The phone is silent too, so nobody hears this sound while it records.') }
-    }
-    if ($isRec -and $Companion -and $req -eq 'copy_play') { $plan.note = 'The mirror window plays the sound on the PC. This recorder only saves it.' }
-
-    if ($isRec -and [bool]$S.audioRequire) {
-        $c2 = Get-ScrcpyAudioCaps $Probe
-        if ($c2.flags['--require-audio']) { [void]$argv.Add('--require-audio') }
-        elseif ($Probe) { [void]$warn.Add('This scrcpy cannot stop a recording when sound capture fails (--require-audio).') }
-    }
-    $codec = [string]$S.audioCodec
-    if ($isRec) { $codec = [string]$S.recordAudioCodec }
-    if ($codec -ne '') { [void]$argv.Add('--audio-codec=' + $codec) }
-    if ([int]$S.audioBitrate -gt 0) { [void]$argv.Add('--audio-bit-rate=' + $S.audioBitrate + 'K') }
-    if ([int]$S.audioBuffer -gt 0) { [void]$argv.Add('--audio-buffer=' + $S.audioBuffer) }
-    $plan.warnings = @($warn)
+    if ($capture -eq 'playback' -and $Sdk -gt 0 -and $Sdk -lt 33) { $capture = 'none'; $dup = $false; $pcPlay = $false; [void]$warn.Add('Game sound for OBS needs Android 13 or newer on this phone.') }
+    if ($capture -eq 'playback' -and $Caps -and $Caps.known -and -not $Caps.flags['audio-dup']) { $capture = 'none'; $dup = $false; $pcPlay = $false }
+    if ($capture -eq 'playback') { [void]$warn.Add('Sound is taken from apps that allow capture. If a game blocks it, the sound is missing and the check after recording tells you.') }
+    if ($ViewerMode -ne '' -and $Role -eq 'companion' -and $ViewerMode -ne $need) { [void]$warn.Add('The mirror window was opened with a different audio mode (' + $ViewerMode + '). Restart the mirror so both use the same mode.') }
+    $plan.capture = $capture; $plan.dup = $dup; $plan.pcPlay = $pcPlay
+    $plan.phoneSilent = ($capture -eq 'output')
+    $plan.recordsAudio = ($recording -and $capture -ne 'none')
+    if ($recording -and $req -ne 'video-only' -and -not $plan.recordsAudio) { $plan.degraded = $true }
     return $plan
 }
 
-# A short, safe copy of a plan for the session file and the dashboard.
-function ConvertTo-AudioView {
-    param($Plan)
-    return @{ requested = [string]$Plan.requested; effective = [string]$Plan.effective; capture = [bool]$Plan.capture; playsOnPc = [bool]$Plan.playsOnPc; recordsAudio = [bool]$Plan.recordsAudio; phone = [string]$Plan.phone; fallback = [bool]$Plan.fallback; reason = [string]$Plan.reason; note = [string]$Plan.note; warnings = @($Plan.warnings) }
+function Get-AudioArgs {
+    param($Plan, [string]$Mode, $S, [bool]$Headless)
+    $a = New-Object System.Collections.ArrayList
+    if ($Plan.capture -eq 'none') { [void]$a.Add('--no-audio'); return @($a) }
+    if ($Plan.capture -eq 'playback') { [void]$a.Add('--audio-source=playback'); if ($Plan.dup) { [void]$a.Add('--audio-dup') } }
+    $codec = [string]$S.audioCodec
+    if ($Mode -eq 'record') { $codec = [string]$S.recordAudioCodec }
+    if ($codec -ne '') { [void]$a.Add('--audio-codec=' + $codec) }
+    if ([int]$S.audioBitrate -gt 0) { [void]$a.Add('--audio-bit-rate=' + $S.audioBitrate + 'K') }
+    if ([int]$S.audioBuffer -gt 0) { [void]$a.Add('--audio-buffer=' + $S.audioBuffer) }
+    if (-not $Plan.pcPlay -and -not $Headless) { [void]$a.Add('--no-audio-playback') }
+    return @($a)
 }
 
-# Looks for audio trouble in a scrcpy session log. Returns the offending line or an empty string.
-function Get-AudioLogProblem {
-    param([string]$LogPath)
+# Reads a finished recording and reports whether it holds an audio track and, when ffmpeg is available, whether it is audible.
+function Get-AudioFileCheck {
+    param([string]$Path)
+    $r = @{ file = [IO.Path]::GetFileName($Path); size = [long](Get-Item -LiteralPath $Path).Length; audioTrack = $false; codec = ''; audible = $null; meanDb = $null; maxDb = $null; method = 'container'; message = '' }
+    $fs = [IO.File]::Open($Path, 'Open', 'Read', 'ReadWrite')
     try {
-        if (-not $LogPath -or -not (Test-Path -LiteralPath $LogPath)) { return '' }
-        # One quick read, no retries: this runs on the dashboard status path and must never wait.
-        $fs = New-Object IO.FileStream($LogPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+        $take = [int][math]::Min([long]262144, $fs.Length)
+        $head = New-Object byte[] $take
+        [void]$fs.Read($head, 0, $take)
+        $tail = New-Object byte[] 0
+        if ($fs.Length -gt $take) {
+            $tn = [int][math]::Min([long]1048576, $fs.Length - $take)
+            $tail = New-Object byte[] $tn
+            [void]$fs.Seek(-$tn, 'End')
+            [void]$fs.Read($tail, 0, $tn)
+        }
+        $all = [Text.Encoding]::GetEncoding(28591).GetString($head) + [Text.Encoding]::GetEncoding(28591).GetString($tail)
+        foreach ($c in @('A_AAC', 'A_OPUS', 'A_FLAC', 'A_PCM')) { if ($all.Contains($c)) { $r.audioTrack = $true; $r.codec = $c.Substring(2); break } }
+        if (-not $r.audioTrack -and $all.Contains('soun') -and ($all.Contains('mp4a') -or $all.Contains('Opus') -or $all.Contains('fLaC'))) { $r.audioTrack = $true; $r.codec = 'mp4' }
+    } finally { $fs.Dispose() }
+    $ff = ''
+    foreach ($cand in @((Join-Path (Join-Path (Join-Path $Root 'core') 'ffmpeg') 'ffmpeg.exe'), (Join-Path $BundledDir 'ffmpeg.exe'))) { if (Test-Path -LiteralPath $cand -PathType Leaf) { $ff = $cand; break } }
+    if (-not $ff) { try { $g = Get-Command ffmpeg -ErrorAction Stop; $ff = $g.Source } catch {} }
+    if ($r.audioTrack -and $ff) {
         try {
-            if ($fs.Length -gt 60000) { $fs.Position = $fs.Length - 60000 }
-            $sr = New-Object IO.StreamReader($fs, [Text.Encoding]::UTF8, $true)
-            $text = [string]$sr.ReadToEnd()
-        } finally { $fs.Dispose() }
-        foreach ($line in ($text -split "`r?`n")) {
-            $t = $line.Trim()
-            if ($t -eq '' -or $t -match 'No audio playback, no recording') { continue }
-            if ($t -match '(?i)audio.{0,60}(fail|error|disabled|not supported|unsupported|cannot|could not|unavailable)' -or $t -match '(?i)(could not|cannot|failed to|unable to).{0,60}audio' -or $t -match "(?i)stream explicitly disabled") {
-                return ($t -replace '^\s*(ERROR|WARN|INFO)\s*:\s*', '')
-            }
-        }
-    } catch {}
-    return ''
-}
-
-# State of the sound of a running session: off, starting, running (no error seen), failed.
-# 'running' means scrcpy reported no audio error. It does not prove the sound is audible; Test-RecordingAudio does that.
-function Get-SessionAudioState {
-    param($S)
-    $a = Get-Prop $S 'audio' $null
-    if ($null -eq $a -or -not [bool](Get-Prop $a 'capture' $false)) { return @{ state = 'off'; detail = '' } }
-    $problem = Get-AudioLogProblem ([string](Get-Prop $S 'log' ''))
-    if ($problem -ne '') { return @{ state = 'failed'; detail = $problem } }
-    $age = ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - [long](Get-Prop $S 'startedMs' 0)) / 1000
-    if ($age -lt 4) { return @{ state = 'starting'; detail = '' } }
-    return @{ state = 'running'; detail = '' }
-}
-
-# Called for live sessions: reports an audio failure once, as soon as scrcpy logs it.
-function Test-AudioSessionHealth {
-    param($S)
-    $a = Get-Prop $S 'audio' $null
-    if ($null -eq $a -or -not [bool](Get-Prop $a 'capture' $false)) { return }
-    if (-not $Shared.audioFlag) { $Shared.audioFlag = [hashtable]::Synchronized(@{}) }
-    $id = [string]$S.id
-    if ($Shared.audioFlag[$id]) { return }
-    $age = ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - [long]$S.startedMs) / 1000
-    if ($age -gt 120) { return }
-    $problem = Get-AudioLogProblem ([string]$S.log)
-    if ($problem -eq '') { return }
-    $Shared.audioFlag[$id] = $true
-    $label = $(if ($S.mode -eq 'record') { 'Recording' } else { 'Mirror' })
-    Add-Activity 'error' ($label + ' sound problem: ' + $problem)
-    Add-Event 'audio' @{ session = $id; mode = [string]$S.mode; problem = $problem }
-}
-
-# ---------------------------------------------------------------------------
-# Does a saved recording really contain sound? (container check, optional ffmpeg level check)
-# ---------------------------------------------------------------------------
-function Read-EbmlNumber {
-    param([IO.Stream]$Fs, [bool]$KeepMarker)
-    $b = $Fs.ReadByte()
-    if ($b -lt 0) { return $null }
-    $len = 1
-    $mask = 0x80
-    while ($len -le 8 -and (($b -band $mask) -eq 0)) { $len++; $mask = $mask -shr 1 }
-    if ($len -gt 8) { return $null }
-    $low = $b -band ($mask - 1)
-    if ($KeepMarker) { $v = [long]$b } else { $v = [long]$low }
-    $ones = ((-not $KeepMarker) -and ($low -eq ($mask - 1)))
-    for ($i = 1; $i -lt $len; $i++) {
-        $n = $Fs.ReadByte()
-        if ($n -lt 0) { return $null }
-        $v = ($v -shl 8) -bor $n
-        if ($n -ne 255) { $ones = $false }
+            $o = Invoke-Native $ff ('-hide_banner -nostats -i "' + $Path + '" -vn -af volumedetect -f null -') 120
+            $t = [string]$o.err + [string]$o.out
+            if ($t -match 'mean_volume:\s*(-?[\d.]+)\s*dB') { $r.meanDb = [double]$Matches[1] }
+            if ($t -match 'max_volume:\s*(-?[\d.]+)\s*dB') { $r.maxDb = [double]$Matches[1] }
+            if ($null -ne $r.maxDb) { $r.method = 'ffmpeg'; $r.audible = ($r.maxDb -gt -60) }
+        } catch {}
     }
-    return @{ v = $v; len = $len; unknown = $ones }
-}
-
-function Read-BigEndian {
-    param([IO.Stream]$Fs, [int]$Count)
-    $v = [long]0
-    for ($i = 0; $i -lt $Count; $i++) {
-        $n = $Fs.ReadByte()
-        if ($n -lt 0) { return -1 }
-        $v = ($v -shl 8) -bor $n
-    }
-    return $v
-}
-
-# Matroska (.mkv). Walks the track list and counts the audio blocks (first part only when the file is long).
-function Get-MkvAudioInfo {
-    param([string]$Path, [int]$BudgetMs = 8000, [int]$MaxAudioBlocks = 6000)
-    $info = @{ format = 'mkv'; ok = $false; videoTracks = 0; audioTracks = 0; audioCodec = ''; audioBlocks = 0; audioBytes = [long]0; scannedMs = [long]0; sampled = $false }
-    $masters = @(0x18538067, 0x1F43B675, 0xA0, 0x1654AE6B, 0xAE)
-    $sw = [Diagnostics.Stopwatch]::StartNew()
-    $fs = New-Object IO.FileStream($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete), 65536)
-    try {
-        $tracks = @{}
-        $cur = $null
-        $clusterTc = [long]0
-        $lastMs = [long]0
-        while ($true) {
-            if ($sw.ElapsedMilliseconds -gt $BudgetMs -or $info.audioBlocks -ge $MaxAudioBlocks) { $info.sampled = $true; break }
-            $idr = Read-EbmlNumber $fs $true
-            if ($null -eq $idr -or $idr.len -gt 4) { break }
-            $szr = Read-EbmlNumber $fs $false
-            if ($null -eq $szr) { break }
-            $id = $idr.v
-            if ($masters -contains $id) {
-                if ($id -eq 0xAE) { $cur = @{ num = 0; type = 0; codec = '' } }
-                continue
-            }
-            if ($szr.unknown) { break }
-            $sz = $szr.v
-            $pos = $fs.Position
-            if (($id -eq 0xD7 -or $id -eq 0x83 -or $id -eq 0xE7) -and $sz -ge 1 -and $sz -le 8) {
-                $val = Read-BigEndian $fs ([int]$sz)
-                if ($id -eq 0xE7) { $clusterTc = $val }
-                elseif ($null -ne $cur) { if ($id -eq 0xD7) { $cur.num = [int]$val } else { $cur.type = [int]$val } }
-            } elseif ($id -eq 0x86 -and $null -ne $cur -and $sz -le 64) {
-                $buf = New-Object byte[] ([int]$sz)
-                [void]$fs.Read($buf, 0, [int]$sz)
-                $cur.codec = [Text.Encoding]::ASCII.GetString($buf)
-            } elseif ($id -eq 0xA3 -or $id -eq 0xA1) {
-                $tn = Read-EbmlNumber $fs $false
-                if ($null -ne $tn) {
-                    $t = $tracks[[int]$tn.v]
-                    if ($t -and $t.type -eq 2) {
-                        $hi = $fs.ReadByte()
-                        $lo = $fs.ReadByte()
-                        $rel = ($hi -shl 8) -bor $lo
-                        if ($rel -ge 32768) { $rel -= 65536 }
-                        $info.audioBlocks++
-                        $info.audioBytes += $sz
-                        $lastMs = $clusterTc + $rel
-                    }
-                }
-            }
-            if ($null -ne $cur -and $cur.num -gt 0 -and $cur.type -gt 0 -and -not $tracks.ContainsKey([int]$cur.num)) { $tracks[[int]$cur.num] = $cur }
-            $fs.Position = $pos + $sz
-        }
-        foreach ($t in $tracks.Values) {
-            if ($t.type -eq 1) { $info.videoTracks++ }
-            if ($t.type -eq 2) { $info.audioTracks++; if ($info.audioCodec -eq '') { $info.audioCodec = [string]$t.codec } }
-        }
-        $info.scannedMs = $lastMs
-        $info.ok = ($tracks.Count -gt 0)
-    } finally { $fs.Dispose() }
-    return $info
-}
-
-# MP4. Reads the track list from the moov box (an MP4 that was not closed cleanly has none).
-function Read-Mp4Boxes {
-    param([IO.Stream]$Fs, [long]$Pos, [long]$Limit, $State, [int]$Depth)
-    $containers = @('moov', 'trak', 'mdia', 'minf', 'stbl')
-    while (($Pos + 8) -le $Limit -and $Depth -lt 8) {
-        if ($State.sw.ElapsedMilliseconds -gt $State.budget) { $State.sampled = $true; return }
-        $Fs.Position = $Pos
-        $size = Read-BigEndian $Fs 4
-        $tb = New-Object byte[] 4
-        [void]$Fs.Read($tb, 0, 4)
-        $type = [Text.Encoding]::ASCII.GetString($tb)
-        $hdr = 8
-        if ($size -eq 1) { $size = Read-BigEndian $Fs 8; $hdr = 16 }
-        elseif ($size -eq 0) { $size = $Limit - $Pos }
-        if ($size -lt $hdr) { return }
-        $body = $Pos + $hdr
-        $end = [math]::Min($Pos + $size, $Limit)
-        if ($type -eq 'moov') { $State.moov = $true }
-        if ($type -eq 'trak') { $State.cur = @{ handler = ''; timescale = 0; duration = [long]0; samples = [long]0; bytes = [long]0 }; $State.tracks += , $State.cur }
-        if ($containers -contains $type) { Read-Mp4Boxes $Fs $body $end $State ($Depth + 1) }
-        elseif ($type -eq 'hdlr' -and $null -ne $State.cur) {
-            $Fs.Position = $body + 8
-            $hb = New-Object byte[] 4
-            [void]$Fs.Read($hb, 0, 4)
-            $State.cur.handler = [Text.Encoding]::ASCII.GetString($hb)
-        } elseif ($type -eq 'mdhd' -and $null -ne $State.cur) {
-            $Fs.Position = $body
-            $ver = $Fs.ReadByte()
-            $Fs.Position = $body + 4
-            if ($ver -eq 1) { $Fs.Position = $body + 20; $State.cur.timescale = [long](Read-BigEndian $Fs 4); $State.cur.duration = [long](Read-BigEndian $Fs 8) }
-            else { $Fs.Position = $body + 12; $State.cur.timescale = [long](Read-BigEndian $Fs 4); $State.cur.duration = [long](Read-BigEndian $Fs 4) }
-        } elseif ($type -eq 'stsz' -and $null -ne $State.cur) {
-            $Fs.Position = $body + 4
-            $each = Read-BigEndian $Fs 4
-            $count = Read-BigEndian $Fs 4
-            $State.cur.samples = $count
-            if ($each -gt 0) { $State.cur.bytes = $each * $count }
-            elseif ($State.cur.handler -eq 'soun') {
-                $total = [long]0
-                $left = $count
-                while ($left -gt 0) {
-                    $n = [int][math]::Min($left, 16384)
-                    $buf = New-Object byte[] (4 * $n)
-                    $got = $Fs.Read($buf, 0, $buf.Length)
-                    if ($got -lt $buf.Length) { break }
-                    for ($i = 0; $i -lt $n; $i++) { $o = 4 * $i; $total += ([long]$buf[$o] * 16777216) + ([long]$buf[$o + 1] * 65536) + ([long]$buf[$o + 2] * 256) + [long]$buf[$o + 3] }
-                    $left -= $n
-                }
-                $State.cur.bytes = $total
-            }
-        }
-        $Pos = $Pos + $size
-    }
-}
-
-function Get-Mp4AudioInfo {
-    param([string]$Path, [int]$BudgetMs = 8000)
-    $info = @{ format = 'mp4'; ok = $false; videoTracks = 0; audioTracks = 0; audioCodec = ''; audioBlocks = 0; audioBytes = [long]0; scannedMs = [long]0; sampled = $false }
-    $fs = New-Object IO.FileStream($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete), 65536)
-    try {
-        $state = @{ moov = $false; cur = $null; tracks = @(); sw = [Diagnostics.Stopwatch]::StartNew(); budget = $BudgetMs; sampled = $false }
-        Read-Mp4Boxes $fs 0 $fs.Length $state 0
-        $info.ok = [bool]$state.moov
-        $info.sampled = [bool]$state.sampled
-        foreach ($t in $state.tracks) {
-            if ($t.handler -eq 'vide') { $info.videoTracks++ }
-            if ($t.handler -eq 'soun') {
-                $info.audioTracks++
-                $info.audioBlocks += $t.samples
-                $info.audioBytes += $t.bytes
-                if ($t.timescale -gt 0) { $info.scannedMs = [long](1000 * $t.duration / $t.timescale) }
-            }
-        }
-    } finally { $fs.Dispose() }
-    return $info
-}
-
-# Full report for one recording. $Deep also decodes the sound with ffmpeg, when ffmpeg is available.
-#   state: no_audio   the file has no sound track
-#          silent_hint a sound track exists but carries almost no data (likely silence)
-#          present    a sound track with data exists (loudness not measured)
-#          audible    ffmpeg measured sound above the silence floor
-#          silent     ffmpeg measured only silence
-#          unreadable the container could not be read (for example an MP4 that was not closed cleanly)
-function Test-RecordingAudio {
-    param([string]$Path, [bool]$Deep = $false)
-    $name = [IO.Path]::GetFileName($Path)
-    $rep = @{ file = $name; state = 'unreadable'; verified = $false; summary = ''; format = ''; audioTracks = 0; audioCodec = ''; audioBlocks = 0; audioKbps = 0; checkedSeconds = 0; sampled = $false; level = $null }
-    $ext = [IO.Path]::GetExtension($Path).ToLowerInvariant()
-    $info = $null
-    try {
-        if ($ext -eq '.mkv') { $info = Get-MkvAudioInfo $Path }
-        elseif ($ext -eq '.mp4') { $info = Get-Mp4AudioInfo $Path }
-        else { $rep.summary = 'Only MKV and MP4 recordings can be checked.'; return $rep }
-    } catch { $rep.summary = 'The file could not be read: ' + $_.Exception.Message; return $rep }
-    $rep.format = $info.format
-    if (-not $info.ok) {
-        $rep.summary = $(if ($ext -eq '.mp4') { 'This MP4 has no track list. It was probably not closed cleanly, so it cannot be checked. MKV survives forced stops.' } else { 'The file has no readable track list.' })
-        return $rep
-    }
-    $rep.audioTracks = [int]$info.audioTracks
-    $rep.audioCodec = [string]$info.audioCodec
-    $rep.audioBlocks = [long]$info.audioBlocks
-    $rep.sampled = [bool]$info.sampled
-    $secs = [double]$info.scannedMs / 1000
-    $rep.checkedSeconds = [math]::Round($secs, 1)
-    if ($secs -gt 0) { $rep.audioKbps = [math]::Round(([double]$info.audioBytes * 8 / $secs) / 1000, 1) }
-    if ($info.audioTracks -eq 0) {
-        $rep.state = 'no_audio'
-        $rep.summary = 'This recording has no sound track.'
-    } elseif ($info.audioBlocks -le 0) {
-        $rep.state = 'no_audio'
-        $rep.summary = 'The file declares a sound track but holds no sound data.'
-    } else {
-        $avg = [double]$info.audioBytes / [double]$info.audioBlocks
-        if ($avg -lt 24) {
-            $rep.state = 'silent_hint'
-            $rep.summary = 'A sound track exists but carries almost no data, which usually means silence.'
-        } else {
-            $rep.state = 'present'
-            $rep.summary = 'A sound track with data is saved in this recording. Loudness was not measured.'
-        }
-    }
-    if ($Deep -and $rep.state -ne 'no_audio') {
-        $ff = Get-FfmpegPath
-        if ($ff -eq '') { $rep.summary += ' Install ffmpeg (core\ffmpeg) to measure the loudness.' }
-        else {
-            try {
-                $r = Invoke-Native $ff ('-hide_banner -nostats -i "' + $Path + '" -vn -af volumedetect -f null -') 120
-                $text = $r.out + "`n" + $r.err
-                if ($text -match 'max_volume:\s*(-?[\d.]+)\s*dB') {
-                    $mx = [double]$Matches[1]
-                    $mean = $null
-                    if ($text -match 'mean_volume:\s*(-?[\d.]+)\s*dB') { $mean = [double]$Matches[1] }
-                    $rep.level = @{ maxDb = $mx; meanDb = $mean }
-                    $rep.verified = $true
-                    if ($mx -gt -60) { $rep.state = 'audible'; $rep.summary = 'Verified with ffmpeg: the recording has audible sound (peak ' + $mx + ' dB).' }
-                    else { $rep.state = 'silent'; $rep.summary = 'Verified with ffmpeg: the sound track is silent (peak ' + $mx + ' dB). Audio capture produced no sound.' }
-                } else { $rep.summary += ' ffmpeg could not decode the sound.' }
-            } catch { $rep.summary += ' The ffmpeg check failed: ' + $_.Exception.Message }
-        }
-    }
-    return $rep
-}
-
-# ---------------------------------------------------------------------------
-# Streaming (OBS). DROID ADB cannot configure OBS. It reports what the chosen audio mode allows OBS to hear
-# and what must be set up in OBS and Windows. The plan never changes the phone, the mirror or a recording.
-# ---------------------------------------------------------------------------
-function Get-StreamAudioPlan {
-    param($S)
-    $mode = Get-AudioModeId $S
-    $plan = [string]$S.streamAudio
-    if ($StreamAudioIds -notcontains $plan) { $plan = 'none' }
-    $pcPlays = ($mode -eq 'copy_play' -or $mode -eq 'reroute')
-    $r = @{ plan = $plan; mode = $mode; status = 'ok'; headline = ''; steps = @(); notes = @() }
-    switch ($plan) {
-        'none' {
-            $r.headline = 'OBS takes the mirror video only. No game sound in the stream.'
-            $r.steps = @(('In OBS, add the mirror window as a Window Capture source (the window titled "' + [string]$S.windowTitle + '").'), 'Do not add an audio source for the game.')
-            if ($pcPlays) {
-                $r.status = 'check'
-                $r.notes = @('This audio mode plays the game on the PC. If OBS has Desktop Audio switched on, the game will be in the stream. Mute Desktop Audio in OBS, or choose Video only or Copy to recording.')
-            }
-        }
-        'listen' {
-            if ($pcPlays) {
-                $r.headline = 'You hear the game on the PC and OBS can capture it.'
-                $r.steps = @('In OBS, add ONE audio source: Application Audio Capture (BETA) set to the scrcpy window, or Desktop Audio. Not both, or the stream has the game twice.', 'Keep Audio Monitoring off for that source if you already hear the game through Windows.')
-            } else {
-                $r.status = 'conflict'
-                $r.headline = 'This audio mode does not play the game on the PC, so you cannot listen and OBS cannot capture it.'
-                $r.notes = @('Switch to Copy and play on PC (the phone also keeps playing and the recording gets the sound) or Reroute audio to PC.')
-            }
-        }
-        'silent_pc' {
-            if ($pcPlays) {
-                $r.status = 'setup'
-                $r.headline = 'OBS can capture the game while the PC speakers stay quiet, but this needs a Windows audio setup.'
-                $r.steps = @('Windows can only be silent and still pass sound to OBS if the sound goes to an output you are not listening to. Open Settings, System, Sound, Volume mixer (App volume and device preferences) and send scrcpy.exe to a different output: a virtual audio cable you already use, or headphones you are not wearing.', 'In OBS, capture that output with Audio Output Capture. Or add Application Audio Capture (BETA) for the scrcpy window.', 'Check the OBS meter while the game plays. If the meter stays flat, this route does not work on your PC.')
-                $r.notes = @('DROID ADB cannot silence your speakers by itself and does not install any audio driver. Muting scrcpy in the Volume mixer may also silence OBS capture; test it before going live.')
-            } else {
-                $r.status = 'conflict'
-                $r.headline = 'This audio mode keeps the PC silent because the mirror plays no sound, so OBS has nothing to capture.'
-                $r.notes = @('For a silent PC with sound in OBS, use Copy and play on PC and send scrcpy.exe to an output you are not listening to (see the steps for this plan). That also keeps the sound in your recording.')
-            }
-        }
-    }
+    if (-not $r.audioTrack) { $r.message = 'No audio track found in this file.' }
+    elseif ($r.method -eq 'ffmpeg') { if ($r.audible) { $r.message = 'Audio track found and the sound is audible (peak ' + $r.maxDb + ' dB).' } else { $r.message = 'Audio track found but it is silent (peak ' + $r.maxDb + ' dB). The game may block sound capture.' } }
+    else { $r.message = 'Audio track found (' + $r.codec + '). Loudness could not be measured because ffmpeg is not available. Play the file to confirm you can hear it.' }
     return $r
-}
-
-# Read-only look at the Windows audio setup, for the streaming section. Nothing is changed.
-function Get-AudioEnvironment {
-    $e = @{ windows = $OnWindows; build = 0; appAudioCapture = $false; obsRunning = $false; obsProcesses = @(); devices = @(); virtualHints = @(); scrcpyWindows = @(); notes = @() }
-    if (-not $OnWindows) { $e.notes = @('The Windows audio check only runs on Windows.'); return $e }
-    try { $e.build = [int][Environment]::OSVersion.Version.Build } catch {}
-    $e.appAudioCapture = ($e.build -ge 19041)
-    try {
-        $obs = @(Get-Process -Name 'obs64', 'obs32', 'obs' -ErrorAction SilentlyContinue)
-        if ($obs.Count -gt 0) { $e.obsRunning = $true; $e.obsProcesses = @($obs | ForEach-Object { $_.ProcessName + ' (' + $_.Id + ')' }) }
-    } catch {}
-    try {
-        $devs = @(Get-CimInstance Win32_SoundDevice -ErrorAction Stop | ForEach-Object { [string]$_.Name } | Where-Object { $_ })
-        $e.devices = @($devs)
-        $e.virtualHints = @($devs | Where-Object { $_ -match '(?i)virtual|cable|vb-audio|voicemeeter|stereo mix|loopback' })
-    } catch {}
-    try {
-        $e.scrcpyWindows = @(Get-Process -Name 'scrcpy' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | ForEach-Object { @{ pid = $_.Id; title = [string]$_.MainWindowTitle } })
-    } catch {}
-    if (-not $e.appAudioCapture) { $e.notes += 'Application Audio Capture in OBS needs Windows 10 version 2004 or newer. Use Audio Output Capture instead.' }
-    return $e
 }
 
 # ---------------------------------------------------------------------------
 # Building the scrcpy command line
 # ---------------------------------------------------------------------------
 function New-ScrcpyArgs {
-    param($S, [string]$Mode, [string]$Serial, [string]$OutFile, [hashtable]$Once, [hashtable]$PlanSink = $null, [bool]$Probe = $true)
+    param($S, [string]$Mode, [string]$Serial, [string]$OutFile, [hashtable]$Once)
     Test-Serial $Serial
     if (-not $Once) { $Once = @{} }
     $companion = [bool]$Once.companion
@@ -1109,10 +709,12 @@ function New-ScrcpyArgs {
     if ($S.videoEncoder -ne '') { [void]$a.Add('--video-encoder=' + $S.videoEncoder) }
     if ($S.captureOrientation -ne '') { [void]$a.Add('--capture-orientation=' + $S.captureOrientation) }
     if ($S.videoBuffer -gt 0) { [void]$a.Add('--video-buffer=' + $S.videoBuffer) }
-    # audio: the Audio mode controller decides every audio option (see Resolve-AudioPlan)
-    $plan = Resolve-AudioPlan -S $S -Mode $Mode -Serial $Serial -Companion $companion -Headless $headless -Probe $Probe
-    foreach ($x in $plan.argv) { [void]$a.Add([string]$x) }
-    if ($null -ne $PlanSink) { $PlanSink.plan = $plan }
+    # audio (decided by Get-AudioPlan; see the audio mode engine above)
+    $role = 'mirror'
+    if ($Mode -eq 'record') { if ($companion) { $role = 'companion' } elseif ($headless) { $role = 'solo' } else { $role = 'viewer' } }
+    $plan = $Once.audioPlan
+    if (-not $plan) { $plan = Get-AudioPlan -S $S -Role $role -Sdk (Get-AudioSdk $Serial) -Caps (Get-ScrcpyCaps) -ViewerMode ([string]$Once.viewerAudio) }
+    foreach ($x in (Get-AudioArgs -Plan $plan -Mode $Mode -S $S -Headless $headless)) { [void]$a.Add($x) }
     # control
     if ($S.viewOnly -or $companion) { [void]$a.Add('--no-control') } else {
         if ($S.keyboard -ne '') { [void]$a.Add('--keyboard=' + $S.keyboard) }
@@ -1130,7 +732,7 @@ function New-ScrcpyArgs {
         if ($S.screenOffTimeout -gt 0) { [void]$a.Add('--screen-off-timeout=' + $S.screenOffTimeout) }
     }
     # window
-    if ($headless) { [void]$a.Add('--no-playback') } else {
+    if ($headless) { if ($plan.pcPlay -and $plan.capture -ne 'none') { [void]$a.Add('--no-video-playback') } else { [void]$a.Add('--no-playback') } } else {
         $title = $S.windowTitle
         if ($title -eq '') { $title = 'DROID ADB' }
         [void]$a.Add('--window-title="' + $title + '"')
@@ -1263,17 +865,10 @@ function Get-LiveSessions {
                         $txt = $label + ' ended after ' + [timespan]::FromSeconds($secs).ToString('hh\:mm\:ss')
                         if ($d.mode -eq 'record' -and $d.fileName) { $txt = 'Recording saved: ' + $d.fileName }
                         Add-Activity 'stop' $txt
-                        $da = Get-Prop $d 'audio' $null
-                        $expect = $false
-                        $dmode = ''
-                        if ($null -ne $da) { $expect = [bool](Get-Prop $da 'recordsAudio' $false); $dmode = [string](Get-Prop $da 'effective' '') }
-                        $dprob = $(if ($expect) { Get-AudioLogProblem $d.log } else { '' })
-                        if ($dprob -ne '' -and -not ($Shared.audioFlag -and $Shared.audioFlag[[string]$d.id])) { Add-Activity 'error' ('Recording sound problem: ' + $dprob) }
-                        Add-Event 'ended' @{ mode = $d.mode; file = $d.fileName; size = $size; seconds = $secs; session = $d.id; audioExpected = $expect; audioMode = $dmode; audioProblem = $dprob }
+                        Add-Event 'ended' @{ mode = $d.mode; file = $d.fileName; size = $size; seconds = $secs; session = $d.id }
                     }
                 }
             }
-            foreach ($l in $live) { try { Test-AudioSessionHealth $l } catch {} }
             return $live
         })
 }
@@ -1282,7 +877,7 @@ function Get-SessionView {
     param($S)
     $size = [long]0
     if ($S.mode -eq 'record' -and $S.path -and (Test-Path -LiteralPath $S.path)) { try { $size = [long](Get-Item -LiteralPath $S.path).Length } catch {} }
-    return @{ id = $S.id; pid = [int]$S.pid; mode = $S.mode; recording = ($S.mode -eq 'record'); type = $(if ($S.mode -eq 'record') { 'Recording' } else { 'Mirroring' }); serial = [string]$S.serial; started = ([DateTimeOffset]::FromUnixTimeMilliseconds([long]$S.startedMs).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')); file = [string]$S.fileName; fileSize = $size; headless = [bool]$S.headless; companion = [bool]$S.companion; app = [string]$S.app; audio = (Get-Prop $S 'audio' $null); audioState = (Get-SessionAudioState $S) }
+    return @{ id = $S.id; pid = [int]$S.pid; mode = $S.mode; recording = ($S.mode -eq 'record'); type = $(if ($S.mode -eq 'record') { 'Recording' } else { 'Mirroring' }); serial = [string]$S.serial; started = ([DateTimeOffset]::FromUnixTimeMilliseconds([long]$S.startedMs).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')); file = [string]$S.fileName; fileSize = $size; headless = [bool]$S.headless; companion = [bool]$S.companion; app = [string]$S.app; audio = $S.audio }
 }
 
 function Get-ChildPid {
@@ -1359,12 +954,14 @@ function Start-ToolkitScrcpy {
         $out = New-UniquePath (Get-Dir 'recordings') (New-FileStem $settings.recordTemplate $Serial) $settings.recordFormat
         $fileName = [IO.Path]::GetFileName($out)
     }
-    $sink = @{}
-    $argLine = New-ScrcpyArgs -S $settings -Mode $Mode -Serial $Serial -OutFile $out -Once $Once -PlanSink $sink
-    $plan = $sink.plan
-    if ($Mode -eq 'record' -and $plan.fallback -and [bool]$settings.audioRequire) {
-        Fail ('Recording not started. ' + $plan.reason + ' Choose Video only in Settings, Audio, or turn off "Stop a recording if its sound cannot be captured".')
-    }
+    $headlessNow = ($Mode -eq 'record' -and ([bool]$settings.recordWindowless -or $companion))
+    $role = 'mirror'
+    if ($Mode -eq 'record') { if ($companion) { $role = 'companion' } elseif ($headlessNow) { $role = 'solo' } else { $role = 'viewer' } }
+    $viewerAudio = ''
+    if ($companion) { $vs = @($viewer)[0]; if ($vs -and $vs.audio) { $viewerAudio = [string]$vs.audio.effective } }
+    $plan = Get-AudioPlan -S $settings -Role $role -Sdk (Get-AudioSdk $Serial $true) -Caps (Get-ScrcpyCaps) -ViewerMode $viewerAudio
+    $Once.audioPlan = $plan
+    $argLine = New-ScrcpyArgs -S $settings -Mode $Mode -Serial $Serial -OutFile $out -Once $Once
     $log = Join-Path $LogDir ('session-' + $id + '.log')
     $psi = New-Object Diagnostics.ProcessStartInfo
     if ($OnWindows) {
@@ -1384,7 +981,7 @@ function Start-ToolkitScrcpy {
     $proc = [Diagnostics.Process]::Start($psi)
     $startTicks = [long]0
     try { $startTicks = $proc.StartTime.ToUniversalTime().Ticks } catch {}
-    $session = @{ id = $id; pid = [int]$proc.Id; procStart = $startTicks; mode = $Mode; serial = $Serial; startedMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); path = $out; fileName = $fileName; headless = ($Mode -eq 'record' -and ([bool]$settings.recordWindowless -or $companion)); companion = $companion; log = $log; app = [string]$Once.startApp; audio = (ConvertTo-AudioView $plan) }
+    $session = @{ id = $id; pid = [int]$proc.Id; procStart = $startTicks; mode = $Mode; serial = $Serial; startedMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); path = $out; fileName = $fileName; headless = ($Mode -eq 'record' -and ([bool]$settings.recordWindowless -or $companion)); companion = $companion; log = $log; app = [string]$Once.startApp; audio = @{ requested = $plan.requested; effective = $plan.effective; capture = $plan.capture; pcPlay = [bool]$plan.pcPlay; phoneSilent = [bool]$plan.phoneSilent; recordsAudio = [bool]$plan.recordsAudio; degraded = [bool]$plan.degraded; streamAudio = [bool]$plan.streamAudio; warnings = @($plan.warnings) } }
     Use-SessionFile { $list = @(Read-Sessions); $list += , $session; Write-Sessions $list }
     # keep only the newest session logs
     try {

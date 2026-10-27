@@ -180,7 +180,7 @@ try {
                 Send-Json $Ctx @{ ok = $true; version = $ToolkitVersion; uptime = [int]((Get-Date) - $Shared.started).TotalSeconds; inflight = [int]$Shared.inflight }
                 continue
             }
-            if ($method -in @('GET', 'HEAD') -and ($path -eq '' -or $path -eq '/index.html' -or $path.StartsWith('/assets/'))) { Send-Static $Ctx $path; continue }
+            if ($method -in @('GET', 'HEAD') -and ($path -eq '' -or $path -eq '/index.html' -or $path -eq '/sw.js' -or $path -eq '/manifest.webmanifest' -or $path.StartsWith('/assets/'))) { Send-Static $Ctx $path; continue }
             if ($method -eq 'GET' -and $path -eq '/favicon.ico') { $Ctx.Response.StatusCode = 204; $Ctx.Response.Close(); continue }
             $lane = $Shared.queue
             if ($FastRoutes.ContainsKey($method + ' ' + $path)) { $lane = $Shared.fastQueue }

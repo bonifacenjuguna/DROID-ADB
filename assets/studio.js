@@ -1,528 +1,451 @@
-/* DROID ADB 4.0 Performance Studio: shell, live sampling, health score, profiles, suggestions and the Overview and Optimize pages.
-   Other Studio pages (Games, Thermals, Network, Capture) live in studio-games.js and studio-more.js and register themselves here. */
+/* Studio 3.8 engine: live telemetry, 24 hour history, readiness analysis, forecasts, profiles with Undo,
+   game sessions, watchdog alerts and the perf recorder. The screen is drawn by studio-views.js. */
 (() => {
 'use strict';
-const { $, $$, esc, icon, state } = STK;
-const nice = p => (STK.niceApp ? STK.niceApp(p) : p);
-const root = () => $('#studio-root');
-const N = 90;
-const SX = STK.studio = { tabs: [], actions: {}, changes: {} };
-const S = SX.S = { tab: STK.store.get('sx-tab', 'overview'), hist: {}, last: {}, busy: false, timer: null, err: null, toggles: null, brightness: -1, apps: null, pkg: STK.store.get('sx-pkg', ''), compat: null, run: null, prev: {}, active: {}, cool: null, gm: null, mounted: false };
+const { $, $$, esc, state } = STK;
+const SX = STK.sx;
+const enc = encodeURIComponent;
+const SS = STK.studioCore = { render() {}, paint() {}, paintSteps() {}, paintEvents() {}, onChartTick() {} };
+const store = STK.store;
 
-/* ---------- small helpers ---------- */
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const num = v => (v == null || !isFinite(v) ? null : Number(v));
-const OPTS_DEFAULT = { hot: 43, cool: 36 };
-SX.opts = () => ({ ...OPTS_DEFAULT, ...(STK.kv.get('perf-opts', {}) || {}) });
-SX.games = () => STK.kv.get('games', []);
-SX.last = () => S.last[STK.sel()] || null;
-SX.hist = id => S.hist[id || STK.sel()] || null;
-const H = id => S.hist[id] || (S.hist[id] = { cpu: [], mem: [], temp: [], gpuC: [], skin: [], batC: [], bat: [], t: [] });
-const push = (a, v) => { a.push(v == null ? null : v); if (a.length > N) a.shift(); };
-SX.tone = (kind, v) => {
-  if (v == null) return '';
-  const o = SX.opts();
-  if (kind === 'temp') return v >= o.hot ? 'bad' : v >= o.hot - 4 ? 'warn' : v <= o.cool - 2 ? 'cool' : 'ok';
-  if (kind === 'cpu') return v >= 92 ? 'bad' : v >= 75 ? 'warn' : 'ok';
-  if (kind === 'mem') return v >= 90 ? 'bad' : v >= 78 ? 'warn' : 'ok';
-  if (kind === 'bat') return v <= 15 ? 'bad' : v <= 30 ? 'warn' : 'ok';
-  return 'ok';
+const S = SS.S = {
+  tab: store.get('studio-tab', 'overview'), pkg: '', perf: null, perfErr: '', perfBusy: false, perfTimer: null, running: false, paused: false,
+  interval: Number(store.get('sx-int', 4000)) || 4000, lastAt: 0, lastLatency: null, sample: null, lastFrames: null,
+  toggles: null, ext: {}, sys: null, stats: null, statsAt: 0, net: null, netBusy: false, netHist: store.get('sx-nethist', []),
+  top: null, topAt: 0, topBusy: false, battApps: null, battAt: 0, battBusy: false, apps: null, demo: false,
+  profile: store.get('sx-profile', null), busy: '', steps: [], stepPct: 0, freed: null,
+  active: {}, misses: {}, entering: {}, rec: null, events: store.get('sx-events', []), coolNotified: false, alertAt: {},
+  wd: { heat: true, low: true, ram: true, thr: true, fps: false, heatLimit: 43, coolTarget: 38, lowLimit: 15, ramLimit: 92, fpsLimit: 30, ...store.get('sx-wd', {}) },
+  hist: null, histId: '', chartWin: null
 };
-SX.pkg = () => { const L = STK.live(); return S.pkg || (L && L.fgPackage) || ''; };
-SX.setPkg = p => { S.pkg = p || ''; STK.store.set('sx-pkg', S.pkg); };
-SX.ensureApps = async function () {
-  if (S.apps) return S.apps;
-  const id = STK.sel(); if (!id) return [];
-  try { S.apps = (await STK.api('/apps?id=' + encodeURIComponent(id) + '&scope=user', { timeout: 60000 })).apps || []; } catch (e) { S.apps = []; }
-  return S.apps;
-};
-SX.W = (id, html) => { const el = document.getElementById(id); if (el) STK.setHtml(el, html); return el; };
-SX.empty = (ic, title, text) => `<div class="sx-empty">${icon(ic)}<b>${esc(title)}</b><p>${esc(text)}</p></div>`;
-SX.noDevice = () => SX.empty('plug', 'No phone connected', 'Connect a phone on the Devices page and this page comes alive with live performance, cooling and gaming tools.');
+const root = SS.root = () => $('#studio-root');
+const games = SS.games = () => STK.kv.get('games', []);
+const nice = SS.nice = p => (STK.niceApp ? STK.niceApp(p) : p);
+const gt = SS.gt = body => STK.post('/game-tools', { serial: STK.sel(), ...body }, { timeout: 45000 });
+const tog = SS.tog = (key, value) => STK.post('/toggle', { serial: STK.sel(), key, value }, { timeout: 30000 });
+const sleep = STK.sleep;
+const num = SX.num;
 
-/* smooth sparkline with a soft area */
-let uid = 0;
-SX.spark = function (values, { w = 240, h = 60, min = 0, max = 100, cls = '', bands = [] } = {}) {
-  const pts = values.filter(x => x != null && isFinite(x));
-  if (pts.length < 2) return `<svg class="sx-spark ${cls}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"></svg>`;
-  let lo = min, hi = max;
-  if (hi == null) hi = Math.max(1, ...pts) * 1.15;
-  if (lo == null) { lo = Math.min(...pts) - 2; hi = Math.max(hi, Math.max(...pts) + 2); }
-  const n = values.length, step = w / Math.max(1, n - 1), Y = v => h - 4 - (clamp(v, lo, hi) - lo) / ((hi - lo) || 1) * (h - 8);
-  let d = '', first = null, last = null;
-  values.forEach((x, i) => { if (x == null || !isFinite(x)) return; const px = (i * step).toFixed(1); d += (d ? 'L' : 'M') + px + ' ' + Y(x).toFixed(1); if (first === null) first = px; last = px; });
-  const g = 'sg' + (++uid);
-  return `<svg class="sx-spark ${cls}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="${g}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".32"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs><path d="${d}L${last} ${h}L${first} ${h}Z" fill="url(#${g})"/><path class="ln" d="${d}"/></svg>`;
-};
-/* 270 degree gauge ring. pct 0-100 */
-SX.ring = function (pct, { tone = 'ok', stroke = 8 } = {}) {
-  const r = 42, C = 2 * Math.PI * r, sweep = .75 * C, p = clamp(pct == null ? 0 : pct, 0, 100) / 100;
-  return `<svg class="sx-ring ${tone}" viewBox="0 0 100 100" aria-hidden="true"><circle class="trk" cx="50" cy="50" r="${r}" stroke-width="${stroke}" stroke-dasharray="${sweep.toFixed(1)} ${C.toFixed(1)}" transform="rotate(135 50 50)"/><circle class="val" cx="50" cy="50" r="${r}" stroke-width="${stroke}" stroke-dasharray="${(sweep * p).toFixed(1)} ${C.toFixed(1)}" transform="rotate(135 50 50)"/></svg>`;
-};
-SX.meter = (pct, tone = '') => `<i class="sx-bar ${tone}"><u style="width:${clamp(pct || 0, 0, 100).toFixed(0)}%"></u></i>`;
-SX.card = (cls, title, sub, body, right = '') => `<section class="sx-card ${cls}"><header class="sx-card-head"><div><h3>${esc(title)}</h3>${sub ? `<p>${esc(sub)}</p>` : ''}</div>${right}</header>${body}</section>`;
-SX.kv = rows => `<dl class="sx-kv">${rows.filter(Boolean).map(([k, v, t]) => `<div><dt>${esc(k)}</dt><dd class="${t || ''}">${v}</dd></div>`).join('')}</dl>`;
-SX.seg = (name, items, cur, extra = '') => `<div class="sx-seg" role="group" ${extra}>${items.map(([v, l]) => `<button type="button" class="${String(v) === String(cur) ? 'is-active' : ''}" data-sx="${name}" data-v="${esc(v)}">${esc(l)}</button>`).join('')}</div>`;
-
-/* ---------- health score and thermal wording ---------- */
-SX.thermalWord = s => ['Normal', 'Light throttling', 'Moderate throttling', 'Heavy throttling', 'Critical', 'Emergency', 'Shutdown risk'][s] || 'Unknown';
-SX.score = function (r, jank) {
-  if (!r) return null;
-  const o = SX.opts(); let s = 100;
-  const t = r.tempC; if (t != null && t > o.cool) s -= Math.min(48, (t - o.cool) * 4.2);
-  if (r.thermalStatus >= 2) s -= 20; else if (r.thermalStatus === 1) s -= 6;
-  if (r.cpu != null && r.cpu > 88) s -= 8;
-  if (r.memPct != null) { if (r.memPct > 90) s -= 12; else if (r.memPct > 80) s -= 5; }
-  if (r.battery != null && r.battery <= 15 && !r.charging) s -= 10;
-  if (r.storage && r.storage.usedPct > 93) s -= 6;
-  if (jank != null && jank > 15) s -= 8;
-  return Math.round(clamp(s, 0, 100));
-};
-SX.scoreInfo = function (sc) {
-  if (sc == null) return { tone: '', word: 'Waiting for the phone' };
-  if (sc >= 85) return { tone: 'ok', word: 'Ready to game' };
-  if (sc >= 70) return { tone: 'ok', word: 'Running well' };
-  if (sc >= 50) return { tone: 'warn', word: 'Getting warm' };
-  return { tone: 'bad', word: 'Cool it down' };
-};
-
-/* ---------- talking to the phone ---------- */
-SX.tool = async function (body, o = {}) {
-  const id = STK.sel();
-  if (!id) { if (!o.quiet) STK.toast('Connect a phone first.', 'bad'); if (o.quiet) throw new Error('No phone connected.'); return null; }
+/* migrate 3.7 saved Turbo / cool-down state so an Undo still works after updating */
+(() => {
   try {
-    const r = await STK.post('/perf-tools', { serial: id, ...body }, { timeout: o.timeout || 45000 });
-    if (!o.quiet) STK.toast(r.message || 'Done.', r.applied === false ? 'bad' : 'ok');
-    return r;
-  } catch (e) { if (o.quiet) throw e; STK.fail(e); return null; }
+    const t = store.get('turbo', null), c = store.get('cool', null);
+    if (!S.profile && t) S.profile = { id: 'max', name: 'Turbo (from 3.7)', icon: 'rocket', at: t.at, prev: { ...t, touched: { refresh: true, lowpower: true } }, ok: 0, total: 0 };
+    else if (!S.profile && c) S.profile = { id: 'cool', name: 'Cool-down (from 3.7)', icon: 'fan', at: c.at, prev: { ...c, touched: { brightness: true, lowpower: true } }, ok: 0, total: 0 };
+    if (t || c) { store.set('turbo', null); store.set('cool', null); store.set('sx-profile', S.profile); }
+  } catch (e) { /* ignore */ }
+})();
+
+/* ---------- live numbers ---------- */
+const L = SS.L = () => STK.live() || null;
+SS.fgPkg = () => { const l = L(); return l && l.fgPackage ? l.fgPackage : ''; };
+const targetPkg = SS.targetPkg = () => S.pkg || (Object.values(S.active)[0] || {}).pkg || SS.fgPkg();
+const phoneTemp = SS.phoneTemp = () => { const l = L(); if (l && num(l.tempC)) return l.tempC; const p = S.perf; if (p && num(p.skinTempC)) return p.skinTempC; const b = p && p.battery; return b && num(b.temp) ? b.temp : null; };
+const socTemp = SS.socTemp = () => { const p = S.perf; return p ? (num(p.cpuTempC) ? p.cpuTempC : p.maxTempC) : null; };
+const ramPct = SS.ramPct = () => { const p = S.perf; return p && p.memTotalKb ? Math.round(1000 * (1 - p.memAvailKb / p.memTotalKb)) / 10 : null; };
+SS.gb = kb => (kb / 1048576).toFixed(1);
+SS.THERMAL = ['None', 'Light', 'Moderate', 'Severe', 'Critical', 'Emergency', 'Shutdown'];
+SS.tempLevel = t => !num(t) ? '' : t >= 45 ? 'bad' : t >= 41 ? 'warn' : 'ok';
+SS.tempWord = t => !num(t) ? 'No reading' : t >= 45 ? 'Very hot' : t >= 41 ? 'Hot' : t >= 38 ? 'Warm' : t >= 30 ? 'Cool' : 'Cold';
+SS.socLevel = t => !num(t) ? '' : t >= 80 ? 'bad' : t >= 65 ? 'warn' : 'ok';
+SS.pctLevel = (v, w, b) => !num(v) ? '' : v >= b ? 'bad' : v >= w ? 'warn' : 'ok';
+const fpsNow = SS.fpsNow = () => { const h = S.hist ? S.hist.a : []; for (let i = h.length - 1; i >= 0 && i > h.length - 4; i--) if (num(h[i].fps)) return h[i].fps; return null; };
+SS.hist = () => { const id = STK.sel(); if (!id) return null; if (S.histId !== id || !S.hist) { S.histId = id; S.hist = SX.hist(id); } return S.hist; };
+SS.recent = ms => { const h = SS.hist(); return h ? h.range(Date.now() - ms) : []; };
+
+/* ---------- events and alerts ---------- */
+const logEvent = SS.logEvent = (kind, text, level = 'info') => {
+  S.events.unshift({ t: Date.now(), kind, text, level }); if (S.events.length > 40) S.events.length = 40;
+  store.set('sx-events', S.events); SS.paintEvents();
 };
-SX.setToggle = async function (key, value, o = {}) {
-  const id = STK.sel(); if (!id) return null;
-  try { const r = await STK.post('/toggle', { serial: id, key, value }, { timeout: 30000 }); if (r && r.toggles) S.toggles = r.toggles; return r; }
-  catch (e) { if (o.quiet) throw e; STK.fail(e); return null; }
+function alertOnce(key, cooldown, text, level, action, notifyTitle) {
+  const now = Date.now(); if (now - (S.alertAt[key] || 0) < cooldown) return;
+  S.alertAt[key] = now; logEvent('alert', text, level);
+  STK.toast(text, level === 'bad' ? 'bad' : 'ok', action);
+  if (STK.notify && notifyTitle) STK.notify(notifyTitle, text, 'sx-' + key);
+}
+SS.saveWd = () => store.set('sx-wd', S.wd);
+
+/* ---------- sampling ---------- */
+function addSample(r) {
+  S.perf = r; S.sample = null;
+  const l = L(), pkg = targetPkg(); let fps = null;
+  if (r.frames != null) {
+    const lf = S.lastFrames;
+    if (lf && lf.pkg === pkg && r.frames >= lf.frames && r.at > lf.at) { const v = (r.frames - lf.frames) / ((r.at - lf.at) / 1000); if (v >= 0 && v <= 250) fps = Math.round(v); }
+    S.lastFrames = { pkg, frames: r.frames, at: r.at };
+  } else S.lastFrames = null;
+  const b = r.battery || {}, s = { t: r.at || Date.now(), phone: phoneTemp(), soc: socTemp(), skin: r.skinTempC, cpu: r.cpuPct, ram: ramPct(), gpu: r.gpuPct, fps, bat: l && l.battery >= 0 ? l.battery : b.level, ma: num(b.currentMa) ? Math.abs(b.currentMa) : null };
+  s.w = num(s.ma) && num(b.voltage) ? Math.round(s.ma * b.voltage / 1e5) / 10 : null;
+  (r.cores || []).forEach(c => { if (num(c.pct)) s['c' + c.id] = c.pct; });
+  (r.zones || []).slice(0, 8).forEach(z => { s['z:' + z.name] = z.c; });
+  S.sample = s;
+  const h = SS.hist(); if (h) h.push(s);
+  const a = S.active[STK.sel()], mini = { t: s.t, phone: s.phone, cpu: s.cpu, fps, ram: s.ram, bat: s.bat };
+  if (a) { a.samples.push(mini); if (a.samples.length > 4000) a.samples.splice(0, 1000); }
+  if (S.rec) { S.rec.samples.push(mini); if (S.rec.samples.length > 8000) S.rec.samples.splice(0, 2000); }
+  watchdog(s, r);
+  const pt = s.phone;
+  if (S.profile && S.profile.id === 'cool' && !S.coolNotified && num(pt) && pt <= S.wd.coolTarget) { S.coolNotified = true; logEvent('cool', 'The phone cooled down to ' + pt + ' °C.', 'ok'); STK.toast('The phone cooled down to ' + pt + ' °C.', 'ok', { label: 'Restore', run: () => revertProfile() }); }
+  if (S.profile && S.profile.id === 'cool' && num(pt) && pt > S.wd.coolTarget) S.coolNotified = false;
+}
+function watchdog(s, r) {
+  const w = S.wd;
+  if (w.thr && r.thermalStatus != null && r.thermalStatus >= 2) alertOnce('thr', 600e3, 'Android is throttling the phone (' + SS.THERMAL[r.thermalStatus] + '). Frame rate will drop until it cools.', 'bad', { label: 'Cool down', run: () => SS.applyProfile('cool') }, 'Phone is throttling');
+  if (w.ram && num(s.ram) && s.ram >= w.ramLimit) alertOnce('ram', 600e3, 'Memory is ' + Math.round(s.ram) + '% full. Free memory to avoid stutter.', 'bad', { label: 'Free memory', run: () => SS.freeMemory() }, 'Memory almost full');
+  if (w.fps && num(s.fps) && s.fps > 0 && s.fps < w.fpsLimit && (S.active[STK.sel()] || S.rec)) alertOnce('fps', 300e3, 'Frame rate dropped to ' + s.fps + ' fps.', 'bad', null, 'Low frame rate');
+}
+STK.on('live', ({ L: l }) => {
+  if (!l) return; const w = S.wd;
+  if (w.heat && num(l.tempC) && l.tempC >= w.heatLimit) alertOnce('heat', 300e3, 'The phone is hot (' + l.tempC + ' °C). Take a short break or start the cool-down.', 'bad', { label: 'Cool down', run: () => { STK.go('studio'); SS.applyProfile('cool'); } }, 'Phone is hot');
+  if (w.low && l.battery >= 0 && l.battery <= w.lowLimit && !l.charging) alertOnce('low', 600e3, 'Battery is at ' + l.battery + '%. Plug the phone in to keep going.', 'bad', null, 'Battery low');
+});
+
+/* ---------- forecasts ---------- */
+function slope(pts, k) {   // least squares, units per minute
+  const p = pts.filter(x => num(x[k])); if (p.length < 4) return null;
+  const t0 = p[0].t; let sx = 0, sy = 0, sxx = 0, sxy = 0; const n = p.length;
+  p.forEach(q => { const x = (q.t - t0) / 60000; sx += x; sy += q[k]; sxx += x * x; sxy += x * q[k]; });
+  const d = n * sxx - sx * sx; if (Math.abs(d) < 1e-9) return null;
+  return (n * sxy - sx * sy) / d;
+}
+SS.slope = slope;
+SS.tempTrend = () => { const per = slope(SS.recent(4 * 60e3), 'phone'); return per; };
+SS.heatForecast = () => {
+  const pt = phoneTemp(), per = SS.tempTrend(); if (!num(pt) || per == null) return null;
+  if (pt >= S.wd.heatLimit) return { state: 'over', per };
+  if (per > 0.12) { const mins = (S.wd.heatLimit - pt) / per; if (mins > 0 && mins < 90) return { state: 'rising', mins, per }; }
+  if (per < -0.12) { const mins = pt > S.wd.coolTarget ? (pt - S.wd.coolTarget) / -per : 0; return { state: 'falling', mins, per }; }
+  return { state: 'steady', per };
 };
-SX.loadToggles = async function () {
+SS.batteryEta = () => {
+  const l = L(); if (!l || l.battery < 0) return null;
+  const pts = SS.recent(40 * 60e3).filter(p => num(p.bat)), per = slope(pts, 'bat');
+  if (per == null) return null; const span = pts.length ? (pts[pts.length - 1].t - pts[0].t) / 60000 : 0; if (span < 6) return null;
+  if (l.charging && per > 0.02) return { dir: 'full', mins: Math.max(0, (100 - l.battery) / per), per };
+  if (!l.charging && per < -0.02) return { dir: 'empty', mins: l.battery / -per, per };
+  return { dir: 'steady', per };
+};
+SS.fmtMins = m => { if (!isFinite(m)) return '-'; m = Math.round(m); if (m < 1) return 'under a minute'; if (m < 60) return m + ' min'; const h = Math.floor(m / 60); return h + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); };
+
+/* ---------- readiness score and suggestions ---------- */
+SS.analyse = function () {
+  const l = L(), p = S.perf, t = S.toggles || {}, pt = phoneTemp(), ram = ramPct(), sug = []; let score = 100;
+  const add = (sev, title, text, fix, label) => sug.push({ sev, title, text, fix, label });
+  if (num(pt)) {
+    if (pt >= 45) { score -= 32; add('bad', 'The phone is very hot (' + pt + ' °C)', 'It will slow itself down to protect the battery. Pause and cool it before playing on.', 'cool', 'Start cool-down'); }
+    else if (pt >= 41) { score -= 18; add('warn', 'The phone is getting hot (' + pt + ' °C)', 'Performance drops soon at this heat. Lower brightness or take a short break.', 'cool', 'Start cool-down'); }
+    else if (pt >= 38) score -= 5;
+  }
+  const fc = SS.heatForecast();
+  if (fc && fc.state === 'rising') add(fc.mins < 10 ? 'warn' : 'info', 'Heat is rising: ' + S.wd.heatLimit + ' °C in about ' + SS.fmtMins(fc.mins), 'The phone warms by about ' + fc.per.toFixed(1) + ' °C every minute. Act now to stay ahead of throttling.', 'cool', 'Start cool-down');
+  if (p && p.thermalStatus != null && p.thermalStatus >= 2) { score -= 15; add('bad', 'Android is throttling the phone (' + SS.THERMAL[p.thermalStatus] + ')', 'The system is already cutting speed because of heat. Frame rate will suffer until it cools.', 'cool', 'Start cool-down'); }
+  if (num(ram)) {
+    if (ram >= 90) { score -= 25; add('bad', 'Memory is almost full (' + Math.round(ram) + '% used)', 'Games reload and stutter when memory runs out. Close background apps first.', 'freemem', 'Free memory'); }
+    else if (ram >= 80) { score -= 12; add('warn', 'Memory is getting full (' + Math.round(ram) + '% used)', 'Closing background apps gives the game more room.', 'freemem', 'Free memory'); }
+  }
+  if (p && num(p.cpuPct) && p.cpuPct >= 85 && !Object.keys(S.active).length) { score -= 8; add('warn', 'Something is using the processor (' + p.cpuPct + '%)', 'A background app is busy. See Performance for the busiest apps.', 'perf', 'Open Performance'); }
+  if (l && l.battery >= 0) {
+    if (l.battery <= 15 && !l.charging) { score -= 15; add('bad', 'Battery is low (' + l.battery + '%)', 'Low battery makes many phones cut performance. Plug in, ideally with a slow charger to limit heat.', '', ''); }
+    else if (l.battery <= 30 && !l.charging) score -= 5;
+    if (l.charging && num(pt) && pt >= 39) add('warn', 'Charging while hot adds heat', 'Gaming and fast charging together is the biggest source of heat. Pause charging or use a slower charger.', '', '');
+    const e = SS.batteryEta(); if (e && e.dir === 'empty' && e.mins < 45 && !l.charging) add('warn', 'About ' + SS.fmtMins(e.mins) + ' of battery left', 'At the current drain the battery will run out soon.', '', '');
+  }
+  if (S.toggles) {
+    if (!t.dnd) { score -= 5; add('info', 'Notifications can interrupt you', 'Do not disturb keeps pop-ups and calls from covering the game.', 'dnd', 'Turn on'); }
+    if (t.animations !== false) { score -= 2; add('info', 'System animations are on', 'Turning them off makes menus and app switching feel faster.', 'anim', 'Turn off'); }
+  }
+  if (p && p.lowPower === 1) { score -= 12; add('warn', 'Battery saver is on', 'Battery saver limits the processor and frame rate. Turn it off for gaming.', 'lowpower', 'Turn off'); }
+  if (p && p.storageTotalKb) { const free = 100 * p.storageFreeKb / p.storageTotalKb; if (free < 8) { score -= 8; add('warn', 'Storage is nearly full (' + SS.gb(p.storageFreeKb) + ' GB free)', 'Very full storage slows loading and can make games crash. Clear caches or remove large files.', 'storage', 'Clean up'); } }
+  const mir = STK.mirroring && STK.mirroring(), rec = STK.recording && STK.recording();
+  if ((mir || rec) && num(pt) && pt >= 41) add('info', 'Mirroring or recording adds heat', 'Encoding video keeps the chip busy. A lighter capture preset runs cooler.', 'preset', 'Use Low latency');
+  const net = S.net; if (net && net.reachable && net.avgMs != null && net.avgMs >= 80) add('warn', 'Network delay is high (' + Math.round(net.avgMs) + ' ms)', 'Online games feel laggy above about 80 ms. Move closer to the router or use 5 GHz Wi-Fi.', 'net', 'Test again');
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  const order = { bad: 0, warn: 1, info: 2, ok: 3 }; sug.sort((a, b) => order[a.sev] - order[b.sev]);
+  if (!sug.length) add('ok', 'Everything looks good', 'No problems found. Pick a profile for an extra edge before a long session.', '', '');
+  return { score, sug, word: score >= 85 ? 'Ready to play' : score >= 65 ? 'Good to go' : score >= 45 ? 'Could be better' : 'Needs attention', color: score >= 85 ? 'var(--ok)' : score >= 65 ? 'var(--accent)' : score >= 45 ? 'var(--warn)' : 'var(--bad)' };
+};
+
+/* ---------- chart metrics (shared by cards, inline graph and full-size windows) ---------- */
+const coreSeries = () => { const n = S.perf && S.perf.cores ? S.perf.cores.length : 0; return Array.from({ length: n }, (_, i) => ({ k: 'c' + i, name: 'CPU' + i, hidden: true })); };
+SS.METRICS = {
+  temp: { title: 'Temperature', sub: 'Phone (battery) and processor temperature over time.', unit: '°C', fmt: SX.f.c1, series: () => [{ k: 'phone', name: 'Phone', color: 'var(--warn)' }, { k: 'soc', name: 'Processor', color: 'var(--rec)' }, { k: 'skin', name: 'Skin sensor', color: 'var(--focus)', hidden: true }], thresholds: () => [{ v: S.wd.heatLimit, label: 'Warning limit', cls: 'bad' }, { v: S.wd.coolTarget, label: 'Cool-down target', cls: 'ok' }], minSpan: 6 },
+  cpu: { title: 'Processor load', sub: 'Total load, and each core (click a core name to show it).', unit: '%', fmt: SX.f.pct, lo: 0, hi: 100, series: () => [{ k: 'cpu', name: 'Total', color: 'var(--focus)' }, ...coreSeries()] },
+  ram: { title: 'Memory used', sub: 'Share of the phone memory in use.', unit: '%', fmt: SX.f.pct, lo: 0, hi: 100, series: () => [{ k: 'ram', name: 'Memory', color: 'var(--ok)' }], thresholds: () => [{ v: S.wd.ramLimit, label: 'Alert at ' + S.wd.ramLimit + '%', cls: 'bad' }] },
+  gpu: { title: 'Graphics load', sub: 'Graphics chip busy time (phones that share it).', unit: '%', fmt: SX.f.pct, lo: 0, hi: 100, series: () => [{ k: 'gpu', name: 'GPU', color: '#b794f6' }] },
+  fps: { title: 'Frame rate', sub: 'Estimated frames per second of the target game.', unit: 'fps', fmt: SX.f.fps, lo: 0, series: () => [{ k: 'fps', name: 'Frame rate', color: 'var(--accent)' }], thresholds: () => [{ v: 60, label: '60 fps', cls: 'ok' }, { v: 30, label: '30 fps', cls: 'bad' }] },
+  bat: { title: 'Battery level', sub: 'Charge level over time.', unit: '%', fmt: SX.f.pct, lo: 0, hi: 100, series: () => [{ k: 'bat', name: 'Battery', color: 'var(--ok)' }], thresholds: () => [{ v: S.wd.lowLimit, label: 'Low battery', cls: 'bad' }] },
+  power: { title: 'Power draw', sub: 'How much power the phone uses (or takes in while charging).', unit: 'W', fmt: SX.f.w, lo: 0, series: () => [{ k: 'w', name: 'Power', color: 'var(--rec)' }], note: 'Estimated from battery current and voltage. Some phones do not share the current reading.' },
+  zones: { title: 'All sensors', sub: 'Every temperature sensor the phone shares.', unit: '°C', fmt: SX.f.c1, series: () => ((S.perf && S.perf.zones) || []).map(z => ({ k: 'z:' + z.name, name: z.name })), minSpan: 6 }
+};
+SS.metricSpec = (key, extra) => {
+  const m = SS.METRICS[key]; if (!m) return null;
+  return { ...m, series: m.series().map(s => ({ ...s })), thresholds: m.thresholds ? m.thresholds() : [], hist: () => SS.hist(), csvName: 'droid-adb-' + key, ...extra };
+};
+SS.openMetric = (key, series) => {
+  const spec = SS.metricSpec(key); if (!spec) return;
+  if (series) { spec.series.forEach(s => { s.hidden = !(series === s.k || series.includes?.(s.k)); }); }
+  S.chartWin = SX.openChart(spec); return S.chartWin;
+};
+SS.chartTick = () => { const w = S.chartWin; if (w && w.modal && w.modal.el.isConnected) w.refresh(); else S.chartWin = null; };
+
+/* ---------- polling ---------- */
+async function pollPerf(force) {
+  const id = STK.sel(); if (!id || S.perfBusy || (S.paused && !force) || document.hidden || state.view !== 'studio') return;
+  S.perfBusy = true; const t0 = performance.now(); const pkg = targetPkg();
+  try { const r = await STK.api('/perf?id=' + enc(id) + (pkg ? '&pkg=' + enc(pkg) : ''), { timeout: 25000 }); S.perfErr = ''; S.lastLatency = Math.round(performance.now() - t0); S.lastAt = Date.now(); addSample(r); }
+  catch (e) { S.perfErr = e.message; }
+  finally { S.perfBusy = false; SS.paint(); SS.chartTick(); }
+  if (S.tab === 'perf' && Date.now() - S.topAt > 6000) loadTop();
+  if (S.tab === 'perf' && S.statsAuto && pkg && Date.now() - S.statsAt > 6000) readStats(true);
+}
+SS.pollPerf = pollPerf;
+function loop() { if (!S.running) return; pollPerf().finally(() => { if (S.running) { clearTimeout(S.perfTimer); S.perfTimer = setTimeout(loop, S.interval); } }); }
+SS.startPerf = () => { SS.stopPerf(); if (state.view !== 'studio') return; S.running = true; loop(); };
+SS.stopPerf = () => { S.running = false; clearTimeout(S.perfTimer); S.perfTimer = null; };
+SS.setPaused = v => { S.paused = v; SS.paint(); if (!v) pollPerf(true); };
+SS.setInterval = ms => { S.interval = ms; store.set('sx-int', ms); if (S.running) { clearTimeout(S.perfTimer); S.perfTimer = setTimeout(loop, 400); } };
+SS.loadToggles = async function () {
   const id = STK.sel(); if (!id) return;
-  try { const t = await STK.api('/toggles?id=' + encodeURIComponent(id), { timeout: 30000 }); S.toggles = t.toggles || {}; S.brightness = t.brightness == null ? -1 : t.brightness; } catch (e) { S.toggles = null; }
-  if (state.view === 'studio') SX.refresh();
+  try { const r = await STK.api('/toggles?id=' + enc(id), { timeout: 30000 }); S.toggles = r.toggles || {}; S.ext = { brightness: r.brightness, timeout: r.timeout, volume: r.volume, volumeMax: r.volumeMax }; } catch (e) { S.toggles = null; }
+  if (state.view === 'studio') { if (S.tab === 'optimize') SS.render(); else SS.paint(); }
+};
+async function loadTop() {
+  const id = STK.sel(); if (!id || S.topBusy) return; S.topBusy = true;
+  try { S.top = await STK.api('/monitor?id=' + enc(id), { timeout: 25000 }); S.topAt = Date.now(); } catch (e) { S.topAt = Date.now(); }
+  S.topBusy = false; if (state.view === 'studio' && S.tab === 'perf') SS.paint();
+}
+SS.loadTop = loadTop;
+SS.loadBattApps = async function (force) {
+  const id = STK.sel(); if (!id || S.battBusy || (!force && S.battApps && Date.now() - S.battAt < 120000)) return; S.battBusy = true; if (state.view === 'studio' && S.tab === 'battery') SS.paint();
+  try { S.battApps = await STK.api('/insights/battery?id=' + enc(id), { timeout: 60000 }); } catch (e) { S.battApps = { apps: [], note: e.message }; }
+  S.battAt = Date.now(); S.battBusy = false; if (state.view === 'studio' && S.tab === 'battery') SS.render();
 };
 
-/* ---------- live sampling ---------- */
-async function sample(force) {
-  if (S.busy) return;
-  if (!force && (state.view !== 'studio' || document.hidden)) return;
-  const id = STK.sel();
-  if (!id) { paintAll(); return; }
-  S.busy = true;
-  try {
-    const r = await STK.api('/perf?id=' + encodeURIComponent(id), { timeout: 30000 });
-    const h = H(id);
-    push(h.cpu, r.cpu); push(h.mem, r.memPct); push(h.temp, r.tempC); push(h.gpuC, r.gpuC); push(h.skin, r.skinC); push(h.batC, r.batteryC); push(h.bat, r.battery); push(h.t, r.at);
-    S.last[id] = r; S.err = null;
-    trackCooldown(id, r);
-    STK.emit('sx-sample', r);
-  } catch (e) { S.err = e.network ? null : e.message; }
-  S.busy = false;
-  paintAll();
-}
-SX.sample = sample;
-function start() { stop(); sample(true); S.timer = setInterval(sample, 2600); }
-function stop() { clearInterval(S.timer); S.timer = null; }
-
-function trackCooldown(id, r) {
-  const c = S.cool; if (!c || c.serial !== id || c.done || r.tempC == null) return;
-  c.now = r.tempC; c.low = Math.min(c.low, r.tempC);
-  if (r.tempC <= SX.opts().cool && Date.now() - c.t0 > 20000) {
-    c.done = true; c.t1 = Date.now();
-    const mins = Math.max(1, Math.round((c.t1 - c.t0) / 60000));
-    STK.toast('Cooled down to ' + r.tempC.toFixed(0) + ' °C in about ' + mins + ' min. Ready to play again.');
-    STK.notify && STK.notify('Phone cooled down', r.tempC.toFixed(0) + ' °C', 'cooled');
-  }
-}
-
-/* ---------- profiles ---------- */
-const maxHz = () => { const r = SX.last(); const l = r && r.supportedHz || []; return l.length ? Math.max(...l) : 0; };
-SX.PROFILES = [
-  { id: 'balanced', name: 'Balanced', ic: 'sliders', tone: 'ok', note: 'Everything back to normal', steps: [
-    { l: 'Performance mode off', k: 'tool', soft: 1, body: { action: 'perfmode', on: false } }, { l: 'Refresh rate automatic', k: 'tool', soft: 1, body: { action: 'refresh', hz: 0 } },
-    { l: 'Normal animations', k: 'tool', body: { action: 'animscale', value: '1' } }, { l: 'Battery saver off', k: 'tool', soft: 1, body: { action: 'lowpower', on: false } }] },
-  { id: 'gaming', name: 'Gaming', ic: 'game', tone: 'accent', note: 'Smooth, quiet and focused', steps: [
-    { l: 'Silence notifications', k: 'toggle', key: 'dnd', value: true }, { l: 'Faster animations', k: 'tool', body: { action: 'animscale', value: '0.5' } },
-    { l: 'Best refresh rate', k: 'hzmax', soft: 1 }, { l: 'Battery saver off', k: 'tool', soft: 1, body: { action: 'lowpower', on: false } },
-    { l: 'Free memory', k: 'tool', body: { action: 'boost' } }] },
-  { id: 'turbo', name: 'Turbo', ic: 'rocket', tone: 'hot', note: 'Maximum speed, runs warmer', steps: [
-    { l: 'Silence notifications', k: 'toggle', key: 'dnd', value: true }, { l: 'Animations off', k: 'tool', body: { action: 'animscale', value: '0' } },
-    { l: 'Best refresh rate', k: 'hzmax', soft: 1 }, { l: 'Battery saver off', k: 'tool', soft: 1, body: { action: 'lowpower', on: false } },
-    { l: 'Fixed performance mode', k: 'tool', soft: 1, body: { action: 'perfmode', on: true } }, { l: 'Keep screen awake', k: 'toggle', key: 'stayawake', value: true },
-    { l: 'Free memory', k: 'tool', body: { action: 'boost' } }, { l: 'Game Mode: performance', k: 'gamemode', soft: 1 }] },
-  { id: 'cool', name: 'Cool', ic: 'snow', tone: 'cool', note: 'Lower heat, steadier frames', steps: [
-    { l: 'Performance mode off', k: 'tool', soft: 1, body: { action: 'perfmode', on: false } }, { l: 'Refresh rate 60 Hz', k: 'tool', soft: 1, body: { action: 'refresh', hz: 60 } },
-    { l: 'Dim the screen a little', k: 'bright', value: 110 }, { l: 'Free memory', k: 'tool', body: { action: 'boost' } }, { l: 'Battery saver on', k: 'tool', soft: 1, body: { action: 'lowpower', on: true } }] },
-  { id: 'saver', name: 'Battery saver', ic: 'battery', tone: 'ok', note: 'Make the charge last', steps: [
-    { l: 'Battery saver on', k: 'tool', soft: 1, body: { action: 'lowpower', on: true } }, { l: 'Refresh rate 60 Hz', k: 'tool', soft: 1, body: { action: 'refresh', hz: 60 } },
-    { l: 'Performance mode off', k: 'tool', soft: 1, body: { action: 'perfmode', on: false } }, { l: 'Faster animations', k: 'tool', body: { action: 'animscale', value: '0.5' } }] },
-  { id: 'record', name: 'Record', ic: 'record', tone: 'rec', note: 'Stable for capture', steps: [
-    { l: 'Silence notifications', k: 'toggle', key: 'dnd', value: true }, { l: 'Show touches', k: 'toggle', key: 'touches', value: true },
-    { l: 'Keep screen awake', k: 'toggle', key: 'stayawake', value: true }, { l: 'Fixed performance mode', k: 'tool', soft: 1, body: { action: 'perfmode', on: true } }, { l: 'Free memory', k: 'tool', body: { action: 'boost' } }] }
-];
-const activeKey = () => 'sx-active:' + STK.sel();
-SX.activeProfile = () => STK.store.get(activeKey(), '');
-async function runStep(st, pkg) {
-  if (st.k === 'tool') return SX.tool(st.body, { quiet: true, timeout: 60000 });
-  if (st.k === 'toggle') return SX.setToggle(st.key, st.value, { quiet: true });
-  if (st.k === 'bright') { const id = STK.sel(); return STK.post('/toggle', { serial: id, key: 'brightness', value: st.value }, { timeout: 30000 }); }
-  if (st.k === 'hzmax') { const hz = maxHz(); if (hz <= 60) return { skipped: 'This screen has no higher refresh rate.' }; return SX.tool({ action: 'refresh', hz }, { quiet: true }); }
-  if (st.k === 'gamemode') { if (!pkg) return { skipped: 'No game selected. Pick one on the Optimize page.' }; const r = await SX.tool({ action: 'gamemode', pkg, mode: 'performance' }, { quiet: true }); if (r && r.applied === false) return { skipped: r.message }; return r; }
-  return null;
-}
-/* Applies a profile step by step with live progress. opts: { quiet, pkg } */
-SX.applyProfile = async function (pid, opts = {}) {
-  const id = STK.sel(); if (!id) return STK.toast('Connect a phone first.', 'bad');
-  const p = SX.PROFILES.find(x => x.id === pid); if (!p) return;
-  if (S.run && S.run.busy) return STK.toast('A profile is still being applied. One moment.');
-  const run = S.run = { id: pid, name: p.name, busy: true, steps: p.steps.map(s => ({ l: s.l, st: 'wait', note: '' })) };
-  paintRun();
-  // remember what the phone looked like so the profile can be undone
-  if (pid !== 'balanced' && !S.prev[id]) {
-    const r = SX.last() || {};
-    let tg = S.toggles;
-    try { const t = await STK.api('/toggles?id=' + encodeURIComponent(id), { timeout: 30000 }); tg = S.toggles = t.toggles || {}; S.brightness = t.brightness == null ? -1 : t.brightness; } catch (e) { /* keep what we have */ }
-    S.prev[id] = { anim: r.animScale, lowPower: !!r.lowPower, lockMin: r.lockMin, lockPeak: r.lockPeak, brightness: S.brightness, dnd: !!(tg && tg.dnd), touches: !!(tg && tg.touches), stayawake: !!(tg && tg.stayawake) };
-  }
-  let ok = 0, skipped = 0, failed = 0;
-  for (let i = 0; i < p.steps.length; i++) {
-    run.steps[i].st = 'run'; paintRun();
+/* ---------- tools ---------- */
+SS.tool = async function (btn, body) {
+  if (!STK.sel()) return null;
+  return STK.busy(btn, async () => {
     try {
-      const r = await runStep(p.steps[i], opts.pkg || SX.pkg());
-      if (r && r.skipped) { run.steps[i].st = 'skip'; run.steps[i].note = r.skipped; skipped++; }
-      else { run.steps[i].st = 'ok'; run.steps[i].note = (r && r.message) || ''; ok++; }
-    } catch (e) {
-      const raw = e && e.message ? e.message : 'The phone refused.';
-      if (p.steps[i].soft) { run.steps[i].st = 'skip'; run.steps[i].note = raw; skipped++; } else { run.steps[i].st = 'fail'; run.steps[i].note = raw; failed++; }
-    }
-    paintRun();
+      const r = await gt(body);
+      if (r.applied === false) { STK.logError('studio ' + body.action, (r.message || '') + (r.reply ? ' Phone reply: ' + r.reply : '') + (r.modes ? ' Modes: ' + r.modes : '')); STK.toast(r.message || 'The phone did not accept that.', 'bad'); }
+      else STK.toast(r.message || 'Done.');
+      return r;
+    } catch (e) { STK.fail(e); return null; }
+  });
+};
+SS.freeMemory = async function (btn) {
+  const before = S.perf ? S.perf.memAvailKb : null;
+  const r = await SS.tool(btn, { action: 'freemem' }); if (!r || r.applied === false) return;
+  await pollPerf(true); const after = S.perf ? S.perf.memAvailKb : null;
+  if (before != null && after != null) { const mb = Math.round((after - before) / 1024); if (mb > 0) { S.freed = { mb, at: Date.now() }; STK.toast('Freed about ' + (mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb + ' MB') + ' of memory.'); logEvent('tool', 'Freed about ' + mb + ' MB of memory.', 'ok'); SS.paint(); }
   }
-  run.busy = false;
-  STK.store.set(activeKey(), pid === 'balanced' ? '' : pid);
-  if (pid === 'balanced') delete S.prev[id];
-  if (!opts.quiet) STK.toast(p.name + ' profile applied' + (skipped ? ' (' + skipped + ' step' + (skipped > 1 ? 's' : '') + ' not supported by this phone)' : '') + (failed ? ', ' + failed + ' failed' : '') + '.', failed ? 'bad' : 'ok');
-  SX.loadToggles();
-  setTimeout(() => sample(true), 600);
-  SX.refresh();
-  return { ok, skipped, failed };
 };
-SX.restoreProfile = async function () {
-  const id = STK.sel(), pv = S.prev[id]; if (!id) return;
-  if (!pv) return SX.applyProfile('balanced');
-  const run = S.run = { id: 'restore', name: 'Restore', busy: true, steps: [] };
-  const steps = [
-    ['Animations back', () => SX.tool({ action: 'animscale', value: pv.anim == null || pv.anim >= .9 ? '1' : pv.anim <= .1 ? '0' : '0.5' }, { quiet: true })],
-    ['Battery saver as before', () => SX.tool({ action: 'lowpower', on: !!pv.lowPower }, { quiet: true })],
-    ['Refresh rate as before', () => SX.tool({ action: 'refresh', hz: pv.lockPeak && pv.lockMin && pv.lockPeak === pv.lockMin ? pv.lockPeak : 0 }, { quiet: true })],
-    ['Performance mode off', () => SX.tool({ action: 'perfmode', on: false }, { quiet: true })],
-    ['Do not disturb as before', () => SX.setToggle('dnd', pv.dnd, { quiet: true })],
-    ['Show touches as before', () => SX.setToggle('touches', pv.touches, { quiet: true })],
-    ['Stay awake as before', () => SX.setToggle('stayawake', pv.stayawake, { quiet: true })]
-  ];
-  if (pv.brightness > 0) steps.push(['Brightness as before', () => STK.post('/toggle', { serial: id, key: 'brightness', value: pv.brightness }, { timeout: 30000 })]);
-  run.steps = steps.map(s => ({ l: s[0], st: 'wait', note: '' })); paintRun();
-  for (let i = 0; i < steps.length; i++) { run.steps[i].st = 'run'; paintRun(); try { await steps[i][1](); run.steps[i].st = 'ok'; } catch (e) { run.steps[i].st = 'skip'; run.steps[i].note = e.message; } paintRun(); }
-  run.busy = false; delete S.prev[id]; STK.store.set(activeKey(), '');
-  STK.toast('Your phone settings were restored.');
-  SX.loadToggles(); setTimeout(() => sample(true), 600); SX.refresh();
-};
-function paintRun() {
-  const el = document.getElementById('w-run'); if (!el) return;
-  const r = S.run;
-  if (!r) { STK.setHtml(el, ''); return; }
-  const mark = s => s === 'ok' ? icon('check', 'sm') : s === 'run' ? '<i class="sx-spin"></i>' : s === 'skip' ? icon('info', 'sm') : s === 'fail' ? icon('alert', 'sm') : '<i class="sx-dot"></i>';
-  STK.setHtml(el, `<div class="sx-run ${r.busy ? 'busy' : ''}"><header><b>${r.busy ? 'Applying' : 'Applied'} ${esc(r.name)}</b>${r.busy ? '' : '<button class="btn sm ghost" data-sx="closerun" type="button">Dismiss</button>'}</header><ol>${r.steps.map(s => `<li class="${s.st}"><span class="m">${mark(s.st)}</span><span class="t">${esc(s.l)}${s.note && s.st !== 'ok' ? `<small>${esc(s.note)}</small>` : ''}</span></li>`).join('')}</ol></div>`);
+SS.cleanCaches = async function (btn) { const r = await SS.tool(btn, { action: 'trimcache' }); if (r && r.applied !== false) { logEvent('tool', 'Cleared app caches.', 'ok'); pollPerf(true); } return r; };
+async function readStats(silent) {
+  const id = STK.sel(), pkg = targetPkg(); if (!id || !pkg) { if (!silent) STK.toast('Open the game on the phone, or pick one from the list.', 'bad'); return; }
+  S.statsAt = Date.now();
+  try { S.stats = await STK.api('/game-stats?id=' + enc(id) + '&pkg=' + enc(pkg), { timeout: 30000 }); S.stats.at = Date.now(); if (state.view === 'studio' && S.tab === 'perf') SS.render(); } catch (e) { if (!silent) STK.fail(e); }
 }
-
-/* ---------- boost and cool down ---------- */
-SX.boost = async function (btn) {
-  return STK.busy(btn, async () => { const r = await SX.tool({ action: 'boost' }, { timeout: 60000 }); if (r) setTimeout(() => sample(true), 400); return r; });
-};
-SX.cooldown = async function (btn) {
-  const id = STK.sel(); if (!id) return STK.toast('Connect a phone first.', 'bad');
-  const r = SX.last();
-  S.cool = { serial: id, t0: Date.now(), temp0: r && r.tempC != null ? r.tempC : null, low: r && r.tempC != null ? r.tempC : 99, now: r && r.tempC, done: false };
-  STK.emit('sx-cool');
-  await STK.busy(btn, () => SX.applyProfile('cool', { quiet: true }));
-  STK.toast('Cool-down started. Take the phone out of its case and let it rest; the Thermals page tracks the drop.');
+SS.readStats = readStats;
+SS.netRun = async function () {
+  const id = STK.sel(); if (!id || S.netBusy) return; S.netBusy = true; SS.render();
+  try { S.net = await STK.api('/net-check?id=' + enc(id), { timeout: 60000 }); if (S.net.reachable) { S.netHist.push({ t: Date.now(), ms: S.net.avgMs, loss: S.net.lossPct }); S.netHist = S.netHist.slice(-30); store.set('sx-nethist', S.netHist); } } catch (e) { STK.fail(e); }
+  S.netBusy = false; SS.render();
 };
 
-/* ---------- smart suggestions ---------- */
-SX.suggestions = function () {
-  const r = SX.last(); if (!r) return [];
-  const o = SX.opts(), T = S.toggles || {}, t = r.tempC, out = [];
-  const eta = SX.heatEta && SX.heatEta();
-  if (t != null && t >= o.hot) out.push({ tone: 'bad', ic: 'thermo', title: 'Phone is hot (' + t.toFixed(0) + ' °C)', text: 'Heat makes Android slow the phone down. Let it rest, take it out of its case, or cool it now.', act: ['Cool down', 'cool'] });
-  else if (t != null && t >= o.hot - 4) out.push({ tone: 'warn', ic: 'thermo', title: 'Getting warm (' + t.toFixed(0) + ' °C)', text: eta ? 'At this rate it reaches ' + o.hot + ' °C in about ' + eta + ' min. Switch to the Cool profile to stay smooth.' : 'Switch to the Cool profile to keep frame rates steady.', act: ['Cool profile', 'profile:cool'] });
-  if (r.thermalStatus >= 2) out.push({ tone: 'bad', ic: 'alert', title: 'The phone is throttling', text: 'Android reports "' + SX.thermalWord(r.thermalStatus) + '". Frame rate drops until the phone cools.', act: ['Cool down', 'cool'] });
-  if (r.charging && t != null && t >= o.hot - 6) out.push({ tone: 'warn', ic: 'bolt', title: 'Charging adds heat', text: 'Playing while plugged in warms the battery. Unplug, or use a slower charger, for steadier speed.' });
-  if (r.memPct != null && r.memPct >= 85) out.push({ tone: 'warn', ic: 'ram', title: 'Memory is tight (' + Math.round(r.memPct) + '% used)', text: 'Low free memory makes games reload and stutter. Closing background apps helps.', act: ['Boost memory', 'boost'] });
-  if (r.swapTotalMb > 0 && r.swapUsedMb / r.swapTotalMb > .8) out.push({ tone: 'info', ic: 'ram', title: 'Heavy memory swapping', text: 'The phone is leaning on compressed memory. A boost before you start a game keeps it responsive.', act: ['Boost memory', 'boost'] });
-  if (r.battery != null && r.battery <= 20 && !r.charging) out.push({ tone: 'warn', ic: 'battery', title: 'Battery is at ' + r.battery + '%', text: 'Low charge can make the phone slow itself down. Plug in, or switch to Battery saver.', act: ['Battery saver', 'profile:saver'] });
-  if (r.brightness != null && r.brightness >= 200 && t != null && t >= o.hot - 6) out.push({ tone: 'info', ic: 'sun-moon', title: 'Bright screen adds heat', text: 'The screen is one of the biggest heat sources. A little lower brightness cools the phone.', act: ['Dim screen', 'bright:110'] });
-  const mh = maxHz();
-  if (mh >= 90 && (r.lockPeak == null || r.lockPeak < mh) && (t == null || t < o.hot - 4)) out.push({ tone: 'info', ic: 'gauge', title: 'Unlock ' + mh + ' Hz', text: 'This screen supports ' + mh + ' Hz. Locking it gives the smoothest touch response in games that support it.', act: ['Lock ' + mh + ' Hz', 'hz:' + mh] });
-  if (r.animScale == null || r.animScale > .5) out.push({ tone: 'info', ic: 'bolt', title: 'Faster animations', text: 'Menus and app switches feel snappier with shorter animations.', act: ['Make faster', 'anim:0.5'] });
-  if (S.toggles && !T.dnd) out.push({ tone: 'info', ic: 'bell', title: 'Silence notifications', text: 'Do not disturb keeps pop-ups from interrupting a match.', act: ['Turn on', 'dnd'] });
-  if (r.wifi && r.wifi.band === '2.4 GHz') out.push({ tone: 'info', ic: 'wifi', title: 'You are on 2.4 GHz Wi-Fi', text: '5 GHz usually gives lower and steadier ping for online games if your router offers it.', act: ['Check network', 'tab:network'] });
-  if (r.wifi && r.wifi.rssi <= -75) out.push({ tone: 'warn', ic: 'wifi', title: 'Weak Wi-Fi signal (' + r.wifi.rssi + ' dBm)', text: 'Move closer to the router for lower ping and fewer lag spikes.', act: ['Check network', 'tab:network'] });
-  if (r.storage && r.storage.usedPct >= 92) out.push({ tone: 'warn', ic: 'folder', title: 'Storage is almost full', text: r.storage.freeGb + ' GB left. A full phone loads games slowly. Clearing app caches frees space.', act: ['Clear caches', 'trim'] });
-  if (!SX.games().length) out.push({ tone: 'info', ic: 'game', title: 'Add your games', text: 'Games you add switch on your chosen profile by themselves when you open them.', act: ['Add games', 'tab:games'] });
-  const order = { bad: 0, warn: 1, info: 2, ok: 3 };
-  out.sort((a, b) => order[a.tone] - order[b.tone]);
-  if (!out.length || out.every(x => x.tone === 'info')) out.unshift({ tone: 'ok', ic: 'check', title: 'You are ready to play', text: 'Temperature, memory and battery all look healthy.' });
-  return out.slice(0, 6);
+/* ---------- profiles (Turbo, Cool-down, and your own) with Undo ---------- */
+const TLABEL = { dnd: 'Do not disturb', animations: 'Animations', stayawake: 'Screen stays awake', touches: 'Show touches', rotation: 'Auto-rotate', autobrightness: 'Auto brightness', wifi: 'Wi-Fi', bluetooth: 'Bluetooth', data: 'Mobile data', dark: 'Dark mode', pointer: 'Pointer location', airplane: 'Airplane mode' };
+SS.TLABEL = TLABEL;
+SS.PROFILES = [
+  { id: 'max', name: 'Max performance', icon: 'rocket', blurb: 'No interruptions, no animations, free memory, high refresh rate and performance mode.', spec: { t: { dnd: true, animations: false, stayawake: true }, lowPower: 0, freemem: true, refresh: 'high', perf: true, gamemode: true } },
+  { id: 'balanced', name: 'Balanced', icon: 'gauge', blurb: 'Everyday settings: animations on, performance mode off, automatic refresh rate.', spec: { t: { animations: true, dnd: false }, lowPower: 0, refresh: 'auto', perf: false } },
+  { id: 'cool', name: 'Cool-down', icon: 'fan', blurb: 'Lower brightness, battery saver on, memory freed and performance mode off. Tells you when the phone is cool.', spec: { brightness: 45, lowPower: 1, freemem: true, perf: false, refresh: 'auto' } },
+  { id: 'stream', name: 'Stream and record', icon: 'camera', blurb: 'Do not disturb, taps shown, screen kept on and performance mode for clean captures.', spec: { t: { dnd: true, touches: true, stayawake: true }, lowPower: 0, perf: true } },
+  { id: 'saver', name: 'Battery saver', icon: 'bolt', blurb: 'Battery saver on, dim screen, animations off and a lower refresh rate.', spec: { t: { animations: false }, brightness: 60, lowPower: 1, refresh: 'auto', perf: false } }
+];
+SS.allProfiles = () => SS.PROFILES.concat((STK.kv.get('sxprofiles', []) || []).map(p => ({ ...p, custom: true, icon: p.icon || 'sliders' })));
+function buildSteps(sp, pkg, prev) {
+  const st = [];
+  Object.keys(sp.t || {}).forEach(k => st.push({ label: TLABEL[k] + (sp.t[k] ? ' on' : ' off'), run: () => tog(k, !!sp.t[k]), key: k }));
+  if (num(sp.brightness)) st.push({ label: 'Brightness ' + Math.round(sp.brightness / 2.55) + '%', run: () => gt({ action: 'setstate', brightnessMode: 0, brightness: Math.max(1, Math.min(255, Math.round(sp.brightness))) }), touch: 'brightness' });
+  if (sp.lowPower === 0 || sp.lowPower === 1) st.push({ label: sp.lowPower ? 'Battery saver on' : 'Battery saver off', run: () => gt({ action: 'setstate', lowPower: sp.lowPower }), touch: 'lowpower' });
+  if (sp.freemem) st.push({ label: 'Free memory', run: () => gt({ action: 'freemem' }) });
+  if (sp.refresh === 'high') st.push({ label: 'Lock high refresh rate', run: () => gt({ action: 'refresh', on: true }), touch: 'refresh' });
+  if (sp.refresh === 'auto') st.push({ label: 'Automatic refresh rate', run: () => gt({ action: 'refresh', on: false }), touch: 'refresh' });
+  if (sp.perf === true || sp.perf === false) st.push({ label: sp.perf ? 'Performance mode' : 'Performance mode off', run: () => gt({ action: 'perfmode', on: !!sp.perf }), perf: sp.perf });
+  if (sp.gamemode && pkg) st.push({ label: 'Android Game Mode', run: () => gt({ action: 'gamemode', pkg, mode: 'performance' }), gm: true });
+  return st;
+}
+SS.applyProfile = async function (idOrProfile, opts = {}) {
+  const sid = STK.sel(); if (!sid) return STK.toast('Connect a phone first.', 'bad');
+  if (S.busy) return;
+  const p = typeof idOrProfile === 'string' ? SS.allProfiles().find(x => x.id === idOrProfile) : idOrProfile; if (!p) return;
+  if (S.profile) await SS.revertProfile(true);
+  S.busy = p.id; S.steps = []; S.stepPct = 0; SS.render();
+  const pkg = opts.pkg || S.pkg || '';
+  const prev = { serial: sid, at: Date.now(), pkg, toggles: null, sys: null, gm: false, perf: false, touched: {}, keys: [] };
+  try { const t = await STK.api('/toggles?id=' + enc(sid), { timeout: 30000 }); prev.toggles = t.toggles || {}; prev.ext = { brightness: t.brightness }; } catch (e) { /* optional */ }
+  try { prev.sys = (await gt({ action: 'getstate' })).state; } catch (e) { /* optional */ }
+  const steps = buildSteps(p.spec, pkg, prev);
+  S.steps = steps.map(s => ({ label: s.label, st: 'wait', note: '' })); SS.paintSteps();
+  let ok = 0;
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i]; S.steps[i].st = 'run'; SS.paintSteps();
+    try {
+      const r = await s.run(); const good = !r || r.applied !== false;
+      S.steps[i].st = good ? 'ok' : 'skip'; if (!good) S.steps[i].note = (r && r.message) || '';
+      if (good) { ok++; if (s.key) prev.keys.push(s.key); if (s.touch) prev.touched[s.touch] = true; if (s.perf === true) prev.perf = true; if (s.gm) prev.gm = true; }
+    } catch (e) { S.steps[i].st = 'skip'; S.steps[i].note = e.message; }
+    S.stepPct = Math.round((i + 1) / steps.length * 100); SS.paintSteps(); await sleep(140);
+  }
+  S.profile = { id: p.id, name: p.name, icon: p.icon, at: Date.now(), prev, ok, total: steps.length };
+  store.set('sx-profile', S.profile); S.busy = ''; S.coolNotified = false;
+  logEvent('profile', p.name + ' applied: ' + ok + ' of ' + steps.length + ' changes.', ok ? 'ok' : 'warn');
+  STK.toast(p.name + ' is on: ' + ok + ' of ' + steps.length + ' changes applied.');
+  SS.loadToggles(); pollPerf(true); SS.render();
+  if (opts.after) opts.after();
 };
-async function runDo(s, btn) {
-  const [k, v] = s.split(':');
-  if (k === 'cool') return SX.cooldown(btn);
-  if (k === 'profile') return STK.busy(btn, () => SX.applyProfile(v));
-  if (k === 'boost') return SX.boost(btn);
-  if (k === 'hz') return STK.busy(btn, async () => { await SX.tool({ action: 'refresh', hz: Number(v) }); sample(true); });
-  if (k === 'anim') return STK.busy(btn, async () => { await SX.tool({ action: 'animscale', value: v }); sample(true); });
-  if (k === 'dnd') return STK.busy(btn, async () => { const r = await SX.setToggle('dnd', true); if (r) STK.toast('Do not disturb is on.'); SX.refresh(); });
-  if (k === 'bright') return STK.busy(btn, async () => { try { await STK.post('/toggle', { serial: STK.sel(), key: 'brightness', value: Number(v) }, { timeout: 30000 }); STK.toast('Screen dimmed a little.'); sample(true); } catch (e) { STK.fail(e); } });
-  if (k === 'trim') return STK.busy(btn, () => SX.tool({ action: 'trimcaches' }, { timeout: 120000 }));
-  if (k === 'tab') return SX.go(v);
-}
-SX.runDo = runDo;
-
-/* ---------- shell: hero, tabs, body ---------- */
-function build() {
-  const el = root(); if (!el || S.mounted) return; S.mounted = true;
-  el.innerHTML = `<div class="sx">
-    <section class="sx-hero" id="sx-hero" data-tone="">
-      <div class="sx-score"><div class="sx-ringwrap">
-        <svg class="sx-ring big" viewBox="0 0 100 100" aria-hidden="true"><circle class="trk" cx="50" cy="50" r="42" stroke-width="7" stroke-dasharray="197.9 263.9" transform="rotate(135 50 50)"/><circle class="val" id="sx-rv" cx="50" cy="50" r="42" stroke-width="7" stroke-dasharray="0 263.9" transform="rotate(135 50 50)"/></svg>
-        <div class="sx-ringtxt"><b id="sx-score">--</b><small>health</small></div></div></div>
-      <div class="sx-hero-main">
-        <span class="sx-eyebrow">${icon('rocket', 'sm')}Performance Studio</span>
-        <h2 id="sx-title">Connect a phone to begin</h2>
-        <p class="sx-status" id="sx-status">Live performance, cooling and gaming tools appear here.</p>
-        <div class="sx-chips" id="sx-chips"></div>
-      </div>
-      <div class="sx-metrics">
-        ${[['cpu', 'CPU', 'cpu'], ['mem', 'Memory', 'ram'], ['temp', 'Temperature', 'thermo'], ['bat', 'Battery', 'battery'], ['hz', 'Display', 'gauge']].map(([k, l, ic]) => `<div class="sx-m" id="sxm-${k}">${icon(ic, 'sm')}<span class="l">${l}</span><b>--</b><small></small>${SX.meter(0)}</div>`).join('')}
-      </div>
-      <div class="sx-hero-actions">
-        <button class="btn primary lg" id="sx-boost" data-sx="boost" type="button">${icon('rocket', 'sm')}<span>Boost</span></button>
-        <button class="btn lg" id="sx-cool" data-sx="cool" type="button">${icon('snow', 'sm')}<span>Cool down</span></button>
-      </div>
-    </section>
-    <nav class="sx-tabs" id="sx-tabs" role="tablist" aria-label="Studio pages"></nav>
-    <div class="sx-body" id="sx-body"></div></div>`;
-}
-SX.register = t => { SX.tabs = SX.tabs.filter(x => x.id !== t.id).concat(t).sort((a, b) => (a.order || 9) - (b.order || 9)); };
-const cur = () => SX.tabs.find(t => t.id === S.tab) || SX.tabs[0];
-function paintTabs() {
-  const el = $('#sx-tabs'); if (!el) return;
-  STK.setHtml(el, SX.tabs.map(t => `<button type="button" role="tab" class="sx-tab ${t.id === cur().id ? 'is-active' : ''}" aria-selected="${t.id === cur().id}" data-sx="tab" data-tab="${t.id}">${icon(t.icon, 'sm')}<span>${esc(t.label)}</span></button>`).join(''));
-}
-SX.go = function (id) {
-  if (!SX.tabs.find(t => t.id === id)) return;
-  S.tab = id; STK.store.set('sx-tab', id);
-  paintTabs(); SX.refresh(true);
-  const t = cur(); if (t.onShow) t.onShow();
+SS.revertProfile = async function (silent) {
+  const pr = S.profile; if (!pr || (S.busy && !silent)) return;
+  if (!silent) { S.busy = 'undo'; SS.render(); }
+  const t = pr.prev || {}, pv = t.toggles || {}, run = async fn => { try { await fn(); } catch (e) { /* keep restoring the rest */ } };
+  for (const k of (t.keys || [])) if (pv[k] !== undefined) await run(() => tog(k, !!pv[k]));
+  if (t.sys) {
+    const s = t.sys, body = { action: 'setstate' };
+    if (t.touched && t.touched.lowpower) body.lowPower = s.lowPower === '1' ? 1 : s.lowPower === '0' ? 0 : undefined;
+    if (t.touched && t.touched.refresh) { body.minRefresh = s.minRefresh || ''; body.peakRefresh = s.peakRefresh || ''; }
+    if (t.touched && t.touched.brightness) { if (s.brightness) body.brightness = Number(s.brightness); if (s.brightnessMode === '0' || s.brightnessMode === '1') body.brightnessMode = Number(s.brightnessMode); }
+    if (Object.keys(body).length > 1) await run(() => gt(body));
+  } else if (t.touched && t.touched.refresh) await run(() => gt({ action: 'refresh', on: false }));
+  if (t.perf) await run(() => gt({ action: 'perfmode', on: false }));
+  if (t.gm && t.pkg) await run(() => gt({ action: 'gamemode', pkg: t.pkg, mode: 'standard' }));
+  S.profile = null; S.steps = []; store.set('sx-profile', null); if (!silent) { S.busy = ''; logEvent('profile', pr.name + ' undone. Settings restored.', 'info'); STK.toast(pr.name + ' undone. Your settings were restored.'); SS.loadToggles(); SS.render(); }
 };
-/* Rebuild the body of the open page (static parts). Live parts are painted separately. */
-SX.refresh = function (force) {
-  if (state.view !== 'studio') return;
-  const body = $('#sx-body'), t = cur(); if (!body || !t) return;
-  if (!STK.sel()) { STK.setHtml(body, SX.noDevice()); body._t = ''; return; }
-  const html = t.render();
-  if (force || body._t !== t.id) { body._t = t.id; body._h = ''; }
-  const ae = document.activeElement;
-  if (!force && ae && body.contains(ae) && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName) && ae.type !== 'checkbox') { if (t.paint) t.paint(); return; }
-  if (body._h !== html) { body._h = html; body.innerHTML = html; }
-  if (t.paint) t.paint();
-  if (t.after) t.after();
+SS.saveCustom = async function () {
+  if (!STK.sel()) return STK.toast('Connect a phone first.', 'bad');
+  const f = await STK.form('Save current settings as a profile',
+    STK.field('name', 'Profile name', '') + STK.check('freemem', 'Free memory when applied', false) + STK.check('perf', 'Turn on performance mode', false) + STK.check('high', 'Lock the high refresh rate', false) +
+    '<p class="hint">Saves the current state of the quick switches, the brightness and battery saver. Applying it later sets the phone to these values, and Undo restores what you had.</p>', 'Save');
+  if (!f) return; const name = f.name.trim().slice(0, 32); if (!name) return STK.toast('Give the profile a name.', 'bad');
+  let sys = null; try { sys = (await gt({ action: 'getstate' })).state; } catch (e) { /* optional */ }
+  const t = {}; ['dnd', 'animations', 'stayawake', 'touches', 'rotation', 'autobrightness', 'wifi', 'bluetooth', 'dark'].forEach(k => { if (S.toggles && S.toggles[k] !== undefined) t[k] = !!S.toggles[k]; });
+  const spec = { t, freemem: f.freemem, refresh: f.high ? 'high' : undefined, perf: f.perf ? true : undefined };
+  if (num(S.ext.brightness) && S.ext.brightness > 0 && !(S.toggles && S.toggles.autobrightness)) spec.brightness = S.ext.brightness;
+  if (sys && (sys.lowPower === '0' || sys.lowPower === '1')) spec.lowPower = Number(sys.lowPower);
+  const list = (STK.kv.get('sxprofiles', []) || []).concat([{ id: 'c' + Date.now().toString(36), name, spec }]).slice(-8);
+  STK.kv.set('sxprofiles', list); STK.toast('Profile "' + name + '" saved.'); SS.render();
 };
-SX.paintHeroSoon = () => paintHero();
-function paintAll() { paintHero(); const t = cur(); if (t && STK.sel() && t.paint && $('#sx-body') && $('#sx-body')._t === t.id) t.paint(); else if (!STK.sel()) SX.refresh(); }
+SS.deleteCustom = id => { STK.kv.set('sxprofiles', (STK.kv.get('sxprofiles', []) || []).filter(p => p.id !== id)); SS.render(); };
 
-function setM(k, val, sub, pct, tone) {
-  const m = document.getElementById('sxm-' + k); if (!m) return;
-  const b = m.querySelector('b'), s = m.querySelector('small'), u = m.querySelector('u');
-  if (b.textContent !== val) b.textContent = val; if (s.textContent !== sub) s.textContent = sub;
-  u.style.width = clamp(pct || 0, 0, 100) + '%'; m.className = 'sx-m ' + (tone || '');
+/* ---------- sessions: games and the manual recorder ---------- */
+function downsample(a, n) {
+  if (a.length <= n) return a.map(p => ({ ...p }));
+  const out = [], w = a.length / n;
+  for (let i = 0; i < n; i++) {
+    const sl = a.slice(Math.floor(i * w), Math.max(Math.floor(i * w) + 1, Math.floor((i + 1) * w))), o = { t: sl[0].t };
+    ['phone', 'cpu', 'fps', 'ram', 'bat'].forEach(k => { const v = sl.map(x => x[k]).filter(num); o[k] = v.length ? Math.round(v.reduce((x, y) => x + y, 0) / v.length * 10) / 10 : null; });
+    out.push(o);
+  }
+  return out;
 }
-function paintHero() {
-  const hero = document.getElementById('sx-hero'); if (!hero) return;
-  const id = STK.sel(), r = id ? S.last[id] : null, info = STK.info();
-  const jank = SX.jank && SX.jank();
-  const sc = r ? SX.score(r, jank) : null, si = SX.scoreInfo(sc);
-  hero.dataset.tone = si.tone;
-  const rv = document.getElementById('sx-rv'); if (rv) rv.setAttribute('stroke-dasharray', (197.9 * (sc || 0) / 100).toFixed(1) + ' 263.9');
-  const sct = document.getElementById('sx-score'); sct.textContent = sc == null ? '--' : sc;
-  let name = 'Connect a phone to begin';
-  if (id) name = (STK.nickFor && STK.nickFor(id)) || (info && (info.model ? ((info.manufacturer || '') + ' ' + info.model).trim() : id)) || id;
-  const tt = document.getElementById('sx-title'); if (tt.textContent !== name) tt.textContent = name;
-  let status = id ? (S.err ? S.err : r ? si.word + (r.tempC != null ? ' · ' + r.tempC.toFixed(0) + ' °C' : '') + (r.cpu != null ? ' · CPU ' + Math.round(r.cpu) + '%' : '') : 'Reading the phone...') : 'Live performance, cooling and gaming tools appear here.';
-  const st = document.getElementById('sx-status'); if (st.textContent !== status) st.textContent = status;
-  const chips = [];
-  if (info && info.android) chips.push(`<span class="sx-chip">${icon('phone', 'sm')}Android ${esc(info.android)}${info.sdk ? ' · API ' + esc(info.sdk) : ''}</span>`);
-  if (r && r.charging) chips.push(`<span class="sx-chip ok">${icon('bolt', 'sm')}Charging</span>`);
-  const ap = id ? SX.activeProfile() : '', pr = SX.PROFILES.find(x => x.id === ap);
-  if (pr) chips.push(`<span class="sx-chip accent">${icon(pr.ic, 'sm')}${esc(pr.name)} profile</span>`);
-  const L = STK.live(); if (L && L.fgPackage) chips.push(`<span class="sx-chip">${icon('play', 'sm')}${esc(nice(L.fgPackage))}</span>`);
-  if (r && r.thermalStatus >= 1) chips.push(`<span class="sx-chip bad">${icon('thermo', 'sm')}${esc(SX.thermalWord(r.thermalStatus))}</span>`);
-  STK.setHtml(document.getElementById('sx-chips'), chips.join(''));
-  const dis = !id; ['sx-boost', 'sx-cool'].forEach(b => { const e = document.getElementById(b); if (e) e.disabled = dis; });
-  const cpu = r && r.cpu, mem = r && r.memPct, t = r && r.tempC, bat = r && r.battery, mh = maxHz();
-  setM('cpu', cpu == null ? '--' : Math.round(cpu) + '%', r && r.cores && r.cores.length ? r.cores.filter(c => c.online).length + ' cores active' : '', cpu, SX.tone('cpu', cpu));
-  setM('mem', mem == null ? '--' : Math.round(mem) + '%', r && r.memTotalMb ? (r.memUsedMb / 1024).toFixed(1) + ' of ' + (r.memTotalMb / 1024).toFixed(1) + ' GB' : '', mem, SX.tone('mem', mem));
-  setM('temp', t == null ? '--' : t.toFixed(0) + ' °C', r ? [r.batteryC != null ? 'Battery ' + r.batteryC.toFixed(0) + '°' : '', r.skinC != null ? 'Skin ' + r.skinC.toFixed(0) + '°' : ''].filter(Boolean).join(' · ') : '', t == null ? 0 : (t - 20) / 35 * 100, SX.tone('temp', t));
-  setM('bat', bat == null ? '--' : bat + '%', r ? (r.charging ? 'Charging' : r.plugged ? 'Plugged in' : 'On battery') : '', bat, SX.tone('bat', bat));
-  const hzv = r ? (r.lockPeak || mh) : 0;
-  setM('hz', hzv ? hzv + ' Hz' : '--', r ? (r.lockPeak ? 'Locked' : mh ? 'Up to ' + mh + ' Hz' : 'Automatic') : '', hzv ? hzv / 1.4 : 0, '');
+const avg = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length * 10) / 10 : null;
+function makeSession(src) {
+  const temps = src.samples.map(x => x.phone).filter(num), fps = src.samples.map(x => x.fps).filter(x => num(x) && x > 0), l = L();
+  const secs = Math.round((Date.now() - src.start) / 1000);
+  return { pkg: src.pkg, name: src.name, start: src.start, secs, manual: !!src.manual, peak: temps.length ? Math.max(...temps) : null, avg: avg(temps), batStart: src.batStart, batEnd: l && l.battery >= 0 ? l.battery : null, fps: fps.length ? Math.round(avg(fps)) : null, minFps: fps.length ? Math.min(...fps) : null, samples: downsample(src.samples, 120) };
 }
+const saveSession = rec => { STK.kv.set('gamesessions', [...(STK.kv.get('gamesessions', []) || []), rec].slice(-60)); };
+SS.startRec = function () {
+  if (S.rec || !STK.sel()) return; const l = L(), pkg = targetPkg();
+  S.rec = { start: Date.now(), pkg, name: pkg ? nice(pkg) : 'Phone', manual: true, samples: [], batStart: l && l.battery >= 0 ? l.battery : null };
+  logEvent('rec', 'Started recording performance' + (pkg ? ' for ' + nice(pkg) : '') + '.', 'info'); STK.toast('Performance recording started.'); SS.render();
+};
+SS.stopRec = function () {
+  const r = S.rec; if (!r) return; S.rec = null;
+  if (r.samples.length < 2) { STK.toast('Recording was too short to save.', 'bad'); return SS.render(); }
+  const rec = makeSession(r); saveSession(rec); logEvent('rec', 'Saved a ' + STK.dur(rec.secs) + ' performance recording.', 'ok'); STK.toast('Recording saved to Session history.', 'ok', { label: 'Open', run: () => { S.tab = 'games'; store.set('studio-tab', 'games'); SS.render(); SS.openSession(-1); } }); SS.render();
+};
 
-/* ---------- Overview ---------- */
-function profilesHtml() {
-  const id = STK.sel(), ap = id ? SX.activeProfile() : '', can = !!S.prev[id];
-  const cards = SX.PROFILES.map(p => `<button type="button" class="sx-prof tone-${p.tone} ${p.id === ap ? 'is-active' : ''}" data-sx="profile" data-id="${p.id}" ${id ? '' : 'disabled'}><span class="ic-wrap">${icon(p.ic)}</span><b>${esc(p.name)}</b><small>${esc(p.note)}</small>${p.id === ap ? '<em>Active</em>' : ''}</button>`).join('');
-  return `<div class="sx-profiles">${cards}</div>${can ? `<div class="sx-restore"><span>${icon('info', 'sm')}Your earlier phone settings were saved when this profile started.</span><button class="btn sm" data-sx="restore" type="button">${icon('refresh', 'sm')}<span>Restore my settings</span></button></div>` : ''}`;
+async function ensureApps() { if (S.apps) return S.apps; try { S.apps = (await STK.api(`/apps?id=${enc(STK.sel())}&scope=user`, { timeout: 60000 })).apps || []; } catch (e) { S.apps = []; } return S.apps; }
+SS.ensureApps = ensureApps;
+SS.editGame = async function (i) {
+  const g = i >= 0 ? games()[i] : {}, apps = await ensureApps();
+  const presets = [['', 'Keep my settings'], ...(((state.schema && state.schema.presets) || []).map(p => [p.id, p.name]))];
+  const f = await STK.form(i >= 0 ? 'Edit game' : 'Add a game',
+    `<label class="ff"><span>App</span><input name="pkg" list="g-list" value="${esc(g.pkg || '')}" placeholder="Start typing the game name" autocomplete="off" spellcheck="false"></label><datalist id="g-list">${apps.map(a => `<option value="${esc(a.package)}">${esc(a.label || nice(a.package))}</option>`).join('')}</datalist>` +
+    STK.field('name', 'Display name (optional)', g.name || '') + STK.select('preset', 'Capture preset', presets, g.preset || 'latency') +
+    STK.check('mirror', 'Start mirroring', g.mirror) + STK.check('record', 'Start recording', g.record !== false) + STK.check('dnd', 'Turn on Do not disturb', g.dnd !== false) + STK.check('touches', 'Show touches', !!g.touches) + STK.check('freemem', 'Free memory when the game starts', !!g.freemem) + STK.check('smooth', 'Lock the high refresh rate', !!g.smooth) + STK.check('gamemode', 'Try Android Game Mode: performance', !!g.gamemode), 'Save');
+  if (!f) return; const pkg = f.pkg.trim();
+  if (!/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(pkg)) return STK.toast('Use the package name, like com.tencent.ig. Pick one from the list.', 'bad');
+  const entry = { pkg, name: f.name.trim().slice(0, 40), preset: f.preset, mirror: f.mirror, record: f.record, dnd: f.dnd, touches: f.touches, freemem: f.freemem, smooth: f.smooth, gamemode: f.gamemode, on: g.on !== false };
+  const list = games().slice(); if (i >= 0) list[i] = entry; else list.push(entry);
+  STK.kv.set('games', list.slice(0, 30)); SS.render();
+};
+async function setT(serial, key, value) { try { await STK.post('/toggle', { serial, key, value }, { timeout: 30000 }); } catch (e) { /* the phone may refuse; continue */ } }
+async function enter(serial, g) {
+  if (S.entering[serial]) return; S.entering[serial] = true; const l = L();
+  const a = S.active[serial] = { pkg: g.pkg, g, prevSettings: null, prevToggles: null, prevSys: null, rec: false, mir: false, gm: false, smooth: false, startedAt: Date.now(), samples: [], batStart: l && l.battery >= 0 ? l.battery : null };
+  S.misses[serial] = 0; if (state.view === 'studio') SS.render();
+  STK.toast('Game mode on: ' + (g.name || nice(g.pkg))); logEvent('game', 'Game profile started for ' + (g.name || nice(g.pkg)) + '.', 'ok');
+  try {
+    try { const t = await STK.api('/toggles?id=' + enc(serial), { timeout: 30000 }); a.prevToggles = t.toggles || {}; } catch (e) { /* optional */ }
+    if (g.smooth) { try { a.prevSys = (await STK.post('/game-tools', { serial, action: 'getstate' }, { timeout: 30000 })).state; } catch (e) { /* optional */ } }
+    if (g.dnd) await setT(serial, 'dnd', true);
+    if (g.touches) await setT(serial, 'touches', true);
+    if (g.freemem) { try { await STK.post('/game-tools', { serial, action: 'freemem' }, { timeout: 30000 }); } catch (e) { /* optional */ } }
+    if (g.smooth) { try { const r = await STK.post('/game-tools', { serial, action: 'refresh', on: true }, { timeout: 30000 }); a.smooth = r.applied !== false; } catch (e) { /* optional */ } }
+    if (g.gamemode) { try { const r = await STK.post('/game-tools', { serial, action: 'gamemode', pkg: g.pkg, mode: 'performance' }, { timeout: 30000 }); a.gm = r.applied !== false; if (r.applied === false) STK.logError('game mode', r.message + (r.reply ? ' Phone reply: ' + r.reply : '')); } catch (e) { /* optional */ } }
+    const p = ((state.schema && state.schema.presets) || []).find(x => x.id === g.preset);
+    if (p) { const prev = {}; for (const k of Object.keys(p.v)) prev[k] = (state.settings || {})[k]; a.prevSettings = prev; try { await STK.post('/settings', { patch: p.v }); await STK.loadSettings(); } catch (e) { STK.fail(e); } }
+    if (g.mirror && !STK.mirroring()) { await STK.actions.mirror(); a.mir = true; }
+    if (g.record && !STK.recording()) { await STK.actions.record(); a.rec = true; }
+  } finally { S.entering[serial] = false; }
 }
-function liveCards() {
-  const id = STK.sel(), r = SX.last(), h = id && S.hist[id]; if (!r || !h) return '<p class="hint">Reading the phone...</p>';
-  const o = SX.opts();
-  const card = (label, val, sub, spark, tone, ic) => `<div class="sx-lc ${tone}"><div class="tp"><span class="l">${icon(ic, 'sm')}${label}</span><b>${val}</b></div>${spark}<small>${sub}</small></div>`;
-  return card('Processor', r.cpu == null ? '--' : Math.round(r.cpu) + '%', 'Load across all cores', SX.spark(h.cpu, { min: 0, max: 100 }), SX.tone('cpu', r.cpu), 'cpu')
-    + card('Memory', r.memPct == null ? '--' : Math.round(r.memPct) + '%', r.memAvailMb != null ? (r.memAvailMb / 1024).toFixed(1) + ' GB free' : '', SX.spark(h.mem, { min: 0, max: 100 }), SX.tone('mem', r.memPct), 'ram')
-    + card('Temperature', r.tempC == null ? '--' : r.tempC.toFixed(1) + ' °C', 'Warning at ' + o.hot + ' °C', SX.spark(h.temp, { min: 25, max: 55 }), SX.tone('temp', r.tempC), 'thermo')
-    + card('Battery', r.battery == null ? '--' : r.battery + '%', r.charging ? 'Charging' + (r.voltage ? ' · ' + (r.voltage / 1000).toFixed(2) + ' V' : '') : 'Discharging' + (r.voltage ? ' · ' + (r.voltage / 1000).toFixed(2) + ' V' : ''), SX.spark(h.bat, { min: 0, max: 100 }), SX.tone('bat', r.battery), 'battery');
+async function exit(serial) {
+  const a = S.active[serial]; if (!a) return;
+  delete S.active[serial]; delete S.misses[serial]; if (state.view === 'studio') SS.render();
+  try {
+    const secs = Math.round((Date.now() - (a.startedAt || Date.now())) / 1000);
+    if (secs >= 10) {
+      const pt = { ...(STK.kv.get('playtime', {}) || {}) }; pt[a.pkg] = (pt[a.pkg] || 0) + secs; STK.kv.set('playtime', pt);
+      saveSession(makeSession({ pkg: a.pkg, name: a.g.name || nice(a.pkg), start: a.startedAt, samples: a.samples, batStart: a.batStart }));
+    }
+  } catch (e) { /* history is optional */ }
+  STK.toast('Game mode off. Settings restored.'); logEvent('game', 'Game profile ended for ' + (a.g.name || nice(a.pkg)) + '.', 'info');
+  if (a.gm) { try { await STK.post('/game-tools', { serial, action: 'gamemode', pkg: a.pkg, mode: 'standard' }, { timeout: 30000 }); } catch (e) { /* ignore */ } }
+  if (a.smooth) { try { const s = a.prevSys || {}; await STK.post('/game-tools', { serial, action: 'setstate', minRefresh: s.minRefresh || '', peakRefresh: s.peakRefresh || '' }, { timeout: 30000 }); } catch (e) { /* ignore */ } }
+  if (a.rec && STK.recording()) { try { await STK.actions.record(); } catch (e) { /* ignore */ } }
+  if (a.mir && STK.mirroring()) { try { await STK.actions.mirror(); } catch (e) { /* ignore */ } }
+  if (a.prevToggles) { if (a.g.dnd) await setT(serial, 'dnd', !!a.prevToggles.dnd); if (a.g.touches) await setT(serial, 'touches', !!a.prevToggles.touches); }
+  if (a.prevSettings) { try { await STK.post('/settings', { patch: a.prevSettings }); await STK.loadSettings(); } catch (e) { /* ignore */ } }
 }
-function coresHtml() {
-  const r = SX.last(); if (!r) return '<p class="hint">Reading the phone...</p>';
-  const cores = r.cores || [];
-  const rows = cores.length ? `<div class="sx-cores">${cores.map(c => { const pct = c.online && c.maxMhz ? (c.mhz || 0) / c.maxMhz * 100 : 0; return `<div class="sx-core ${c.online ? '' : 'off'}"><span>CPU ${c.id}</span>${SX.meter(pct, pct > 85 ? 'warn' : '')}<b>${c.online && c.mhz ? c.mhz + ' MHz' : 'sleeping'}</b></div>`; }).join('')}</div>` : '<p class="hint">This phone does not share its processor clock speeds.</p>';
-  const gpu = r.gpuMHz != null || r.gpuC != null ? SX.kv([r.gpuMHz != null ? ['Graphics clock', r.gpuMHz + ' MHz'] : null, r.gpuBusy != null ? ['Graphics busy', r.gpuBusy + '%'] : null, r.gpuC != null ? ['Graphics temperature', r.gpuC.toFixed(0) + ' °C', SX.tone('temp', r.gpuC)] : null]) : '';
-  return rows + gpu;
-}
-function sysHtml() {
-  const r = SX.last(); if (!r) return '<p class="hint">Reading the phone...</p>';
-  const info = STK.info() || {};
-  return SX.kv([
-    r.storage ? ['Storage', r.storage.freeGb + ' GB free of ' + r.storage.totalGb + ' GB', r.storage.usedPct >= 92 ? 'bad' : ''] : null,
-    r.swapTotalMb ? ['Compressed memory', r.swapUsedMb + ' of ' + r.swapTotalMb + ' MB used'] : null,
-    ['Refresh rate', r.lockPeak ? 'Locked at ' + r.lockPeak + ' Hz' : 'Automatic' + (maxHz() ? ' (up to ' + maxHz() + ' Hz)' : '')],
-    ['Thermal state', r.thermalStatus == null ? 'Not reported' : SX.thermalWord(r.thermalStatus), r.thermalStatus >= 2 ? 'bad' : ''],
-    r.wifi ? ['Wi-Fi', (r.wifi.band || 'Wi-Fi') + ' · ' + r.wifi.rssi + ' dBm' + (r.wifi.linkMbps ? ' · ' + r.wifi.linkMbps + ' Mbps' : ''), r.wifi.rssi <= -75 ? 'warn' : ''] : null,
-    r.brightness != null ? ['Brightness', Math.round(r.brightness / 255 * 100) + '%'] : null,
-    r.animScale != null ? ['Animations', r.animScale === 0 ? 'Off' : r.animScale < 1 ? 'Faster (' + r.animScale + 'x)' : 'Normal'] : null,
-    info.android ? ['Android', esc(info.android) + (info.sdk ? ' (API ' + esc(info.sdk) + ')' : '')] : null
-  ]);
-}
-function suggHtml() {
-  const list = SX.suggestions(); if (!list.length) return '<p class="hint">Reading the phone...</p>';
-  return `<ul class="sx-sugg">${list.map(s => `<li class="${s.tone}"><span class="ico">${icon(s.ic)}</span><div><b>${esc(s.title)}</b><p>${esc(s.text)}</p>${s.act ? `<button class="btn sm" type="button" data-sx="do" data-do="${esc(s.act[1])}">${esc(s.act[0])}</button>` : ''}</div></li>`).join('')}</ul>`;
-}
-SX.register({ id: 'overview', label: 'Overview', icon: 'gauge', order: 1,
-  render: () => `<div class="sx-grid">
-    ${SX.card('span-12', 'Performance profiles', 'One tap sets up the whole phone. Your old settings are saved so you can undo it.', '<div id="w-prof"></div><div id="w-run"></div>')}
-    ${SX.card('span-8', 'Live performance', 'Updates every few seconds while this page is open.', '<div id="w-live" class="sx-live"></div>')}
-    ${SX.card('span-4 tall', 'Smart suggestions', 'Based on what your phone is doing right now.', '<div id="w-sugg"></div>')}
-    ${SX.card('span-8', 'Processor and graphics', 'Per-core clock speed.', '<div id="w-cores"></div>')}
-    ${SX.card('span-12', 'System', 'Storage, display, network and thermal state.', '<div id="w-sys"></div>')}
-  </div>`,
-  paint() { SX.W('w-prof', profilesHtml()); SX.W('w-live', liveCards()); SX.W('w-sugg', suggHtml()); SX.W('w-cores', coresHtml()); SX.W('w-sys', sysHtml()); paintRun(); }
+STK.on('live', ({ L: l }) => {
+  const serial = STK.sel(); if (!serial || !l) return;
+  if (state.view === 'studio') SS.paint();
+  const a = S.active[serial], pkg = l.fgPackage;
+  if (!a) { const g = games().find(x => x.pkg === pkg && x.on !== false); if (g && pkg) enter(serial, g); }
+  else if (pkg && pkg !== a.pkg) { S.misses[serial] = (S.misses[serial] || 0) + 1; if (S.misses[serial] >= 2) exit(serial); }
+  else S.misses[serial] = 0;
 });
 
-/* ---------- Optimize ---------- */
-const TOGGLES = [['dnd', 'Do not disturb', 'bell', 'No pop-ups during play'], ['airplane', 'Airplane mode', 'plane', 'Offline games run cooler'], ['stayawake', 'Stay awake', 'sun-moon', 'Screen stays on while charging'], ['touches', 'Show touches', 'tap', 'Taps visible on recordings'], ['rotation', 'Auto-rotate', 'rotate', 'Off locks the orientation'], ['autobrightness', 'Auto brightness', 'sun-moon', 'Off keeps light steady'], ['bluetooth', 'Bluetooth', 'link', 'Off saves a little power'], ['dark', 'Dark mode', 'eye', 'Saves power on OLED screens']];
-function optPkgBox() {
-  const gl = SX.games(), pkg = SX.pkg(), L = STK.live();
-  const chips = gl.slice(0, 6).map(g => `<button type="button" class="chipbtn ${g.pkg === pkg ? 'is-active' : ''}" data-sx="pickpkg" data-pkg="${esc(g.pkg)}">${esc(g.name || nice(g.pkg))}</button>`).join('');
-  return `<div class="sx-pkg"><label class="ff"><span>Target app or game</span><input id="sx-pkg" data-sxc="pkg" list="sx-apps" value="${esc(S.pkg)}" placeholder="${esc(L && L.fgPackage ? 'Current app: ' + L.fgPackage : 'Open a game on the phone or type its package name')}" autocomplete="off" spellcheck="false"></label><datalist id="sx-apps">${(S.apps || []).map(a => `<option value="${esc(a.package)}">${esc(nice(a.package))}</option>`).join('')}</datalist>${chips ? `<div class="chiprow">${chips}</div>` : ''}</div>`;
-}
-function togglesHtml() {
-  const T = S.toggles; if (!T) return '<p class="hint">Reading the phone settings...</p>';
-  return `<div class="sx-toggles">${TOGGLES.map(([k, l, ic, h]) => `<button type="button" class="sx-tg ${T[k] ? 'on' : ''}" aria-pressed="${!!T[k]}" data-sx="toggle" data-key="${k}"><span class="ico">${icon(ic)}</span><span class="tx"><b>${esc(l)}</b><small>${esc(h)}</small></span><i class="sw"></i></button>`).join('')}</div>`;
-}
-function compatHtml() {
-  const c = S.compat;
-  if (!c) return `<p class="hint">Not sure what this phone supports? Run the check. It reads the phone itself and tells you exactly which features work.</p>`;
-  if (c.error) return `<div class="sx-note bad">${icon('alert', 'sm')}<span>${esc(c.error)}</span></div>`;
-  return `<div class="sx-compat"><header><b>${esc((c.maker || '') + ' ' + (c.model || ''))}</b><span>Android ${esc(c.android)} · API ${esc(c.sdk)}</span></header><ul>${c.checks.map(k => `<li class="${k.ok ? 'ok' : 'no'}"><span class="m">${icon(k.ok ? 'check' : 'info', 'sm')}</span><div><b>${esc(k.label)}</b><small>${esc(k.detail)}</small></div></li>`).join('')}</ul></div>`;
-}
-function gmReportHtml() {
-  const g = S.gm; if (!g) return '';
-  return `<div class="sx-note ${g.applied ? 'ok' : 'bad'}">${icon(g.applied ? 'check' : 'alert', 'sm')}<span>${esc(g.message)}${g.reply && g.applied ? ' The phone said: "' + esc(g.reply) + '".' : ''}</span></div>`;
-}
-SX.register({ id: 'optimize', label: 'Optimize', icon: 'bolt', order: 2,
-  render() {
-    const r = SX.last() || {}, hz = r.supportedHz || [];
-    const hzItems = [[0, 'Auto'], ...hz.map(x => [x, x + ' Hz'])];
-    const tile = (ic, t, d, body, cls = '') => `<button type="button" class="sx-tool ${cls}" data-sx="${body.sx}" ${body.attrs || ''}><span class="ico">${icon(ic)}</span><b>${esc(t)}</b><small>${esc(d)}</small></button>`;
-    return `<div class="sx-grid">
-      ${SX.card('span-12', 'Quick boosts', 'Safe one-tap actions. Nothing here deletes your data.', `<div class="sx-tools">
-        ${tile('rocket', 'Boost memory', 'Close background apps and see how much was freed.', { sx: 'boostbtn' }, 'primary')}
-        ${tile('folder', 'Clear app caches', 'Free storage that apps rebuild by themselves.', { sx: 'tool', attrs: `data-body='${esc(JSON.stringify({ action: 'trimcaches' }))}' data-timeout="120000"` })}
-        ${tile('bolt', 'Optimize app code', 'Recompile the target app for faster start-up and steadier frames. Takes a minute.', { sx: 'dexopt' })}
-        ${tile('stop', 'Stop the target app', 'Force-close it before a clean restart.', { sx: 'forcestop' })}
-        ${tile('play', 'Open the target app', 'Launch it on the phone.', { sx: 'launchapp' })}
-      </div>${optPkgBox()}`)}
-      ${SX.card('span-6', 'Display and smoothness', 'Higher refresh feels smoother and uses more heat.', `
-        <div class="sx-row"><div><b>Refresh rate</b><small>${hz.length ? 'Your screen supports ' + hz.join(', ') + ' Hz.' : 'Locks the screen to one refresh rate.'}</small></div>${SX.seg('hz', hzItems, r.lockPeak && r.lockMin === r.lockPeak ? r.lockPeak : 0)}</div>
-        <div class="sx-row"><div><b>Animation speed</b><small>Shorter animations make menus feel instant.</small></div>${SX.seg('anim', [['0', 'Off'], ['0.5', 'Fast'], ['1', 'Normal']], r.animScale == null ? '1' : r.animScale === 0 ? '0' : r.animScale < 1 ? '0.5' : '1')}</div>
-        <div class="sx-row col"><div><b>Brightness <em id="sx-bv">${S.brightness > 0 ? Math.round(S.brightness / 255 * 100) + '%' : ''}</em></b><small>Turning it down is the fastest way to cool a phone.</small></div><input type="range" id="sx-bright" data-sxc="bright" min="10" max="255" value="${S.brightness > 0 ? S.brightness : 128}" aria-label="Brightness"></div>`)}
-      ${SX.card('span-6', 'Power and focus', 'Switches for a calmer, cooler play session.', '<div id="w-toggles"></div>')}
-      ${SX.card('span-12', 'Android Game Mode', 'Android 12 and newer can tune the system for a game. Some makers hide it, so a check is included.', `
-        <div class="sx-gm"><div class="sx-gm-l"><div class="sx-row"><div><b>Game Mode for the target app</b><small>Performance mode favours speed, Battery favours endurance.</small></div>${SX.seg('gm', [['performance', 'Performance'], ['standard', 'Standard'], ['battery', 'Battery']], '')}</div>
-        <div class="sx-row"><div><b>Fixed performance mode</b><small>Keeps the processor at a steady high speed. Runs warm.</small></div><div class="sx-seg"><button type="button" data-sx="tool" data-body='${esc(JSON.stringify({ action: 'perfmode', on: true }))}'>On</button><button type="button" data-sx="tool" data-body='${esc(JSON.stringify({ action: 'perfmode', on: false }))}'>Off</button></div></div>
-        <div id="w-gm"></div></div>
-        <div class="sx-gm-r"><div class="sx-row"><div><b>Compatibility check</b><small>Reads what this phone supports.</small></div><button class="btn sm" data-sx="compat" type="button">${icon('shield', 'sm')}<span>Run check</span></button></div><div id="w-compat"></div></div></div>`)}
-    </div>`;
-  },
-  paint() { SX.W('w-toggles', togglesHtml()); SX.W('w-compat', compatHtml()); SX.W('w-gm', gmReportHtml()); },
-  onShow() { SX.loadToggles(); SX.ensureApps().then(() => { if (state.view === 'studio' && S.tab === 'optimize') { const dl = document.getElementById('sx-apps'); if (dl) dl.innerHTML = (S.apps || []).map(a => `<option value="${esc(a.package)}">${esc(nice(a.package))}</option>`).join(''); } }); }
-});
+/* ---------- demo mode ---------- */
+SS.loadDemo = async function () { const id = STK.sel(); if (!id) { S.demo = false; return; } try { S.demo = (await STK.api('/demo?id=' + enc(id))).on; } catch (e) { /* ignore */ } if (state.view === 'studio' && S.tab === 'capture') SS.render(); };
+STK.on('demo', on => { S.demo = on; if (state.view === 'studio' && S.tab === 'capture') SS.render(); });
 
-/* ---------- events ---------- */
-function needPkg() { const p = SX.pkg(); if (!p) { STK.toast('Open the game on the phone, pick one of your games, or type its package name.', 'bad'); return ''; } if (!/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(p)) { STK.toast('That is not a valid package name, like com.tencent.ig. Pick one from the list.', 'bad'); return ''; } return p; }
-SX.needPkg = needPkg;
-Object.assign(SX.actions, {
-  tab: t => SX.go(t.dataset.tab),
-  boost: t => SX.boost(t), cool: t => SX.cooldown(t), boostbtn: t => SX.boost(t),
-  profile: t => STK.busy(t, () => SX.applyProfile(t.dataset.id)),
-  restore: t => STK.busy(t, () => SX.restoreProfile()),
-  closerun: () => { S.run = null; paintRun(); },
-  do: t => runDo(t.dataset.do, t),
-  pickpkg: t => { SX.setPkg(t.dataset.pkg); SX.refresh(true); },
-  tool: t => { let body = {}; try { body = JSON.parse(t.dataset.body || '{}'); } catch (e) { return; } return STK.busy(t, async () => { await SX.tool(body, { timeout: Number(t.dataset.timeout) || 45000 }); sample(true); }); },
-  dexopt: t => { const p = needPkg(); if (!p) return; return STK.busy(t, () => SX.tool({ action: 'dexopt', pkg: p }, { timeout: 260000 })); },
-  forcestop: t => { const p = needPkg(); if (!p) return; return STK.busy(t, () => SX.tool({ action: 'forcestop', pkg: p })); },
-  launchapp: t => { const p = needPkg(); if (!p) return; return STK.busy(t, () => SX.tool({ action: 'launch', pkg: p })); },
-  hz: t => STK.busy(t, async () => { await SX.tool({ action: 'refresh', hz: Number(t.dataset.v) }); sample(true); SX.refresh(true); }),
-  anim: t => STK.busy(t, async () => { await SX.tool({ action: 'animscale', value: t.dataset.v }); sample(true); SX.refresh(true); }),
-  toggle: t => { const key = t.dataset.key, next = !(S.toggles && S.toggles[key]); return STK.busy(t, async () => { const r = await SX.setToggle(key, next); if (r) { SX.refresh(); } }); },
-  gm: t => { const p = needPkg(); if (!p) return; return STK.busy(t, async () => { const r = await SX.tool({ action: 'gamemode', pkg: p, mode: t.dataset.v }, { timeout: 60000 }); if (r) { S.gm = r; SX.refresh(); } }); },
-  compat: t => STK.busy(t, async () => { try { S.compat = await STK.post('/perf-tools', { serial: STK.sel(), action: 'compat' }, { timeout: 45000 }); } catch (e) { S.compat = { error: e.message }; } SX.refresh(); })
-});
-document.addEventListener('click', e => {
-  const t = e.target.closest('#studio-root [data-sx]'); if (!t || t.disabled) return;
-  const fn = SX.actions[t.dataset.sx]; if (fn) fn(t, e);
-});
-document.addEventListener('change', e => {
-  const t = e.target.closest('#studio-root [data-sxc]'); if (!t) return;
-  const fn = SX.changes[t.dataset.sxc]; if (fn) fn(t, e);
-});
-document.addEventListener('input', e => { const t = e.target.closest('#studio-root [data-sxc="bright"]'); if (t) { const v = document.getElementById('sx-bv'); if (v) v.textContent = Math.round(t.value / 255 * 100) + '%'; } });
-Object.assign(SX.changes, {
-  pkg: t => { SX.setPkg(t.value.trim()); },
-  bright: t => { const v = Number(t.value); S.brightness = v; STK.post('/toggle', { serial: STK.sel(), key: 'brightness', value: v }, { timeout: 30000 }).then(() => { STK.toast('Brightness set.'); sample(true); }).catch(STK.fail); }
-});
+/* ---------- export ---------- */
+SS.exportCsv = function () {
+  const h = SS.hist(); if (!h || !h.a.length) return STK.toast('No history yet. Keep the Studio open for a minute first.', 'bad');
+  h.save(); const keys = new Set(); h.a.forEach(p => Object.keys(p).forEach(k => { if (k !== 't') keys.add(k); }));
+  const cols = [['t', 'time', r => new Date(r.t).toISOString()]].concat([...keys].map(k => [k, k]));
+  SX.download('droid-adb-studio-history.csv', SX.csv(h.a, cols)); STK.toast('History saved as CSV (' + h.a.length + ' readings).');
+};
+SS.clearHistory = async function () {
+  if (!await STK.confirm('Clear Studio history?', '<p>This removes the stored graphs for this phone from this browser. Game session history is kept.</p>', 'Clear', true)) return;
+  const h = SS.hist(); if (h) h.clear(); S.events = []; store.set('sx-events', []); STK.toast('History cleared.'); SS.render();
+};
 
-/* ---------- lifecycle ---------- */
-STK.views.studio = { onShow() { build(); paintTabs(); SX.refresh(true); start(); const t = cur(); if (t && t.onShow) t.onShow(); if (!S.toggles) SX.loadToggles(); } };
-STK.on('view', v => { if (v !== 'studio') stop(); });
-STK.on('device-changed', () => { S.toggles = null; S.apps = null; S.compat = null; S.gm = null; S.cool = null; S.run = null; if (state.view === 'studio') { SX.refresh(true); start(); SX.loadToggles(); } });
-STK.on('kv', () => { if (state.view === 'studio') { SX.refresh(); paintHero(); } });
-STK.on('info', () => { if (state.view === 'studio') paintHero(); });
-document.addEventListener('visibilitychange', () => { if (!document.hidden && state.view === 'studio') sample(true); });
+/* ---------- device changes ---------- */
+STK.on('device-changed', () => { S.toggles = null; S.ext = {}; S.stats = null; S.sample = null; S.perf = null; S.lastFrames = null; S.net = null; S.top = null; S.battApps = null; S.apps = null; S.hist = null; if (state.view === 'studio') { SS.render(); SS.loadToggles(); pollPerf(true); } });
+SS.save = () => {};
 })();

@@ -161,23 +161,36 @@ Use this checklist after dashboard, backend, launcher, or recording-related chan
 - [ ] Game mode: add a game with Free memory and Game Mode ticked, open it on the phone, confirm they run, leave the game and confirm settings return and play time is added.
 - [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 3.6.0).
 
-## 4.0 Performance Studio
-- [ ] Studio opens on Overview with health score and live graphs; all six tabs load without errors.
-- [ ] Optimize, Compatibility check on an Android 13 phone lists Game Mode as supported; setting performance mode shows success or the phone's real reply (never "needs Android 12").
-- [ ] Apply Gaming profile, then Restore my settings: refresh rate, animations, brightness and switches return to the earlier values.
-- [ ] Games: launching a saved game applies its profile; leaving restores it and adds a session row.
-- [ ] Thermals: gauge, history and cool-down tracker update; threshold sliders persist.
-- [ ] Network test shows ping, jitter, loss and a verdict.
-- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 4.0.0).
+## 3.9 Audio modes (needs the TECNO KJ5, Android 13, and OBS)
+For each mode: set it in Studio, Capture, start Mirror, start Record, play PUBG Mobile for 30 s, stop, press Check a recording, then play the file.
+- [ ] Video only: phone plays, PC silent, file has no audio track. Default after a fresh install.
+- [ ] Copy to recording: phone plays, PC silent, file has audible sound (Check says audible when ffmpeg exists; otherwise listen). If silent, note the game blocks capture.
+- [ ] Copy and play on PC: phone and PC both play, sound appears once in the file, no echo.
+- [ ] Reroute: phone silent, PC plays. Recording alone has sound; with the mirror open, the recording is silent and the panel says so.
+- [ ] Switching mode while a mirror runs: Running now shows the real mode, the choice applies after restart.
+- [ ] Unplug and replug: restart the mirror, the saved mode is used and Running now is correct.
+- [ ] Stop each session: no scrcpy.exe left in Task Manager, file in Recordings.
+- [ ] Game sound for OBS On: OBS Application Audio Capture for scrcpy.exe hears the game; Off: no game sound. Starting or stopping OBS never stops the mirror or recording or changes the phone sound.
+- [ ] Android 12 or older phone (if available): copy modes show a warning and record no sound.
 
-## 4.1 Audio modes (real device)
-Full steps are in docs/AUDIO.md.
-- [ ] Settings, Audio shows four cards; Video only is selected on a fresh settings file; the choice survives restarting the service.
-- [ ] Video only: mirror and recording behave as in 4.0; the recording has no sound track.
-- [ ] Copy to recording: phone plays, PC silent, Library, More, Check sound reports a sound track (and audible if ffmpeg is present).
-- [ ] Copy and play on PC: phone and PC both play; the recording has exactly one sound track.
-- [ ] Reroute: phone silent, PC plays; recording result is what Check sound reports.
-- [ ] Unplug during a session, replug, start again: the selected mode is applied; the status shows the mode that is really active.
-- [ ] Android 12 or older phone (if available): a Copy mode shows a warning and starts as Video only, or refuses the recording.
-- [ ] Streaming audio plans show the correct status for each mode; starting or stopping OBS does not stop the mirror or a recording.
-- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 4.1.0).
+## 3.8 Studio rebuild
+- [ ] Studio opens on Overview, LIVE pill counts up and resets on each update; refresh selector and Pause (key P) work.
+- [ ] Each of the seven tabs renders with no console errors; `[` and `]` switch tabs.
+- [ ] Clicking a KPI card opens the chart modal: period buttons, hover read-out, drag to zoom, double-click reset, legend toggles, CSV, Esc closes.
+- [ ] Optimize: each profile shows animated steps and Undo restores state; custom profile save and delete work; quick switches and sliders change the phone.
+- [ ] Performance: cores, busiest apps, frame stats histogram, recorder start/stop adds a session that opens a graph.
+- [ ] Battery tab shows ring, details, history chart and per-app use.
+- [ ] Light theme and 400 px width look correct.
+- [ ] Chrome offers Install (manifest valid, icons incl. maskable, service worker registered). `/sw.js` and `/manifest.webmanifest` load without auth errors; API calls are never cached.
+- [ ] After updating, no "service outdated" banner (page and service both 3.8.0).
+
+## 3.7 Performance Studio
+- [ ] Studio opens on Overview with a phone connected: ring, six gauges, trends and suggestions fill within about 5 seconds. With no phone, the connect message shows.
+- [ ] Game Mode: Optimize, pick a game, press Game Mode: performance on an Android 13 phone. It either applies or shows the phone's real reply. It never says Android 12 or newer is needed on Android 13. Settings, Error log holds the reply.
+- [ ] Turbo on: each step reports done or skipped. Undo restores Do not disturb, animations, stay awake, battery saver and refresh rate. Reload the page while Turbo is on: Undo still works.
+- [ ] Cooling: temperature and trend update. Cool-down lowers brightness and turns on battery saver; Restore returns them. The notice appears at the target temperature.
+- [ ] Network check shows delay, loss and Wi-Fi band. With Wi-Fi off it says there is no internet.
+- [ ] Games: add a game with Free memory, Lock refresh rate and Game Mode. Play opens it. Leaving it restores settings and adds a session row with peak temperature.
+- [ ] Capture: demo mode on and off, presentation view and capture presets still work.
+- [ ] Opening any app route with a bad package name (for example from Apps) is still rejected with "not a valid app package name".
+

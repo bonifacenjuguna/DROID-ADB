@@ -284,17 +284,6 @@ async function sendUrl() {
 }
 
 /* ---------- sessions, feed, captures ---------- */
-function sessAudio(s) {
-  const a = s.audio, st = s.audioState || {};
-  if (!a) return '';
-  const name = id => audioLabel(id).replace(/^./, c => c.toUpperCase());
-  let t;
-  if (a.fallback) t = `Audio: asked for ${name(a.requested)}, running as Video only`;
-  else if (st.state === 'failed') t = `Audio: ${name(a.effective)}, sound problem`;
-  else if (!a.capture) t = `Audio: ${name(a.requested)}, no sound captured here`;
-  else t = `Audio: ${name(a.effective)}${st.state === 'starting' ? ', starting' : ', capturing'}${a.playsOnPc ? ', plays on PC' : ', PC silent'}`;
-  return `<small class="sess-audio ${a.fallback || st.state === 'failed' ? 'bad' : ''}">${esc(t)}</small>`;
-}
 function renderSessions() {
   const box = $('#sessions'), list = state.sessions, chip = $('#session-chip');
   chip.className = 'chip sm' + (list.some(s => s.recording) ? ' rec' : list.length ? ' ok' : '');
@@ -302,7 +291,7 @@ function renderSessions() {
   if (!list.length) { setHtml(box, `<div class="empty">${icon('mirror')}<b>No windows open</b><p>Mirror or record to see a live timer here.</p></div>`); return; }
   setHtml(box, (list.length > 1 ? `<div class="sess-all"><button class="btn sm danger" data-act="stopAll">${icon('stop', 'sm')}<span>Stop all</span></button></div>` : '') + list.map(s => `<div class="sess ${s.recording ? 'rec' : ''}"><span class="badge">${icon(s.recording ? 'record' : 'mirror')}</span>
     <div><b>${s.recording ? (s.headless ? 'Recording in background' : 'Recording') : 'Mirroring'}${s.app ? ' · ' + esc(s.app) : ''}</b><div class="timer" data-since="${esc(s.started)}">${clock(s.started)}</div>
-    <small>${s.recording && s.file ? esc(s.file) + ' · ' + bytes(s.fileSize) : (s.serial ? esc(s.serial) + ' · ' : '') + 'process ' + esc(s.pid)}</small>${sessAudio(s)}</div>
+    <small>${s.recording && s.file ? esc(s.file) + ' · ' + bytes(s.fileSize) : (s.serial ? esc(s.serial) + ' · ' : '') + 'process ' + esc(s.pid)}</small></div>
     <div class="acts"><button class="icon-btn" data-sess-log="${esc(s.id)}" title="Show scrcpy output" aria-label="Show scrcpy output">${icon('list', 'sm')}</button><button class="btn sm danger" data-sess-stop="${esc(s.id)}">${icon('stop', 'sm')}<span>Stop</span></button></div></div>`).join(''));
 }
 const FEED_ICON = { record: 'record', mirror: 'mirror', stop: 'stop', screenshot: 'camera', wifi: 'wifi', delete: 'trash', system: 'pulse', error: 'alert', app: 'apps', files: 'folder', shell: 'terminal', rename: 'pencil' };
@@ -373,7 +362,6 @@ async function pollMedia(force) {
 }
 
 /* ---------- quick profile line ---------- */
-function audioLabel(id) { const m = ((state.schema && state.schema.audioModes) || []).find(x => x.id === id); return (m ? m.label : String(id || 'video_only').replace(/_/g, ' ')).toLowerCase(); }
 function renderQuickline() {
   const s = state.settings, box = $('#quickline');
   if (!s || !state.schema) { setHtml(box, ''); return; }
@@ -382,7 +370,7 @@ function renderQuickline() {
   const opts = [`<option value="custom"${active === 'custom' ? ' selected' : ''}>Custom</option>`]
     .concat(presets.map(p => `<option value="preset:${esc(p.id)}"${active === p.id ? ' selected' : ''}>${esc(p.name)}</option>`))
     .concat(profiles.map(p => `<option value="profile:${esc(p.name)}">${esc(p.name)} (saved)</option>`));
-  const sum = [s.source === 'camera' ? 'Camera' : (s.maxSize ? s.maxSize + ' px' : 'Native size'), s.maxFps + ' fps', s.bitrateMbps + ' Mbps', String(s.codec).toUpperCase().replace('H', 'H.'), 'audio: ' + audioLabel(s.audioMode)];
+  const sum = [s.source === 'camera' ? 'Camera' : (s.maxSize ? s.maxSize + ' px' : 'Native size'), s.maxFps + ' fps', s.bitrateMbps + ' Mbps', String(s.codec).toUpperCase().replace('H', 'H.'), s.audio ? 'sound on' : 'no sound'];
   if (s.recordWindowless) sum.push('background recording');
   setHtml(box, `<span>Quality</span><div class="select-wrap plain">${''}<select id="quick-preset" aria-label="Quality preset">${opts.join('')}</select>${icon('chevron', 'sm chev')}</div><span>${esc(sum.join(' · '))}</span><button class="link" data-view="settings" type="button">Edit settings</button>`);
 }
