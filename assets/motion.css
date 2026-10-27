@@ -1,0 +1,42 @@
+/* DROID ADB 4.2 motion layer: page entrances, card stagger, button feedback, toasts, dialogs, theme cross-fade.
+   Everything here is decoration only and switches off when the system asks for reduced motion. */
+:root { --mo-ease: cubic-bezier(.2, .8, .2, 1); }
+@keyframes mo-rise { from { opacity: 0; transform: translateY(14px) scale(.99); } }
+@keyframes mo-pop { 0% { transform: scale(.6); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
+@keyframes mo-toast { from { opacity: 0; transform: translateX(28px) scale(.96); } }
+@keyframes mo-dlg { from { opacity: 0; transform: translateY(14px) scale(.96); } }
+@keyframes mo-fade { from { opacity: 0; } }
+@keyframes mo-breathe { 50% { opacity: .45; } }
+@keyframes mo-ripple { from { transform: scale(0); opacity: .45; } to { transform: scale(1); opacity: 0; } }
+
+/* pages and cards arrive one after another */
+.view.mo-in .panel, .view.mo-in .sx-card, .view.mo-in .sx-hero, .view.mo-in .sx-tabs, .view.mo-in .toolbar { animation: mo-rise .55s var(--mo-ease) both; animation-delay: calc(var(--mo-i, 0) * 45ms); }
+.mo-stagger > .sx-card, .mo-stagger > .panel { animation: mo-rise .5s var(--mo-ease) both; animation-delay: calc(var(--mo-i, 0) * 50ms); }
+
+/* buttons feel pressable */
+.btn, .sx-tab, .sx-prof, .ptab { transition: transform .15s var(--mo-ease), box-shadow .2s, background-color .2s, border-color .2s, color .2s; }
+.btn:hover:not(:disabled) { transform: translateY(-1px); }
+.btn:active:not(:disabled) { transform: translateY(0) scale(.97); }
+.btn.primary:hover:not(:disabled) { box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 32%, transparent); }
+.sx-tab:active, .ptab:active { transform: scale(.96); }
+.mo-rp { position: relative; overflow: hidden; }
+.mo-ripple { position: absolute; border-radius: 50%; pointer-events: none; background: radial-gradient(circle, color-mix(in srgb, currentColor 40%, transparent) 0%, transparent 70%); animation: mo-ripple .6s var(--mo-ease) forwards; }
+
+/* small celebrations */
+.rail-btn.is-active .ic, .sx-tab.is-active .ic { animation: mo-pop .45s cubic-bezier(.3, 1.4, .5, 1); }
+.toast { animation: mo-toast .38s var(--mo-ease); }
+.dlg[open] { animation: mo-dlg .3s var(--mo-ease); }
+.dlg[open]::backdrop { animation: mo-fade .25s ease-out; }
+.sx-live > .hint, #w-cores > .hint, #w-sugg > .hint { animation: mo-breathe 1.6s ease-in-out infinite; }
+.mo-burst { position: fixed; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: 90; }
+.mo-burst i { position: absolute; width: 7px; height: 7px; margin: -3px 0 0 -3px; border-radius: 50%; }
+
+/* theme and accent changes fade instead of snapping */
+html.mo-theme *, html.mo-theme *::before, html.mo-theme *::after { transition: background-color .4s ease, color .4s ease, border-color .4s ease, fill .4s ease, stroke .4s ease !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .view.mo-in .panel, .view.mo-in .sx-card, .view.mo-in .sx-hero, .view.mo-in .sx-tabs, .view.mo-in .toolbar, .mo-stagger > *, .toast, .dlg[open], .dlg[open]::backdrop, .mo-ripple,
+  .rail-btn.is-active .ic, .sx-tab.is-active .ic, .sx-live > .hint, #w-cores > .hint, #w-sugg > .hint { animation: none !important; }
+  .btn, .sx-tab, .sx-prof, .ptab { transition: none !important; }
+  .btn:hover:not(:disabled), .btn:active:not(:disabled) { transform: none; }
+}

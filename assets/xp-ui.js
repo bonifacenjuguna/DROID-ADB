@@ -1,9 +1,9 @@
-/* Studio 3.8 building blocks: history store, interactive charts (inline and full size), count-up numbers,
+/* Studio Plus 4.2 building blocks (ported from Studio 3.8): history store, interactive charts (inline and full size), count-up numbers,
    rings, gauges, sparklines, modal, ripple and CSV download. Used by studio.js. No dependencies. */
 (() => {
 'use strict';
 const { $, $$, esc, icon } = STK;
-const SX = STK.sx = {};
+const SX = STK.xp = {};
 const DAY = 24 * 3600 * 1000;
 SX.reduced = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 const num = v => v != null && isFinite(v);
@@ -11,7 +11,7 @@ SX.num = num;
 SX.clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 /* ---------- history: 24 hours of samples per phone, kept in this browser ---------- */
-const hkey = id => 'stk-sxh:' + id;
+const hkey = id => 'stk-xph:' + id;
 class Hist {
   constructor(id) {
     this.id = id; this.saved = 0; this.a = [];
@@ -71,23 +71,23 @@ SX.stats = vals => { const v = vals.filter(num); if (!v.length) return null; ret
 /* ---------- sparkline (tiny, no axes) ---------- */
 SX.spark = function (vals, { min = null, max = null, color = 'var(--accent)', mark = null } = {}) {
   const v = vals.filter(num);
-  if (v.length < 2) return '<svg class="sx-spark" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true"><line x1="0" x2="100" y1="26" y2="26" class="sx-spark-empty"/></svg>';
+  if (v.length < 2) return '<svg class="xp-spark" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true"><line x1="0" x2="100" y1="26" y2="26" class="xp-spark-empty"/></svg>';
   let lo = min != null ? Math.min(min, ...v) : Math.min(...v), hi = max != null ? Math.max(max, ...v) : Math.max(...v);
   if (hi - lo < 1e-6) { hi = lo + 1; }
   const Y = x => 29 - (x - lo) / (hi - lo) * 26, n = vals.length;
   let d = '', fx = null, lx = 0;
   vals.forEach((x, i) => { if (!num(x)) return; const px = (i / Math.max(1, n - 1) * 100).toFixed(2); d += (d ? 'L' : 'M') + px + ' ' + Y(x).toFixed(2); if (fx === null) fx = px; lx = px; });
-  const ml = mark != null && mark >= lo && mark <= hi ? `<line x1="0" x2="100" y1="${Y(mark).toFixed(1)}" y2="${Y(mark).toFixed(1)}" class="sx-spark-mark"/>` : '';
-  return `<svg class="sx-spark" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true">${ml}<path d="${d}L${lx} 32L${fx} 32Z" style="fill:${color}" class="sx-spark-area"/><path d="${d}" style="stroke:${color}" class="sx-spark-ln"/></svg>`;
+  const ml = mark != null && mark >= lo && mark <= hi ? `<line x1="0" x2="100" y1="${Y(mark).toFixed(1)}" y2="${Y(mark).toFixed(1)}" class="xp-spark-mark"/>` : '';
+  return `<svg class="xp-spark" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true">${ml}<path d="${d}L${lx} 32L${fx} 32Z" style="fill:${color}" class="xp-spark-area"/><path d="${d}" style="stroke:${color}" class="xp-spark-ln"/></svg>`;
 };
 
 /* ---------- ring and arc gauge ---------- */
-SX.ring = (v, color, big, small) => `<svg class="sx-ring" viewBox="0 0 120 120" role="img" aria-label="${esc(big + ' ' + small)}"><defs><linearGradient id="sxg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:${color}"/><stop offset="1" style="stop-color:${color};stop-opacity:.55"/></linearGradient></defs><circle cx="60" cy="60" r="52" class="sx-ring-bg"/><circle cx="60" cy="60" r="52" class="sx-ring-fg" style="stroke:url(#sxg);stroke-dasharray:${(SX.clamp(v, 0, 100) / 100 * 326.7).toFixed(1)} 326.7"/><text x="60" y="63" text-anchor="middle" class="sx-ring-n">${esc(big)}</text><text x="60" y="82" text-anchor="middle" class="sx-ring-s">${esc(small)}</text></svg>`;
+SX.ring = (v, color, big, small) => `<svg class="xp-ring" viewBox="0 0 120 120" role="img" aria-label="${esc(big + ' ' + small)}"><defs><linearGradient id="sxg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:${color}"/><stop offset="1" style="stop-color:${color};stop-opacity:.55"/></linearGradient></defs><circle cx="60" cy="60" r="52" class="xp-ring-bg"/><circle cx="60" cy="60" r="52" class="xp-ring-fg" style="stroke:url(#sxg);stroke-dasharray:${(SX.clamp(v, 0, 100) / 100 * 326.7).toFixed(1)} 326.7"/><text x="60" y="63" text-anchor="middle" class="xp-ring-n">${esc(big)}</text><text x="60" y="82" text-anchor="middle" class="xp-ring-s">${esc(small)}</text></svg>`;
 /* 240-degree arc gauge. Build once, then call SX.arcSet to animate. */
 const ARC_LEN = 2 * Math.PI * 44 * (240 / 360);
-SX.arc = () => `<svg class="sx-arc" viewBox="0 0 120 100" aria-hidden="true"><path class="sx-arc-bg" d="${arcPath()}" /><path class="sx-arc-fg" d="${arcPath()}" style="stroke-dasharray:${ARC_LEN.toFixed(1)};stroke-dashoffset:${ARC_LEN.toFixed(1)}"/></svg>`;
+SX.arc = () => `<svg class="xp-arc" viewBox="0 0 120 100" aria-hidden="true"><path class="xp-arc-bg" d="${arcPath()}" /><path class="xp-arc-fg" d="${arcPath()}" style="stroke-dasharray:${ARC_LEN.toFixed(1)};stroke-dashoffset:${ARC_LEN.toFixed(1)}"/></svg>`;
 function arcPath() { const r = 44, cx = 60, cy = 56, a0 = (150) * Math.PI / 180, a1 = (390) * Math.PI / 180; const p = a => [cx + r * Math.cos(a), cy + r * Math.sin(a)]; const [x0, y0] = p(a0), [x1, y1] = p(a1); return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 1 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`; }
-SX.arcSet = (el, pct, color) => { const fg = $('.sx-arc-fg', el); if (!fg) return; fg.style.strokeDashoffset = (ARC_LEN * (1 - SX.clamp(pct, 0, 100) / 100)).toFixed(1); if (color) fg.style.stroke = color; };
+SX.arcSet = (el, pct, color) => { const fg = $('.xp-arc-fg', el); if (!fg) return; fg.style.strokeDashoffset = (ARC_LEN * (1 - SX.clamp(pct, 0, 100) / 100)).toFixed(1); if (color) fg.style.stroke = color; };
 
 /* ---------- animated number ---------- */
 SX.setNum = function (el, to, { dec = 0, pre = '', suf = '' } = {}) {
@@ -100,7 +100,7 @@ SX.setNum = function (el, to, { dec = 0, pre = '', suf = '' } = {}) {
   const step = now => { const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = show(from + (to - from) * e); if (k < 1) el._raf = requestAnimationFrame(step); };
   el._raf = requestAnimationFrame(step);
 };
-SX.tick = el => { if (!el || SX.reduced()) return; el.classList.remove('sx-tick'); void el.offsetWidth; el.classList.add('sx-tick'); };
+SX.tick = el => { if (!el || SX.reduced()) return; el.classList.remove('xp-tick'); void el.offsetWidth; el.classList.add('xp-tick'); };
 
 /* ---------- download ---------- */
 SX.download = function (name, text, mime = 'text/csv') {
@@ -115,11 +115,11 @@ let openModal = null;
 SX.modal = function (html, { cls = '', label = 'Details', onClose } = {}) {
   if (openModal) openModal.close(true);
   const prevFocus = document.activeElement;
-  const el = document.createElement('div'); el.className = 'sx-modal ' + cls; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', label);
-  el.innerHTML = `<div class="sx-modal-box" tabindex="-1">${html}</div>`;
+  const el = document.createElement('div'); el.className = 'xp-modal ' + cls; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', label);
+  el.innerHTML = `<div class="xp-modal-box" tabindex="-1">${html}</div>`;
   document.body.appendChild(el);
   requestAnimationFrame(() => el.classList.add('on'));
-  const box = $('.sx-modal-box', el);
+  const box = $('.xp-modal-box', el);
   const api = {
     el, box,
     close(quick) { if (!el.isConnected) return; document.removeEventListener('keydown', key, true); openModal = null; if (onClose) onClose(); if (quick || SX.reduced()) el.remove(); else { el.classList.remove('on'); setTimeout(() => el.remove(), 200); } try { prevFocus && prevFocus.focus && prevFocus.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
@@ -141,8 +141,8 @@ SX.isModalOpen = () => !!openModal;
 
 /* ---------- ripple on buttons ---------- */
 document.addEventListener('pointerdown', e => {
-  const b = e.target.closest && e.target.closest('.sx-btn, .sx-tile, .sx-prof'); if (!b || b.disabled || SX.reduced()) return;
-  const r = b.getBoundingClientRect(), s = document.createElement('span'); s.className = 'sx-ripple';
+  const b = e.target.closest && e.target.closest('.xp-btn, .xp-tile, .xp-prof'); if (!b || b.disabled || SX.reduced()) return;
+  const r = b.getBoundingClientRect(), s = document.createElement('span'); s.className = 'xp-ripple';
   const d = Math.max(r.width, r.height) * 1.6; s.style.cssText = `width:${d}px;height:${d}px;left:${e.clientX - r.left - d / 2}px;top:${e.clientY - r.top - d / 2}px`;
   b.appendChild(s); setTimeout(() => s.remove(), 600);
 }, { passive: true });
@@ -154,8 +154,8 @@ SX.Chart = class {
   constructor(host, cfg) {
     this.host = host; this.cfg = cfg; this.per = cfg.period || '15m'; this.zoom = null; this.hx = null; this.hy = null; this.pts = []; this.drag = null; this.paused = false;
     cfg.series.forEach((s, i) => { if (!s.color) s.color = SX.color(i); });
-    host.classList.add('sx-chart'); host.innerHTML = `<div class="sx-plot" tabindex="0" role="img" aria-label="${esc(cfg.title || 'Graph')}. Move over it to read values."><div class="sx-tip"></div></div>`;
-    this.plot = $('.sx-plot', host); this.tip = $('.sx-tip', host);
+    host.classList.add('xp-chart'); host.innerHTML = `<div class="xp-plot" tabindex="0" role="img" aria-label="${esc(cfg.title || 'Graph')}. Move over it to read values."><div class="xp-tip"></div></div>`;
+    this.plot = $('.xp-plot', host); this.tip = $('.xp-tip', host);
     const mv = e => { const r = this.plot.getBoundingClientRect(); this.hx = e.clientX - r.left; this.hy = e.clientY - r.top; if (this.drag) { this.drag.x1 = this.hx; } this.cross(); };
     this.plot.addEventListener('pointermove', mv);
     this.plot.addEventListener('pointerdown', e => { if (e.button) return; try { this.plot.setPointerCapture(e.pointerId); } catch (er) { /* ignore */ } mv(e); if (!cfg.inline && this.G) this.drag = { x0: this.hx, x1: this.hx }; });
@@ -190,10 +190,10 @@ SX.Chart = class {
     const X = t => L + (t - t0) / (t1 - t0 || 1) * pw, Y = v => T + ph - (SX.clamp(v, lo, hi) - lo) / (hi - lo) * ph;
     const f = c.fmt || (v => String(Math.round(v * 10) / 10));
     let g = '';
-    for (let i = 0; i <= 4; i++) { const v = lo + (hi - lo) * i / 4, y = Y(v); g += `<line class="sx-grid" x1="${L}" x2="${W - R}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="sx-ax" x="${W - R + 8}" y="${(y + 4).toFixed(1)}">${esc(f(v))}</text>`; }
+    for (let i = 0; i <= 4; i++) { const v = lo + (hi - lo) * i / 4, y = Y(v); g += `<line class="xp-grid" x1="${L}" x2="${W - R}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="xp-ax" x="${W - R + 8}" y="${(y + 4).toFixed(1)}">${esc(f(v))}</text>`; }
     const nx = Math.max(2, Math.min(6, Math.floor(pw / 120)));
-    for (let i = 0; i <= nx; i++) { const t = t0 + (t1 - t0) * i / nx, x = X(t); g += `<line class="sx-grid v" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${T}" y2="${T + ph}"/><text class="sx-ax" x="${SX.clamp(x - 22, L, W - R - 44).toFixed(1)}" y="${H - 7}">${esc(fmtT(t, t1 - t0))}</text>`; }
-    (c.thresholds || []).forEach(th => { if (!num(th.v) || th.v < lo || th.v > hi) return; const y = Y(th.v); g += `<line class="sx-th ${th.cls || ''}" x1="${L}" x2="${W - R}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="sx-th-t ${th.cls || ''}" x="${L + 4}" y="${(y - 4).toFixed(1)}">${esc(th.label || '')}</text>`; });
+    for (let i = 0; i <= nx; i++) { const t = t0 + (t1 - t0) * i / nx, x = X(t); g += `<line class="xp-grid v" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${T}" y2="${T + ph}"/><text class="xp-ax" x="${SX.clamp(x - 22, L, W - R - 44).toFixed(1)}" y="${H - 7}">${esc(fmtT(t, t1 - t0))}</text>`; }
+    (c.thresholds || []).forEach(th => { if (!num(th.v) || th.v < lo || th.v > hi) return; const y = Y(th.v); g += `<line class="xp-th ${th.cls || ''}" x1="${L}" x2="${W - R}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="xp-th-t ${th.cls || ''}" x="${L + 4}" y="${(y - 4).toFixed(1)}">${esc(th.label || '')}</text>`; });
     const gap = Math.max((t1 - t0) / 40, 60e3);
     let lines = '', defs = '';
     vis.forEach((s, si) => {
@@ -203,22 +203,22 @@ SX.Chart = class {
       defs += `<linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${s.color};stop-opacity:.32"/><stop offset="1" style="stop-color:${s.color};stop-opacity:0"/></linearGradient>`;
       segs.forEach(sg => {
         const d = sg.map((q, i) => (i ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('');
-        if (sg.length > 1 && (vis.length === 1 || si === 0 || c.fillAll)) lines += `<path class="sx-area" fill="url(#${gid})" d="${d}L${sg[sg.length - 1][0].toFixed(1)} ${T + ph}L${sg[0][0].toFixed(1)} ${T + ph}Z"/>`;
-        lines += `<path class="sx-ln" style="stroke:${s.color}" d="${d}${sg.length === 1 ? 'h.1' : ''}"/>`;
+        if (sg.length > 1 && (vis.length === 1 || si === 0 || c.fillAll)) lines += `<path class="xp-area" fill="url(#${gid})" d="${d}L${sg[sg.length - 1][0].toFixed(1)} ${T + ph}L${sg[0][0].toFixed(1)} ${T + ph}Z"/>`;
+        lines += `<path class="xp-ln" style="stroke:${s.color}" d="${d}${sg.length === 1 ? 'h.1' : ''}"/>`;
       });
     });
     // peak marker on the first visible series
     let peak = '';
-    if (vis.length && !c.inline) { let best = null; pts.forEach(p => { const v = p[vis[0].k]; if (num(v) && (!best || v > best.v)) best = { v, t: p.t }; }); if (best && pts.length > 3) { const x = X(best.t), y = Y(best.v); peak = `<g class="sx-peak"><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.5" style="stroke:${vis[0].color}"/><text x="${SX.clamp(x, 30, W - R - 30).toFixed(1)}" y="${Math.max(10, y - 9).toFixed(1)}" text-anchor="middle">max ${esc((vis[0].fmt || f)(best.v))}</text></g>`; } }
+    if (vis.length && !c.inline) { let best = null; pts.forEach(p => { const v = p[vis[0].k]; if (num(v) && (!best || v > best.v)) best = { v, t: p.t }; }); if (best && pts.length > 3) { const x = X(best.t), y = Y(best.v); peak = `<g class="xp-peak"><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.5" style="stroke:${vis[0].color}"/><text x="${SX.clamp(x, 30, W - R - 30).toFixed(1)}" y="${Math.max(10, y - 9).toFixed(1)}" text-anchor="middle">max ${esc((vis[0].fmt || f)(best.v))}</text></g>`; } }
     this.G = { W, H, L, R, T, B, pw, ph, X, Y, t0, t1, lo, hi };
-    plot.querySelectorAll('svg, .sx-empty').forEach(n => n.remove());
-    plot.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true"><defs>${defs}</defs>${g}${lines}${peak}<rect class="sx-brush" id="sxbr" y="${T}" height="${ph}" visibility="hidden"/><g class="sx-cross" visibility="hidden"><line class="sx-vx" y1="${T}" y2="${T + ph}"/><line class="sx-hy" x1="${L}" x2="${W - R}"/><g class="sx-dots"></g></g><g class="sx-tag sx-tagy" visibility="hidden"><rect x="${W - R + 2}" width="${R - 4}" height="18" rx="4"/><text x="${W - R + 7}"></text></g></svg>`);
-    if (!pts.length) plot.insertAdjacentHTML('beforeend', `<div class="sx-empty"><div><b>Collecting data...</b><br>The graph fills as readings arrive${this.zoom ? '' : '. Longer ranges fill over time'}.</div></div>`);
+    plot.querySelectorAll('svg, .xp-empty').forEach(n => n.remove());
+    plot.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true"><defs>${defs}</defs>${g}${lines}${peak}<rect class="xp-brush" id="sxbr" y="${T}" height="${ph}" visibility="hidden"/><g class="xp-cross" visibility="hidden"><line class="xp-vx" y1="${T}" y2="${T + ph}"/><line class="xp-hy" x1="${L}" x2="${W - R}"/><g class="xp-dots"></g></g><g class="xp-tag xp-tagy" visibility="hidden"><rect x="${W - R + 2}" width="${R - 4}" height="18" rx="4"/><text x="${W - R + 7}"></text></g></svg>`);
+    if (!pts.length) plot.insertAdjacentHTML('beforeend', `<div class="xp-empty"><div><b>Collecting data...</b><br>The graph fills as readings arrive${this.zoom ? '' : '. Longer ranges fill over time'}.</div></div>`);
     this.cross();
   }
   cross() {
     const G = this.G, host = this.host; if (!G) return;
-    const cr = $('.sx-cross', host), ty = $('.sx-tagy', host), tip = this.tip, br = $('.sx-brush', host); if (!cr) return;
+    const cr = $('.xp-cross', host), ty = $('.xp-tagy', host), tip = this.tip, br = $('.xp-brush', host); if (!cr) return;
     if (br) { if (this.drag) { const a = Math.max(G.L, Math.min(this.drag.x0, this.drag.x1)), b = Math.min(G.W - G.R, Math.max(this.drag.x0, this.drag.x1)); br.setAttribute('x', a); br.setAttribute('width', Math.max(0, b - a)); br.setAttribute('visibility', 'visible'); } else br.setAttribute('visibility', 'hidden'); }
     const off = () => { cr.setAttribute('visibility', 'hidden'); ty.setAttribute('visibility', 'hidden'); tip.style.opacity = 0; this.hi = null; if (this.cfg.onHover) this.cfg.onHover(null); };
     if (this.hx == null || !this.pts.length || this.hx < G.L || this.hx > G.W - G.R) return off();
@@ -229,8 +229,8 @@ SX.Chart = class {
     const main = vis.find(s => num(p[s.k])), py = main ? G.Y(p[main.k]) : G.T + G.ph / 2;
     const hy = SX.clamp(this.hy == null ? py : this.hy, G.T, G.T + G.ph);
     cr.setAttribute('visibility', 'visible');
-    const vx = $('.sx-vx', cr), hl = $('.sx-hy', cr); vx.setAttribute('x1', px.toFixed(1)); vx.setAttribute('x2', px.toFixed(1)); hl.setAttribute('y1', hy.toFixed(1)); hl.setAttribute('y2', hy.toFixed(1));
-    $('.sx-dots', cr).innerHTML = vis.map(s => num(p[s.k]) ? `<circle cx="${px.toFixed(1)}" cy="${G.Y(p[s.k]).toFixed(1)}" r="4.5" style="stroke:${s.color}"/>` : '').join('');
+    const vx = $('.xp-vx', cr), hl = $('.xp-hy', cr); vx.setAttribute('x1', px.toFixed(1)); vx.setAttribute('x2', px.toFixed(1)); hl.setAttribute('y1', hy.toFixed(1)); hl.setAttribute('y2', hy.toFixed(1));
+    $('.xp-dots', cr).innerHTML = vis.map(s => num(p[s.k]) ? `<circle cx="${px.toFixed(1)}" cy="${G.Y(p[s.k]).toFixed(1)}" r="4.5" style="stroke:${s.color}"/>` : '').join('');
     const val = G.lo + (G.hi - G.lo) * (1 - (hy - G.T) / G.ph);
     ty.setAttribute('visibility', 'visible'); ty.firstElementChild.setAttribute('y', (hy - 9).toFixed(1)); ty.lastElementChild.setAttribute('y', (hy + 4).toFixed(1)); ty.lastElementChild.textContent = f(val);
     tip.innerHTML = `<b>${esc(fmtT(p.t, G.t1 - G.t0))}</b>` + vis.map(s => `<div><i style="background:${s.color}"></i>${esc(s.name)}<span>${num(p[s.k]) ? esc((s.fmt || f)(p[s.k])) : '-'}</span></div>`).join('');
@@ -244,22 +244,22 @@ SX.Chart = class {
 /* ---------- full-size chart window ----------
    spec: { title, sub, series, fmt, lo, hi, thresholds, hist, rangeOf, period, csvName, note }  Returns { refresh, close } */
 SX.openChart = function (spec) {
-  const per0 = spec.period || STK.store.get('sx-per', '15m');
-  const html = `<div class="sx-cm-head"><div><h3>${esc(spec.title)}</h3><p class="hint">${esc(spec.sub || '')}</p></div><span class="grow"></span>
-    <div class="sx-seg" id="sxc-per" role="group" aria-label="Time range" ${spec.fixedRange ? 'hidden' : ''}>${SX.PERIODS.map(p => `<button type="button" data-per="${p[0]}" class="${p[0] === per0 ? 'is-active' : ''}">${p[2]}</button>`).join('')}</div>
-    <button class="sx-btn sm" type="button" id="sxc-zoom" hidden>${icon('refresh', 'sm')}<span>Reset zoom</span></button>
-    <button class="sx-btn sm" type="button" id="sxc-csv">${icon('download', 'sm')}<span>CSV</span></button>
-    <button class="sx-btn sm" type="button" id="sxc-x" data-autofocus aria-label="Close">${icon('x', 'sm')}<span>Close</span></button></div>
-    <div class="sx-legend" id="sxc-legend"></div><div id="sxc-host" class="sx-cm-plot"></div><div class="sx-statt" id="sxc-stats"></div>
-    <p class="hint sx-cm-note">${esc(spec.note || 'Move over the graph to read exact values. Drag across it to zoom, double-click to reset. Arrow keys step through readings. Click a name above to hide or show it.')}</p>`;
-  const m = SX.modal(html, { cls: 'sx-chartwin', label: spec.title + ' history' });
+  const per0 = spec.period || STK.store.get('xp-per', '15m');
+  const html = `<div class="xp-cm-head"><div><h3>${esc(spec.title)}</h3><p class="hint">${esc(spec.sub || '')}</p></div><span class="grow"></span>
+    <div class="xp-seg" id="sxc-per" role="group" aria-label="Time range" ${spec.fixedRange ? 'hidden' : ''}>${SX.PERIODS.map(p => `<button type="button" data-per="${p[0]}" class="${p[0] === per0 ? 'is-active' : ''}">${p[2]}</button>`).join('')}</div>
+    <button class="xp-btn sm" type="button" id="sxc-zoom" hidden>${icon('refresh', 'sm')}<span>Reset zoom</span></button>
+    <button class="xp-btn sm" type="button" id="sxc-csv">${icon('download', 'sm')}<span>CSV</span></button>
+    <button class="xp-btn sm" type="button" id="sxc-x" data-autofocus aria-label="Close">${icon('x', 'sm')}<span>Close</span></button></div>
+    <div class="xp-legend" id="sxc-legend"></div><div id="sxc-host" class="xp-cm-plot"></div><div class="xp-statt" id="sxc-stats"></div>
+    <p class="hint xp-cm-note">${esc(spec.note || 'Move over the graph to read exact values. Drag across it to zoom, double-click to reset. Arrow keys step through readings. Click a name above to hide or show it.')}</p>`;
+  const m = SX.modal(html, { cls: 'xp-chartwin', label: spec.title + ' history' });
   const host = $('#sxc-host', m.el), legend = $('#sxc-legend', m.el), statsEl = $('#sxc-stats', m.el);
   const cfg = { ...spec, series: spec.series.map(s => ({ ...s })), period: per0, inline: false, onState: () => side(), onHover: p => legendVals(p) };
   const ch = new SX.Chart(host, cfg);
   const f = k => (cfg.series.find(s => s.k === k) || {}).fmt || cfg.fmt || String;
   function legendVals(p) { const last = p || (ch.pts && ch.pts[ch.pts.length - 1]); $$('[data-lk]', legend).forEach(b => { const k = b.dataset.lk, v = last ? last[k] : null; $('b', b).textContent = num(v) ? f(k)(v) : '-'; }); }
   function side() {
-    legend.innerHTML = cfg.series.map(s => `<button type="button" class="sx-lg ${s.hidden ? 'off' : ''}" data-lk="${esc(s.k)}" aria-pressed="${!s.hidden}"><i style="background:${s.color}"></i><span>${esc(s.name)}</span><b>-</b></button>`).join('');
+    legend.innerHTML = cfg.series.map(s => `<button type="button" class="xp-lg ${s.hidden ? 'off' : ''}" data-lk="${esc(s.k)}" aria-pressed="${!s.hidden}"><i style="background:${s.color}"></i><span>${esc(s.name)}</span><b>-</b></button>`).join('');
     $('#sxc-zoom', m.el).hidden = !ch.zoom;
     legendVals(null);
     const rows = cfg.series.filter(s => !s.hidden).map(s => { const st = SX.stats(ch.pts.map(p => p[s.k])); const ff = s.fmt || cfg.fmt || String; return st ? `<tr><th><i style="background:${s.color}"></i>${esc(s.name)}</th><td>${esc(ff(st.last))}</td><td>${esc(ff(st.min))}</td><td>${esc(ff(st.avg))}</td><td>${esc(ff(st.p95))}</td><td>${esc(ff(st.max))}</td></tr>` : ''; }).join('');
@@ -268,7 +268,7 @@ SX.openChart = function (spec) {
   m.el.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.id === 'sxc-x') return m.close();
-    if (b.dataset.per) { STK.store.set('sx-per', b.dataset.per); $$('#sxc-per button', m.el).forEach(x => x.classList.toggle('is-active', x === b)); return ch.setPeriod(b.dataset.per); }
+    if (b.dataset.per) { STK.store.set('xp-per', b.dataset.per); $$('#sxc-per button', m.el).forEach(x => x.classList.toggle('is-active', x === b)); return ch.setPeriod(b.dataset.per); }
     if (b.dataset.lk) return ch.toggle(b.dataset.lk);
     if (b.id === 'sxc-zoom') return ch.resetZoom();
     if (b.id === 'sxc-csv') { const [t0, t1] = ch.range(); const rows = ch.samples(t0, t1); SX.download((spec.csvName || 'studio-' + spec.title.toLowerCase().replace(/\W+/g, '-')) + '.csv', SX.csv(rows, [['t', 'time', r => new Date(r.t).toISOString()]].concat(cfg.series.map(s => [s.k, s.name + (spec.unit ? ' (' + spec.unit + ')' : '')])))); STK.toast('CSV saved to your downloads.'); }

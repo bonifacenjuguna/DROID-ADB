@@ -1,4 +1,4 @@
-/* DROID ADB 3.8: install as an app (Chrome, Edge). Registers the service worker, shows an Install button
+/* DROID ADB 4.2: install as an app (Chrome, Edge). Registers the service worker, shows an Install button
    when the browser offers it, and tells the user when the app was installed. */
 (() => {
 'use strict';

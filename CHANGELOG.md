@@ -1,64 +1,76 @@
 # Changelog
 
-## 3.9.0
+## 4.2.0
+Studio Plus: clickable analytics, per-core load, the Cool-down assistant, a Battery page, Watchdog alerts, installable app, motion, and the recording fix.
+
+Fixed
+- Recording could refuse to start with "Recording not started. Scrcpy did not list its audio options (...)". Cause: before every recording and mirror the service started `scrcpy.exe --version` and `--help` just to read which audio options exist. On a PC where that start is slow (antivirus checking the program) it timed out, and the check failing was treated as "this phone cannot do audio". Now the option list is read from scrcpy.exe as a file (instant, nothing is started). If scrcpy has to be started it gets 30 and 40 seconds, and if the check still cannot run the audio mode is tried anyway with a warning instead of refusing. A recording is only refused when a mode is known not to work (phone older than Android 11 or 13, option missing in scrcpy).
+- A timeout of scrcpy used to say "The phone did not answer in time". It now says which program was slow.
+- Error messages longer than 220 characters were replaced by "Something did not work as expected", which hid the real reason (this is why the recording message above was not readable). The limit is now 480 characters; technical messages are still summarised and kept in Settings, Error log.
+- Each browser tab that was closed or refreshed while a page was loading wrote an "Unexpected backend error" to the log. These are now ignored.
+
+New
+- Clickable analytics cards. Every card on Overview (Processor, Memory, Temperature, Battery, and new Graphics, Power, Storage and Frame rate cards) and the hero numbers open a large graph: 5 minutes to 24 hours, hover read-out, drag to zoom, show or hide series, CSV export. History is kept for 24 hours per phone in the browser (downsampled).
+- Processor cores card: load and clock speed for every core, grouped into efficiency, performance and prime cores. Click a core for its history. Needs the per-core load that `/api/perf` now reports (`cores[].pct`).
+- Cool-down assistant (Thermals): animated ring, falling temperature, live steps, aurora and snow background, a forecast of when the phone gets hot, finish celebration, and Undo that puts every setting back. The hero card shimmers while cooling.
+- Battery page: charge ring, power, current, voltage, health, capacity against new, time left or time to full, charge history, battery use by app. `/api/perf` now also reports `batt` (current, health, technology, charge counter, capacity).
+- Watchdog: toasts (and desktop notifications when allowed) for overheating, throttling, low battery and nearly full memory. Optional background watching every 30 seconds while the tab is open. Settings are on the Battery page.
+- Undo is saved, so it still works after reloading the page, and the profile result panel has an Undo button.
+- Installable app (PWA): service worker, maskable icons, Install app button.
+- Motion: pages and cards rise in one after another, buttons ripple and press, toasts and dialogs animate, theme changes fade, numbers tick when they change, small celebrations after a cool-down or a profile. `STK.fx.pop`, `shake` and `burst` can be used on any page. Everything switches off when the system asks for reduced motion.
+
+Changed
+- The Studio code stays in the 4.x files. New files: `xp-ui.js` (graph engine, history store), `xp.css`, `studio-plus.js`, `motion.js`, `motion.css`, `sw.js`, `pwa.js`.
+- Versions: page and service report 4.2.0.
+
+Not verified
+- Written without a Windows PC or phone. The dashboard was tested in a headless browser against a simulated backend (no script errors, graphs, cores, cool-down, Battery page, Undo after reload, Watchdog toasts, service worker). The PowerShell changes were checked by reading and a bracket check only. Real-phone checks are in docs/REGRESSION-CHECKLIST.md, section 4.2.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
+
+## 4.1.0
 Audio modes, recording sound and OBS streaming guidance.
 
 New
-- One saved Audio mode with four choices, set in Studio, Capture (or Settings, Audio): Video only (default), Copy to recording, Copy and play on PC, Reroute audio to PC. Each card shows what happens on the phone, on the PC and in the saved file.
-- A central audio engine builds the scrcpy flags for every mirror and recording from the selected mode, the phone's Android API level and the bundled scrcpy's own `--help` output (scrcpy 5.0.1). Copy modes use playback capture with `--audio-dup` (phone keeps playing, Android 13 or newer); Reroute uses output capture (Android 11 or newer).
-- Requested and active mode are shown separately. If the phone or scrcpy cannot do the mode, the session shows what it really uses plus a warning instead of claiming the requested mode.
-- Hidden companion recorders pick the right flags per mode and never fight a rerouting mirror; under Reroute a companion recording is silent and says so.
-- Game sound for OBS: optional, makes only the mirror play the phone sound on the PC so OBS can capture scrcpy.exe with Application Audio Capture. It never changes the recording mode or phone policy. The panel explains the silent-speaker options and what OBS cannot capture.
-- Check a recording: reports whether a file has an audio track and, when ffmpeg is present (core\ffmpeg or PATH), measures whether it is silent.
-- New routes `GET /api/audio` (capabilities, per-mode plan, live sessions) and `POST /api/audio/verify`. Sessions now report their `audio` details.
+- Four audio modes in Settings, Audio, stored as `audioMode`: `video_only` (default), `record_only` (Copy to recording), `copy_play` (Copy and play on PC), `reroute` (Reroute audio to PC). One controller (`Resolve-AudioPlan` in lib.ps1) builds every audio option of every scrcpy process, and reports what each session really does.
+- Options were checked against the bundled scrcpy 5.0.1: `--audio-source=playback --audio-dup` (copy, phone keeps playing), `--no-audio-playback` (PC silent while recording), `--audio-source=output` (reroute, scrcpy's default), `--require-audio`. The controller also reads `scrcpy --help` and the phone's Android version at start. Copy modes need Android 13, Reroute needs Android 11.
+- Requested and active are shown separately. If the phone or scrcpy cannot do a mode, the session starts as video only and says so; a recording is refused instead when "Stop a recording if its sound cannot be captured" is on (default).
+- Sound problems that scrcpy logs are reported as soon as they happen. After a recording ends its container is checked for a sound track; Library, More, Check sound also measures loudness when ffmpeg is present.
+- Streaming audio (OBS): a plan selector (no game sound, listen on the PC, silent PC speakers) checked against the audio mode, with the OBS and Windows steps, and a read-only Windows audio check. DROID ADB does not configure OBS or install audio drivers. It never changes the phone, the mirror or a recording because of this choice.
+- Routes: `GET /api/audio-status`, `POST /api/audio-mode`, `GET /api/audio-check`, `GET /api/audio-env`. `/api/schema` also lists the modes. Mirror and recording sessions carry an `audio` object and `audioState`.
+- Docs: `docs/AUDIO.md` (modes, OBS setup, real-device test matrix) and `core/scripts/audio-selftest.ps1`.
 
 Changed
-- New settings `audioMode` and `streamAudio`. The older `audio`, `audioSource`, `audioDup` and `companionAudio` settings are kept for compatibility but no longer used. The default is Video only, so mirrors that used to carry sound are silent until you pick another mode. Microphone capture is no longer in the settings list.
-- Presets: Low latency uses Video only, Screen recorder uses Copy to recording.
-- Version 3.9.0, page and service both.
+- Default is Video only. Before 4.1 the saved `audio` setting was on by default, which sent sound to the PC and silenced the phone. If you relied on that, pick Reroute audio to PC once. The old `audio` and `audioDup` keys are kept so backups import, but they are no longer used.
+- Presets: Low latency sets Video only, Screen recorder sets Copy to recording.
+- With Reroute, "Sound in companion recordings" still controls whether a recorder started next to the mirror captures sound.
 
 Not verified
-- Developed without a TECNO KJ5 or Windows PC. Whether PUBG Mobile allows playback capture, and OBS routing, need the manual tests in docs/REGRESSION-CHECKLIST.md.
+- Written and statically checked without a Windows PC or phone. Audio on the TECNO KJ5, PUBG Mobile capture, two simultaneous captures, and OBS routing still need the manual tests in docs/AUDIO.md.
 
-Compatibility
-- Settings and backups keep working. After updating, run Launch.bat again.
+After updating, run Launch.bat again so the background service restarts with the new version.
 
-## 3.8.0
-Studio rebuilt: live, interactive and installable.
-
-New
-- Studio has seven tabs: Overview, Performance, Optimize, Cooling, Battery, Games, Capture, with a live indicator, adjustable refresh rate (1 to 30 s) and pause.
-- Interactive graphs: click any card (temperature, processor, memory, graphics, battery, frame rate, power, storage) to open a large chart with 5 min to 24 h periods, hover read-out, drag to zoom, keyboard stepping, series toggles and CSV export. History is kept for 24 hours in the browser.
-- Performance: per-core load with frequencies, busiest apps with one-tap stop, frame stats with a frame-time histogram and causes of slow frames, a performance recorder that saves runs to session history, network check.
-- Optimize: five profiles (Max performance, Balanced, Cool-down, Stream and record, Battery saver) with animated step-by-step progress and exact Undo, custom profiles saved from current settings, twelve quick switches, brightness, volume and screen-timeout sliders, game tools (free memory, clear caches, performance mode, refresh rate, Game Mode).
-- Cooling: temperature gauge with trend and forecast, cool-down assistant, adjustable warning and target, cooling checklist.
-- Battery: charge ring, power, current, voltage, health, charge/discharge estimate, history chart, battery use by app.
-- Watchdog notices for overheating, low battery, heavy memory and throttling. Session history opens a graph per session.
-- Command palette entries and shortcuts (`[` `]` change section, `P` pauses).
-- Installable app: new web app manifest with maskable icons, a service worker (app shell cached, API never cached) and an Install button.
-- Backend: `/api/perf` adds per-core load, graphics and battery detail; `/api/game-stats` adds frame histogram and causes; `/api/game-tools` gained `trimcache`. The server also serves `/sw.js` and `/manifest.webmanifest`.
-
-Compatibility
-- No settings keys or backup format changed. Existing game profiles keep working. After updating, run Launch.bat again.
-
-## 3.7.0
-Performance Studio, and the Game Mode fix.
+## 4.0.0
+Performance Studio: a new gaming and app performance center, plus the Game Mode fix.
 
 Fixed
-- Game Mode: "performance" was reported as not supported on Android 13. The check treated any text containing words such as "error" or "invalid" as a failure, and the fallback command overwrote the phone's real reply. It now reads the Android version, uses the current user, tries the named and numeric forms, and shows the phone's actual answer. Games that do not offer Performance mode get an honest message, and the Turbo profile still applies. Replies are saved in Settings, Error log.
-- A 3.6 helper named `Test-PackageName` replaced the original validator of the same name, which weakened the package-name check on routes that open or inspect apps. The original is back and the new boolean helper has its own name (`Test-PkgOk`).
+- Game Mode (performance) said the phone was not supported ("needs Android 12 or newer") on Android 13. The check was hard-coded and too strict. The service now reads the real Android version, tries the command forms used by Android 12, 13 and newer, and counts it as applied only when the phone accepts it. If the phone still refuses, the page shows the phone's own reply. Studio, Optimize, Compatibility check shows what your phone supports.
 
 New
-- Studio is now Performance Studio with five tabs: Overview, Optimize, Cooling, Games, Capture.
-- Overview: readiness score (0 to 100), live gauges (phone temperature, processor load, memory, battery, estimated frame rate, storage), trend charts and suggestions with one-tap fixes. Boost and play opens the chosen game after Turbo.
-- Turbo profile: Do not disturb, animations off, stay awake, battery saver off, free memory, locked high refresh rate, performance mode and Android Game Mode where the phone allows. Each step reports done or skipped with a reason. Undo restores the previous state, even after a page reload.
-- Cooling: big temperature with trend, processor and sensor temperatures, Android thermal status, a cool-down assistant (lower brightness, battery saver, free memory, notice at your target, one-tap restore), adjustable heat warning and tips ordered by what matters now.
-- Network check: delay, loss and Wi-Fi quality with plain advice.
-- Games: Play button, per-game options (free memory, lock refresh rate, Game Mode), play time, and session history with peak temperature, battery use and average frame rate.
-- New routes `GET /api/perf`, `GET /api/net-check`; `POST /api/game-tools` gained launch, refresh, getstate and setstate. Game Mode and performance mode answers now return `applied` plus the phone's reply instead of failing.
+- Studio is now Performance Studio with six pages: Overview, Optimize, Thermals, Games, Network, Capture.
+- Overview: health score, live CPU, memory, temperature, battery and refresh rate with history graphs, per-core clocks, smart suggestions, and one-tap profiles (Balanced, Gaming, Turbo, Cool, Battery saver, Record). Your earlier settings are saved and can be restored.
+- Optimize: Boost, trim caches, refresh rate, animation speed, brightness, quick switches, Game Mode modes, fixed performance mode, compatibility check.
+- Thermals: temperature gauge, zone readings, history with comfort bands, heat forecast, cool-down tracker, cooling techniques, custom warning limits.
+- Games: library with per-game profile, automatic game mode on launch with a saved session report, live frame monitor (fps, jank, p50/p95).
+- Network: Wi-Fi signal, ping, jitter and packet loss test with a plain verdict.
+- Capture: quick capture, demo mode, capture presets.
+- Command palette: Boost, Cool down, Gaming profile, Thermals, Network.
+- Routes: `GET /api/perf` and `POST /api/perf-tools` (freemem, boost, trimcaches, perfmode, gamemode, compat, refresh, animscale, lowpower, resetstats, dexopt, forcestop, launch, netcheck). `POST /api/game-tools` still works.
 
 Compatibility
-- No settings keys or backup format changed. Existing game profiles keep working. After updating, run Launch.bat again.
+- No settings keys, backup format or existing routes were removed. Backups from earlier versions import as before.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
 
 ## 3.6.0
 Reliability, clearer messages, Studio gaming tools.

@@ -78,7 +78,7 @@ STK.friendly = function (raw) {
   const text = String(raw == null ? '' : raw).trim();
   if (!text) return 'Something went wrong. Please try again.';
   for (const [re, msg] of ERR_RULES) if (re.test(text)) return msg;
-  if (RAW_LOOK.test(text) || text.length > 220) return 'Something did not work as expected. The technical details were saved in Settings, Error log.';
+  if (RAW_LOOK.test(text) || text.length > 480) return 'Something did not work as expected. The technical details were saved in Settings, Error log.';
   return text;
 };
 const ERR_KEY = 'errlog';
@@ -236,7 +236,7 @@ STK.menu = function (anchor, items) {
 };
 
 /* ---------- navigation ---------- */
-const TITLES = { console: 'Console', studio: 'Studio', automation: 'Automation', phone: 'Phone tools', monitor: 'Monitor', notifications: 'Notifications', library: 'Library', device: 'Devices', settings: 'Settings' };
+const TITLES = { console: 'Console', studio: 'Performance Studio', automation: 'Automation', phone: 'Phone tools', monitor: 'Monitor', notifications: 'Notifications', library: 'Library', device: 'Devices', settings: 'Settings' };
 STK.go = function go(name) {
   if (!TITLES[name]) name = 'console';
   state.view = name;
@@ -301,7 +301,7 @@ function setConn() {
   chip.className = cls; chip.innerHTML = `<i class="dot"></i><b>${label}</b>`;
   dot.className = dcls;
 }
-STK.FRONT_VERSION = '3.9.0';
+STK.FRONT_VERSION = '4.2.0';
 { const av = document.getElementById('about-version'); if (av) av.textContent = 'v' + STK.FRONT_VERSION; }
 const stale = () => !!(state.online && state.data && state.data.version && state.data.version !== STK.FRONT_VERSION);
 function setBanner() {
@@ -379,11 +379,13 @@ function handleEvents(d) {
       const fr = ev.reason ? STK.friendly(ev.reason) : 'Check the cable and unlock the phone.';
       STK.toast('The mirror window closed right away. ' + fr, 'bad', ev.reason ? { label: 'Details', run: () => { STK.go('settings'); setTimeout(() => { const el = document.getElementById('errlog-panel'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 150); } } : undefined);
     }
+    else if (ev.kind === 'audio') STK.emit('audio-problem', ev);
     else if (ev.kind === 'job') STK.emit('job-event', ev);
     else if (ev.kind === 'ended') {
       if (ev.mode === 'record' && ev.file) STK.notify && STK.notify('Recording saved', ev.file + ' (' + STK.bytes(ev.size) + ')', 'rec');
       if (ev.mode === 'record' && ev.file) STK.toast('Recording saved: ' + ev.file + ' (' + STK.bytes(ev.size) + ', ' + STK.dur(ev.seconds) + ')', 'ok', { label: 'Library', run: () => STK.go('library') });
       else STK.toast('Mirror window closed.');
+      if (ev.mode === 'record' && ev.file && ev.audioExpected && STK.audioAfterRecording) STK.audioAfterRecording(ev);
       STK.emit('library-changed');
     }
   }
