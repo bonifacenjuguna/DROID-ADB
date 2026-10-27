@@ -18,7 +18,7 @@ STK.loadProfiles = async function () {
 const fields = () => (state.schema ? state.schema.fields : []);
 const val = k => (state.settings || {})[k];
 const isDefault = f => JSON.stringify(val(f.key)) === JSON.stringify(f.default);
-const isOff = f => !!f.show && Object.entries(f.show).some(([k, v]) => (Array.isArray(v) ? !v.includes(val(k)) : val(k) !== v));
+const isOff = f => !!f.show && Object.entries(f.show).some(([k, v]) => val(k) !== v);
 const matches = f => !S.query || (f.label + ' ' + f.help + ' ' + f.key).toLowerCase().includes(S.query.toLowerCase());
 
 /* ---------- rendering ---------- */
@@ -40,17 +40,14 @@ function renderBody() {
   if (!state.schema || !state.settings) { STK.setHtml($('#settings-body'), '<section class="panel"><p class="hint">Loading settings...</p></section>'); return; }
   const groups = state.schema.groups;
   let html = '', nav = '';
-  const audioMatch = !S.query || /audio|sound|stream|obs|tiktok|mic|record/i.test(S.query);
   for (const g of groups) {
-    const fs = fields().filter(f => f.group === g.id && !f.hidden && matches(f));
-    const withAudio = g.id === 'audio' && audioMatch;
-    if (!fs.length && !withAudio) continue;
-    html += `<section class="panel" id="grp-${esc(g.id)}"><header class="panel-head"><h2>${esc(g.title)}</h2></header><p class="hint group-note">${esc(g.note)}</p>${withAudio ? '<div id="audio-host"></div>' : ''}<div class="fields">${fs.map(fieldHtml).join('')}</div></section>`;
+    const fs = fields().filter(f => f.group === g.id && matches(f));
+    if (!fs.length) continue;
+    html += `<section class="panel" id="grp-${esc(g.id)}"><header class="panel-head"><h2>${esc(g.title)}</h2></header><p class="hint group-note">${esc(g.note)}</p><div class="fields">${fs.map(fieldHtml).join('')}</div></section>`;
     nav += `<a href="#grp-${esc(g.id)}" data-nav="${esc(g.id)}">${esc(g.title)}</a>`;
   }
   if (!html) html = `<section class="panel"><div class="empty">${icon('search')}<b>No setting matches "${esc(S.query)}"</b><p>Try a shorter word.</p></div></section>`;
   STK.setHtml($('#settings-body'), html);
-  if (STK.renderAudioPanel) STK.renderAudioPanel();
   const navEl = $('#settings-nav');
   if (!$('input', navEl)) navEl.innerHTML = '<input type="search" id="settings-search" placeholder="Search settings" autocomplete="off" aria-label="Search settings"><div id="settings-links" style="display:grid;gap:2px"></div>';
   nav += '<a href="#errlog-panel" data-nav="errlog">Error log</a><a href="#about-panel" data-nav="about">About</a>';
@@ -82,7 +79,6 @@ const refreshCmd = STK.debounce(async () => {
   const my = ++cmdSeq;
   try { const r = await STK.post('/preview', { mode: S.mode, serial: STK.sel() }); if (my === cmdSeq) $('#cmd-preview').textContent = r.command; } catch (e) { if (my === cmdSeq) $('#cmd-preview').textContent = e.message; }
 }, 250);
-STK.refreshCmd = () => refreshCmd();
 function renderAll() { renderPresets(); renderProfiles(); renderBody(); refreshFields(); refreshCmd(); }
 
 /* ---------- saving ---------- */

@@ -1,14 +1,28 @@
 {
+  "id": "/",
   "name": "DROID ADB",
   "short_name": "DROID ADB",
-  "description": "Local control center to mirror, record, capture and manage your Android phone.",
-  "start_url": "/",
+  "description": "Local control center to mirror, record, capture, tune and manage your Android phone.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
   "background_color": "#020f20",
   "theme_color": "#020f20",
+  "categories": ["utilities", "productivity"],
+  "launch_handler": { "client_mode": "focus-existing" },
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Studio", "short_name": "Studio", "description": "Performance Studio", "url": "/?source=shortcut#studio", "icons": [{ "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Console", "short_name": "Console", "description": "Mirror, record and control", "url": "/?source=shortcut#console", "icons": [{ "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Monitor", "short_name": "Monitor", "description": "Live phone graphs", "url": "/?source=shortcut#monitor", "icons": [{ "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png" }] }
   ]
 }
