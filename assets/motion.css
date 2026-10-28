@@ -15,10 +15,9 @@
 
 /* buttons feel pressable */
 .btn, .sx-tab, .sx-prof, .ptab { transition: transform .15s var(--mo-ease), box-shadow .2s, background-color .2s, border-color .2s, color .2s; }
-.btn:hover:not(:disabled) { transform: translateY(-1px); }
-.btn:active:not(:disabled) { transform: translateY(0) scale(.97); }
+.btn:hover:not(:disabled) { box-shadow: 0 4px 12px rgba(0, 0, 0, .16); }
+.btn:active:not(:disabled) { filter: brightness(.9); }
 .btn.primary:hover:not(:disabled) { box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 32%, transparent); }
-.sx-tab:active, .ptab:active { transform: scale(.96); }
 .mo-rp { position: relative; overflow: hidden; }
 .mo-ripple { position: absolute; border-radius: 50%; pointer-events: none; background: radial-gradient(circle, color-mix(in srgb, currentColor 40%, transparent) 0%, transparent 70%); animation: mo-ripple .6s var(--mo-ease) forwards; }
 
@@ -38,5 +37,14 @@ html.mo-theme *, html.mo-theme *::before, html.mo-theme *::after { transition: b
   .view.mo-in .panel, .view.mo-in .sx-card, .view.mo-in .sx-hero, .view.mo-in .sx-tabs, .view.mo-in .toolbar, .mo-stagger > *, .toast, .dlg[open], .dlg[open]::backdrop, .mo-ripple,
   .rail-btn.is-active .ic, .sx-tab.is-active .ic, .sx-live > .hint, #w-cores > .hint, #w-sugg > .hint { animation: none !important; }
   .btn, .sx-tab, .sx-prof, .ptab { transition: none !important; }
-  .btn:hover:not(:disabled), .btn:active:not(:disabled) { transform: none; }
 }
+
+/* 4.4.0: nothing that can be clicked moves or shrinks under the mouse. A button that shrinks when it is pressed can end
+   up under a different spot when the mouse is released, and then the click lands on the card behind it and nothing
+   happens. This was the cause of Open, Stop and the three-dot button on the Tools page not responding. Hover and press are
+   shown with shadow, border and brightness instead. */
+.btn:hover:not(:disabled), .btn:active:not(:disabled), .key:active:not(:disabled), .mon-card[data-k]:hover, .mon-card[data-k]:focus-visible,
+.sx-prof:hover:not(:disabled), .sx-tool:hover:not(:disabled), .xp-btn:active:not(:disabled), .xp-core:hover, .xp-zone:hover, .xp-prof:hover,
+.xp-tile:hover:not(:disabled), .xp-ses:hover, .xp-click:hover, .xp-click:active, .xp-gpubtn:hover, .sx-tab:active, .ptab:active, .tab:active,
+.icon-btn:hover, .icon-btn:active { transform: none !important; }
+.xp-btn:active:not(:disabled), .key:active:not(:disabled), .sx-prof:active:not(:disabled), .sx-tool:active:not(:disabled), .mon-card[data-k]:active { filter: brightness(.92); }

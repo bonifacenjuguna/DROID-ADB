@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/images/droid-adb-logo.jpg" alt="DROID ADB" width="320"></p>
 
-# DROID ADB 4.3.0
+# DROID ADB 4.4.0
 
 A portable Windows control center for your Android phone: mirror, record, screenshot, remote-control and manage it from a local dashboard.
 
@@ -12,6 +12,10 @@ DROID ADB is powered by [scrcpy](https://github.com/Genymobile/scrcpy) v5.0.1 (G
 3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
+
+## What changed in 4.4
+
+4.4 fixes small buttons that did nothing when clicked near an edge, adds a start-up loader (no more Console flash on reload), new file names (DroidADB_date_time_app), the Boost rocket, a better profile panel, an Apps page, a Photos / Videos Phone gallery and a full game library with Game Priority. See CHANGELOG.md.
 
 ## What changed in 4.3
 

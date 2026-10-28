@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '4.3.0'
+$ToolkitVersion = '4.4.0'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -211,7 +211,7 @@ $Schema = @(
     (F 'printFps' 'window' 'bool' $false 'Log frame rate' 'Writes FPS into the session log.'),
     # recording
     (F 'recordFormat' 'recording' 'choice' 'mkv' 'Recording format' 'MKV survives crashes and forced stops. MP4 needs a clean stop.' -Choices @((C 'mkv' 'MKV'), (C 'mp4' 'MP4'))),
-    (F 'recordTemplate' 'recording' 'text' 'Phone-{date}_{time}' 'Recording file name' 'Tokens: {date} {time} {serial} {model} {app}.' -Pattern '^[A-Za-z0-9 ._\-{}]{1,80}$'),
+    (F 'recordTemplate' 'recording' 'text' 'DroidADB_{date}_{time}' 'Recording file name' 'Tokens: {date} {time} {serial} {model} {app}.' -Pattern '^[A-Za-z0-9 ._\-{}]{1,80}$'),
     (F 'recordTimeLimit' 'recording' 'int' 0 'Automatic stop' 'Stop recording after this many seconds. 0 means never.' -Min 0 -Max 86400 -Picks @(0, 60, 300, 600, 1800, 3600) -Unit 'sec'),
     (F 'recordWindowless' 'recording' 'bool' $false 'Record without a window' 'Records in the background. Use Stop in the dashboard to finish.'),
     (F 'recordOwnQuality' 'recording' 'bool' $true 'High quality for recordings' 'Recordings use the three values below, whatever the mirror uses. Turn off to use the Video settings for both.'),
@@ -223,7 +223,7 @@ $Schema = @(
     (F 'showRecBadge' 'recording' 'bool' $true 'Show recording badge on the phone picture' 'Shows REC with a timer on the dashboard phone picture while recording.'),
     (F 'companionAudio' 'recording' 'bool' $true 'Sound in companion recordings (Reroute only)' 'With Reroute, a second capture of the rerouted sound can silence the mirror on some phones. Turn this off to record video only while mirroring. The two Copy modes always record their sound.' -Show @{ audioMode = 'reroute' }),
     (F 'recordCountdown' 'recording' 'int' 0 'Start countdown' 'Seconds to count down in the dashboard before recording begins.' -Min 0 -Max 10 -Picks @(0, 3, 5) -Unit 'sec'),
-    (F 'nameByApp' 'recording' 'bool' $true 'Add the app name to file names' 'Adds the app that was in front on the phone, like Shot-2026-10-24_12-00-00-Chrome. Skipped when the name template already has {app}.'),
+    (F 'nameByApp' 'recording' 'bool' $true 'Add the app name to file names' 'Adds the app that was in front on the phone, like DroidADB_2026-10-24_12-00-00_chrome. Skipped when the name template already has {app}.'),
     (F 'screenshotTemplate' 'recording' 'text' 'Shot-{date}_{time}' 'Screenshot file name' 'Tokens: {date} {time} {serial} {model} {app}.' -Pattern '^[A-Za-z0-9 ._\-{}]{1,80}$'),
     # files
     (F 'recordingsDir' 'files' 'path' '' 'Recordings folder' 'Full path. Empty uses Recordings inside the toolkit.' -Placeholder 'D:\Phone\Recordings'),
@@ -346,6 +346,8 @@ function Get-Settings {
         $result = ConvertTo-Settings $legacy $base
     } catch { $result = ConvertTo-Settings @{} $null }
     if ($result -and [string]$result.windowTitle -eq 'Scrcpy Toolkit') { $result.windowTitle = 'DROID ADB' }
+    # 4.4.0: the old default recording name moves to the new one. A name you wrote yourself is left alone.
+    if ($result -and [string]$result.recordTemplate -eq 'Phone-{date}_{time}') { $result.recordTemplate = 'DroidADB_{date}_{time}' }
     Use-Lock { $Shared.settings = $result.Clone(); $Shared.settingsStamp = $stamp }
     return $result
 }
@@ -1227,6 +1229,36 @@ function Get-AppLabel {
     if ($last -in @('android', 'app', 'mobile', 'main')) { $parts = $Package -split '\.'; if ($parts.Count -ge 2) { $last = $parts[-2] } }
     return $last
 }
+# 4.4.0: short lowercase app name for file names (tiktok, instagram, pubgmobile). Names you set in Settings win,
+# then a built-in list, then the last meaningful word of the package name.
+function Get-CleanAppName {
+    param([string]$Package)
+    if (-not $Package) { return '' }
+    $clean = { param($x) (([string]$x).ToLowerInvariant() -replace '[^a-z0-9]', '') }
+    foreach ($pair in (([string](Get-Settings).appNames) -split ';')) {
+        $kv = $pair.Split('=', 2)
+        if ($kv.Count -eq 2 -and $kv[0].Trim() -eq $Package -and $kv[1].Trim() -ne '') { $c = & $clean $kv[1]; if ($c -ne '') { return $c } }
+    }
+    $known = @{
+        'com.tencent.ig' = 'pubgmobile'; 'com.zhiliaoapp.musically' = 'tiktok'; 'com.ss.android.ugc.trill' = 'tiktok'; 'com.instagram.android' = 'instagram'
+        'com.openai.chatgpt' = 'chatgpt'; 'com.whatsapp' = 'whatsapp'; 'com.google.android.youtube' = 'youtube'; 'com.facebook.katana' = 'facebook'
+        'com.facebook.orca' = 'messenger'; 'org.telegram.messenger' = 'telegram'; 'com.snapchat.android' = 'snapchat'; 'com.spotify.music' = 'spotify'
+        'com.netflix.mediaclient' = 'netflix'; 'com.android.chrome' = 'chrome'; 'com.twitter.android' = 'x'; 'com.reddit.frontpage' = 'reddit'
+        'com.discord' = 'discord'; 'com.pinterest' = 'pinterest'; 'com.linkedin.android' = 'linkedin'; 'com.google.android.gm' = 'gmail'
+        'com.google.android.apps.maps' = 'maps'; 'com.google.android.apps.photos' = 'photos'; 'com.android.vending' = 'playstore'
+        'com.supercell.clashofclans' = 'clashofclans'; 'com.supercell.clashroyale' = 'clashroyale'; 'com.supercell.brawlstars' = 'brawlstars'
+        'com.activision.callofduty.shooter' = 'codmobile'; 'com.garena.game.codm' = 'codmobile'; 'com.dts.freefireth' = 'freefire'; 'com.dts.freefiremax' = 'freefiremax'
+        'com.mojang.minecraftpe' = 'minecraft'; 'com.roblox.client' = 'roblox'; 'com.kiloo.subwaysurf' = 'subwaysurfers'; 'com.miHoYo.GenshinImpact' = 'genshinimpact'
+        'com.twitch.android.app' = 'twitch'; 'com.capcut.android' = 'capcut'; 'com.lemon.lvoverseas' = 'capcut'; 'com.android.settings' = 'settings'
+        'com.android.camera' = 'camera'; 'com.google.android.dialer' = 'phone'; 'com.google.android.apps.messaging' = 'messages'
+    }
+    if ($known.ContainsKey($Package)) { return [string]$known[$Package] }
+    $skip = @('com', 'org', 'net', 'android', 'google', 'app', 'apps', 'mobile', 'www', 'main', 'client')
+    $parts = @($Package -split '\.' | Where-Object { $_ -ne '' -and $skip -notcontains $_ })
+    if ($parts.Count -eq 0) { $parts = @($Package -split '\.') }
+    $c = & $clean $parts[$parts.Count - 1]
+    return $c
+}
 function Get-ForegroundLabel {
     param([string]$Serial)
     try {
@@ -1237,8 +1269,7 @@ function Get-ForegroundLabel {
         if (-not $d) { return '' }
         $pkg = [string]$d.fgPackage
         if ($pkg -match '^com\.android\.(launcher|systemui)|launcher|^com\.(miui|sec)\.[a-z.]*home$|^com\.transsion\.[a-z.]*launcher') { return '' }
-        $lab = Get-AppLabel $pkg
-        return ($lab -replace '[^A-Za-z0-9._\-]', '')
+        return (Get-CleanAppName $pkg)
     } catch { return '' }
 }
 
@@ -1247,7 +1278,7 @@ function New-FileStem {
     $now = Get-Date
     $app = Get-ForegroundLabel $Serial
     $name = $Template.Replace('{date}', $now.ToString('yyyy-MM-dd')).Replace('{time}', $now.ToString('HH-mm-ss')).Replace('{serial}', $Serial).Replace('{model}', (Get-DeviceModelHint $Serial)).Replace('{app}', $app)
-    if ($app -ne '' -and $Template.IndexOf('{app}') -lt 0 -and (Get-Settings).nameByApp) { $name = $name + '-' + $app }
+    if ($app -ne '' -and $Template.IndexOf('{app}') -lt 0 -and (Get-Settings).nameByApp) { $name = $name + '_' + $app }
     $name = ($name -replace '[^A-Za-z0-9._ \-]', '_').Trim()
     if ($name -eq '') { $name = 'Capture-' + $now.ToString('yyyyMMdd-HHmmss') }
     return $name

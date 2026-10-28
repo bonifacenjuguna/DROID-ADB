@@ -209,3 +209,13 @@ Full steps are in docs/AUDIO.md.
 - [ ] A 1-minute recording at 40 Mbps is about 300 MB. If the phone cannot do it, scrcpy exits with an encoder error: lower Recording bitrate or frame rate.
 - [ ] Reroute mirror for 10 minutes: no crackle. If there is crackle, raise Audio buffer to 150 or 200.
 - [ ] Mirror quality did not change (Settings, Video).
+
+## 4.4.0 (real phone)
+- [ ] Tools, Apps and Running: Open, Stop and the three-dot button work when clicked at the very edge of the button.
+- [ ] Reload on Studio, Library and Settings: the loader shows, then your page. The Console page never flashes.
+- [ ] A new recording is named DroidADB_YYYY-MM-DD_HH-MM-SS_appname.mkv (app part lowercase). With the home screen in front there is no app part.
+- [ ] Library opens on Recordings. Phone asks Photos or Videos first; Back returns.
+- [ ] Studio: Boost shows the rocket and the freed memory. Apply Gaming: the panel ticks steps off and shows Undo.
+- [ ] Studio, Apps: Stop on one app works; a starred app cannot be stopped by Stop all others.
+- [ ] Games: add a game, open Details, switch on Game Priority, press Play. Background apps are stopped, the game opens, and apps that wake up are stopped again while you play. After you leave, the guard stops.
+- [ ] Unplug and replug the phone: a Phone connected message shows on any page.

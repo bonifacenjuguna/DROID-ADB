@@ -12,3 +12,6 @@ Things we agreed to come back to. Nothing here is lost; none of it is switched o
 - A smoothness check for finished recordings (gaps in audio and video timing) in case lag is ever seen in the file itself.
 - Recording and mirroring in one scrcpy instead of a hidden second recorder, to save the phone one video encoder.
 - A smooth MP4 copy for the preview. Needs ffmpeg, which is not bundled.
+
+## Backup (needs a decision)
+- Waiting for an answer: should one backup be a single file (one zip) instead of copying many loose files and folders, and what exactly "installing app" should do with it (restore the apps from the backup, or the Install app button at the top).

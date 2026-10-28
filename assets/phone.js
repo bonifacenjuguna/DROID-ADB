@@ -319,7 +319,7 @@ document.addEventListener('keydown', e => {
 ['dragenter', 'dragover'].forEach(n => document.addEventListener(n, e => { const z = e.target.closest && e.target.closest('#drop'); if (z) { e.preventDefault(); z.classList.add('over'); } }));
 ['dragleave', 'drop'].forEach(n => document.addEventListener(n, e => { const z = e.target.closest && e.target.closest('#drop'); if (z) { e.preventDefault(); z.classList.remove('over'); if (n === 'drop') pushFiles([...e.dataTransfer.files]); } }));
 
-STK.views.phone = { onShow() { setTab(P.tab); } };
+STK.views.phone = { onShow() { setTab('quick'); } }; // 4.4.0: the Tools page always opens on Quick settings
 STK.on('device-changed', () => { P.toggles = null; P.apps = null; P.files = null; P.path = '/sdcard/'; if (state.view === 'phone') setTab(P.tab); });
 STK.on('state', () => { if (state.view === 'phone') { const had = !$('#phone-nodev').hidden; if (had === !!serial()) setTab(P.tab); } });
 STK.on('view', v => { if (v !== 'phone') { stopLog(); stopRun(); } });

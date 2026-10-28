@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.4.0
+Clickable buttons fixed, a start-up loader, a new Apps page, the Boost rocket, a better profile panel, a full game library with Game Priority, a Photos / Videos Phone gallery and the new file names.
+
+Fixed
+- Open, Stop and the three-dot button (and other small buttons) on Tools, Apps and Running did nothing when clicked near an edge. Cause (mine, from 4.2.0): buttons moved up and shrank while the mouse was held down, so the mouse was released outside the button and the click landed on the card behind it. Nothing that can be clicked moves or shrinks under the mouse any more; hover and press use shadow, border and brightness instead.
+- Reloading a page other than Console showed the Console page for a moment first. A start-up loader now covers the page from the first frame and leaves once the first reading of the service and phone is in.
+- Tools always opens on Quick settings. Library always opens on Recordings.
+
+New
+- File names: `DroidADB_{date}_{time}_{app}`, for example `DroidADB_2026-10-28_10-39-55_chatgpt.mkv`. The app part is a short lowercase name: your own App display names win, then a built-in list (tiktok, instagram, pubgmobile, chatgpt, whatsapp, youtube, ...), then the last meaningful word of the package. The old default name `Phone-{date}_{time}` is moved to the new one automatically; a name you typed yourself is left alone. Note: `com.tencent.ig`, which used to show as "ig", is PUBG Mobile and is now `pubgmobile`.
+- Start-up loader with animated rings, shown from the first frame, and "Phone connected / disconnected" messages (and desktop notifications if allowed) on any page. The service already runs in the background; closing the browser does not stop it.
+- Library, Phone: first choose Photos or Videos, then browse that kind with the folder chips. A Phone button goes back.
+- Studio icon changed to a dial with a spark, so the rocket belongs to Boost only.
+- Boost rocket: countdown, ignition with flame and smoke, lift-off with speed lines, then the amount of memory freed. Escape or a click closes it.
+- Profile panel under the performance profiles: profile badge, progress bar, steps that tick off one by one, applied / skipped / failed summary, Undo and Dismiss.
+- Studio, Apps replaces Capture: running apps by memory with Stop, star to protect an app, Stop all others, and a switch to keep calls and messages working. Demo mode is still on the command palette (Ctrl+K) and the capture presets are still in Settings.
+- Studio, Games: search, sort (recent, most played, A to Z), pin to the top, last played, sessions and hottest temperature on each card, Play (Game Priority), Open, Details, and an Add a game tile. The Details window shows play time, sessions, last played, hottest, battery per hour, recent sessions and the Game Priority options.
+- Game Priority (advanced game optimization): stop background apps when the game starts, keep stopping apps that wake up while you play (every 10 to 60 seconds, stops by itself when you leave the game), keep calls and messages working, and a protected list shared with the Apps page. Per game.
+
+Not verified
+- Not run on a Windows PC or phone. The dashboard was tested in a headless browser against a simulated backend: no script errors, button clicks at every edge, loader, Library and gallery, Boost scene, profile panel, Apps page, game details and guard switches. The PowerShell changes (file names) were checked by reading, a bracket check and a check that every function they call exists. Game Priority stops apps with the same Stop action as the Tools page; it was not run against a real phone.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
+
 ## 4.3.0
 A smoother Library preview, high quality recordings, steadier sound. Only the Video only and Reroute flows were tuned. The two Copy modes are untouched and are listed in docs/PENDING.md.
 

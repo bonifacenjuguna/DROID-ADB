@@ -28,6 +28,7 @@ function summaryHtml() {
   return `<div class="sx-sums">${tile('Games', gl.length, gl.filter(g => g.on !== false).length + ' with auto profile on')}${tile('Total play time', total ? fmtDur(total) : '0 min', 'Tracked while Studio is open')}${tile('Most played', top ? esc(KNOWN[top[0]] || nice(top[0])) : '-', top ? fmtDur(top[1]) : 'Nothing yet')}${tile('Hottest session', peak ? peak.toFixed(0) + ' °C' : '-', ss.length ? ss.length + ' sessions recorded' : 'Play a game to see this')}</div>`;
 }
 function libraryHtml() {
+  if (SX.gamesLibrary) return SX.gamesLibrary(); // 4.4.0: the richer library lives in studio-pro.js
   const gl = games(), p = pt(), act = G.active[STK.sel()];
   const detect = (S.apps || []).filter(a => KNOWN[a.package] && !gl.find(g => g.pkg === a.package));
   const cards = gl.map((g, i) => {
@@ -86,10 +87,13 @@ async function enter(serial, g) {
     if (g.mirror && !STK.mirroring()) { await STK.actions.mirror(); a.mir = true; }
     if (g.record && !STK.recording()) { await STK.actions.record(); a.rec = true; }
   } finally { G.entering[serial] = false; }
+  STK.emit('sx-game-enter', { serial, g });
 }
 async function exit(serial) {
   const a = G.active[serial]; if (!a) return;
   delete G.active[serial]; delete G.misses[serial]; refreshIfOpen();
+  try { const lp = { ...(STK.kv.get('lastplayed', {}) || {}) }; lp[a.pkg] = Date.now(); STK.kv.set('lastplayed', lp); } catch (e) { /* optional */ }
+  STK.emit('sx-game-exit', { serial, g: a.g });
   const secs = Math.round((Date.now() - (a.startedAt || Date.now())) / 1000);
   try { if (secs >= 10) { const p = { ...pt() }; p[a.pkg] = (p[a.pkg] || 0) + secs; STK.kv.set('playtime', p); } } catch (e) { /* optional */ }
   try {
@@ -173,6 +177,7 @@ function activeHtml() {
   if (!a) return `<div class="sx-note">${icon('info', 'sm')}<span>Waiting for one of your games to open. When it does, its profile switches on here automatically. This works while the dashboard is open.</span></div>`;
   return `<div class="sx-now"><span class="av" style="--h:${hue(a.pkg)}">${esc(initials(gname(a.g)))}</span><div><b>${esc(gname(a.g))}</b><small>Playing for ${esc(fmtDur((Date.now() - a.startedAt) / 1000))}</small></div></div>${SX.kv([['Peak temperature', a.peak ? a.peak.toFixed(1) + ' °C' : '-', SX.tone('temp', a.peak)], ['Now', r && r.tempC != null ? r.tempC.toFixed(1) + ' °C' : '-', r ? SX.tone('temp', r.tempC) : ''], ['Battery at start', a.bat0 != null && a.bat0 >= 0 ? a.bat0 + '%' : '-'], ['Profile', a.g.profile ? esc((SX.PROFILES.find(p => p.id === a.g.profile) || {}).name || a.g.profile) : 'None']])}`;
 }
+SX.gx = { gname, hue, initials, fmtDur, KNOWN, pt, sessions, games, editGame, active: G.active, monitor: g => { SX.setPkg(g.pkg); fmStart(g.pkg); STK.toast('Monitoring ' + gname(g) + '. Switch to it on the phone.'); } };
 SX.register({ id: 'games', label: 'Games', icon: 'game', order: 4,
   render: () => `<div class="sx-grid">
     ${SX.card('span-12', 'Your game library', 'Studio switches on a profile by itself when one of these opens, and restores everything when you leave.', '<div id="w-gsum"></div><div id="w-glib"></div>', `<button class="btn primary" type="button" data-sx="gadd">${icon('game', 'sm')}<span>Add a game</span></button>`)}

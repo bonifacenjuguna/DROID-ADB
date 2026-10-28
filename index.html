@@ -10,14 +10,47 @@
 <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="manifest" href="assets/manifest.webmanifest">
+<script>document.documentElement.classList.add('booting');setTimeout(function(){document.documentElement.classList.remove('booting');var e=document.getElementById('boot-loader');if(e)e.remove();},12000);</script>
+<style id="boot-style">
+/* 4.4.0 start-up loader. It covers the page from the very first paint, so a reload never shows the Console page for a moment. */
+html.booting body{overflow:hidden}
+#boot-loader{position:fixed;inset:0;z-index:5000;display:grid;place-content:center;justify-items:center;gap:22px;background:radial-gradient(circle at 50% 38%,#202733 0%,#12161c 62%,#0d1014 100%);color:#e9ecf1;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;transition:opacity .55s ease,transform .55s ease}
+#boot-loader.out{opacity:0;transform:scale(1.05);pointer-events:none}
+#boot-loader .bl-stage{position:relative;width:140px;height:140px}
+#boot-loader .bl-ring{position:absolute;inset:0;border-radius:50%;border:3px solid transparent;border-top-color:#f2b544;border-right-color:rgba(242,181,68,.25);animation:bl-spin 1.15s cubic-bezier(.5,.1,.3,.9) infinite}
+#boot-loader .bl-ring.b{inset:13px;border-top-color:#4fd3a0;border-right-color:rgba(79,211,160,.25);animation-duration:1.7s;animation-direction:reverse}
+#boot-loader .bl-ring.c{inset:26px;border-top-color:#7be0ff;border-right-color:rgba(123,224,255,.25);animation-duration:2.3s}
+#boot-loader .bl-glow{position:absolute;inset:34px;border-radius:50%;background:radial-gradient(circle,rgba(242,181,68,.35),transparent 70%);animation:bl-pulse 1.8s ease-in-out infinite}
+#boot-loader .bl-logo{position:absolute;inset:40px;width:60px;height:60px;object-fit:contain;animation:bl-float 2.4s ease-in-out infinite}
+#boot-loader .bl-word{font-weight:800;font-size:22px;letter-spacing:.34em;padding-left:.34em;animation:bl-track 1.4s cubic-bezier(.2,.8,.2,1) both}
+#boot-loader .bl-bar{width:190px;height:3px;border-radius:3px;overflow:hidden;background:rgba(255,255,255,.09)}
+#boot-loader .bl-bar i{display:block;height:100%;width:42%;border-radius:3px;background:linear-gradient(90deg,transparent,#f2b544,#4fd3a0,transparent);animation:bl-sweep 1.25s ease-in-out infinite}
+#boot-loader .bl-msgs{position:relative;height:18px;width:260px;text-align:center;font-size:13px;color:#a5aebc}
+#boot-loader .bl-msgs span{position:absolute;inset:0;opacity:0;animation:bl-msg 6s infinite}
+#boot-loader .bl-msgs span:nth-child(2){animation-delay:2s}
+#boot-loader .bl-msgs span:nth-child(3){animation-delay:4s}
+@keyframes bl-spin{to{transform:rotate(360deg)}}
+@keyframes bl-pulse{50%{transform:scale(1.25);opacity:.55}}
+@keyframes bl-float{50%{transform:translateY(-3px) scale(1.04)}}
+@keyframes bl-track{from{letter-spacing:.9em;opacity:0}to{letter-spacing:.34em;opacity:1}}
+@keyframes bl-sweep{0%{transform:translateX(-110%)}100%{transform:translateX(260%)}}
+@keyframes bl-msg{0%,4%{opacity:0;transform:translateY(5px)}10%,30%{opacity:1;transform:none}36%,100%{opacity:0;transform:translateY(-5px)}}
+@media (prefers-reduced-motion:reduce){#boot-loader *{animation:none!important}#boot-loader .bl-msgs span:first-child{opacity:1}#boot-loader{transition:none}}
+</style>
 <meta name="theme-color" content="#020f20">
-<script src="assets/theme.js?v=4.3.0"></script>
-<link rel="stylesheet" href="assets/style.css?v=4.3.0">
-<link rel="stylesheet" href="assets/studio.css?v=4.3.0">
-<link rel="stylesheet" href="assets/xp.css?v=4.3.0">
-<link rel="stylesheet" href="assets/motion.css?v=4.3.0">
+<script src="assets/theme.js?v=4.4.0"></script>
+<link rel="stylesheet" href="assets/style.css?v=4.4.0">
+<link rel="stylesheet" href="assets/studio.css?v=4.4.0">
+<link rel="stylesheet" href="assets/xp.css?v=4.4.0">
+<link rel="stylesheet" href="assets/motion.css?v=4.4.0">
 </head>
 <body>
+<div id="boot-loader" role="status" aria-live="polite" aria-label="Starting DROID ADB">
+  <div class="bl-stage"><span class="bl-ring"></span><span class="bl-ring b"></span><span class="bl-ring c"></span><span class="bl-glow"></span><img class="bl-logo" src="assets/droid-adb-mark.png" alt=""></div>
+  <div class="bl-word">DROID ADB</div>
+  <div class="bl-bar"><i></i></div>
+  <div class="bl-msgs"><span>Starting the service...</span><span>Looking for your phone...</span><span>Getting everything ready...</span></div>
+</div>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
 <defs>
 <symbol id="i-console" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.8"/><rect x="14" y="3" width="7" height="5" rx="1.8"/><rect x="14" y="12" width="7" height="9" rx="1.8"/><rect x="3" y="16" width="7" height="5" rx="1.8"/></symbol>
@@ -105,6 +138,7 @@
 <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><rect x="10" y="10" width="4" height="4" rx=".8"/><path d="M9.5 3.5v3M14.5 3.5v3M9.5 17.5v3M14.5 17.5v3M3.5 9.5h3M3.5 14.5h3M17.5 9.5h3M17.5 14.5h3"/></symbol>
 <symbol id="i-ram" viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="9" rx="1.8"/><path d="M7 15.5V18M11 15.5V18M15 15.5V18M7 9.5v3M11 9.5v3M15 9.5v3"/></symbol>
 <symbol id="i-rocket" viewBox="0 0 24 24"><path d="M12 3c3.5 2 5.5 5.5 5.5 9.5L12 18l-5.5-5.5C6.5 8.5 8.5 5 12 3z"/><circle cx="12" cy="10.5" r="1.8"/><path d="M6.5 12.5L4 14.5l1 3.5 3-1.5M17.5 12.5l2.5 2-1 3.5-3-1.5M12 18v3"/></symbol>
+<symbol id="i-studio" viewBox="0 0 24 24"><path d="M3.5 16.5a8.5 8.5 0 0117 0"/><path d="M12 12.5l3-4"/><circle cx="12" cy="12.5" r="1.3"/><path d="M5 20h14"/><path d="M18.6 2.8l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7z"/></symbol>
 <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4.5 17a8.5 8.5 0 1115 0"/><path d="M12 13.5l3.5-4.5"/><circle cx="12" cy="13.5" r="1.2"/></symbol>
 <symbol id="i-battery" viewBox="0 0 24 24"><rect x="3" y="7.5" width="16" height="9" rx="2.2"/><path d="M21 10.5v3M6.5 10.5v3M9.5 10.5v3"/></symbol>
 <symbol id="i-plane" viewBox="0 0 24 24"><path d="M21 12.5L14 9V4.5a2 2 0 00-4 0V9l-7 3.5V15l7-1.5V18l-2 1.5V21l4-1 4 1v-1.5L14 18v-4.5l7 1.5z"/></symbol>
@@ -118,7 +152,7 @@
     <div class="rail-group" role="group" aria-label="Control">
       <span class="rail-label">Control</span>
       <button class="rail-btn is-active" data-view="console" data-prim aria-current="page"><svg class="ic"><use href="#i-console"/></svg><span>Console</span></button>
-      <button class="rail-btn" data-view="studio"><svg class="ic"><use href="#i-rocket"/></svg><span>Studio</span></button>
+      <button class="rail-btn" data-view="studio"><svg class="ic"><use href="#i-studio"/></svg><span>Studio</span></button>
       <button class="rail-btn" data-view="automation"><svg class="ic"><use href="#i-macro"/></svg><span>Automate</span></button>
     </div>
     <div class="rail-group" role="group" aria-label="Phone">
@@ -317,7 +351,7 @@
           <div class="tabs" role="tablist" aria-label="Library">
             <button role="tab" class="tab is-active" data-tab="recordings" aria-selected="true"><svg class="ic sm"><use href="#i-library"/></svg>Recordings <b id="tab-rec-count">0</b></button>
             <button role="tab" class="tab" data-tab="screenshots" aria-selected="false"><svg class="ic sm"><use href="#i-image"/></svg>Screenshots <b id="tab-shot-count">0</b></button>
-            <button role="tab" class="tab" data-xtab="gallery" aria-selected="false"><svg class="ic sm"><use href="#i-phone"/></svg>Phone gallery</button>
+            <button role="tab" class="tab" data-xtab="gallery" aria-selected="false"><svg class="ic sm"><use href="#i-phone"/></svg>Phone</button>
             <button role="tab" class="tab" data-xtab="backups" aria-selected="false"><svg class="ic sm"><use href="#i-cloud"/></svg>Backups</button>
           </div>
           <div class="search"><svg class="ic sm"><use href="#i-search"/></svg><input id="lib-search" type="search" placeholder="Filter by name" aria-label="Filter files" autocomplete="off"></div>
@@ -612,28 +646,29 @@
   </div>
 </dialog>
 
-<script src="assets/core.js?v=4.3.0"></script>
-<script src="assets/console.js?v=4.3.0"></script>
-<script src="assets/library.js?v=4.3.0"></script>
-<script src="assets/phone.js?v=4.3.0"></script>
-<script src="assets/devices.js?v=4.3.0"></script>
-<script src="assets/settings.js?v=4.3.0"></script>
-<script src="assets/audio.js?v=4.3.0"></script>
+<script src="assets/core.js?v=4.4.0"></script>
+<script src="assets/console.js?v=4.4.0"></script>
+<script src="assets/library.js?v=4.4.0"></script>
+<script src="assets/phone.js?v=4.4.0"></script>
+<script src="assets/devices.js?v=4.4.0"></script>
+<script src="assets/settings.js?v=4.4.0"></script>
+<script src="assets/audio.js?v=4.4.0"></script>
 <script src="assets/v3.js"></script>
-<script src="assets/console-x.js?v=4.3.0"></script>
-<script src="assets/library-x.js?v=4.3.0"></script>
-<script src="assets/monitor.js?v=4.3.0"></script>
-<script src="assets/alerts.js?v=4.3.0"></script>
-<script src="assets/xp-ui.js?v=4.3.0"></script>
-<script src="assets/studio.js?v=4.3.0"></script>
-<script src="assets/studio-games.js?v=4.3.0"></script>
-<script src="assets/studio-more.js?v=4.3.0"></script>
-<script src="assets/studio-plus.js?v=4.3.0"></script>
-<script src="assets/automation.js?v=4.3.0"></script>
-<script src="assets/inspect.js?v=4.3.0"></script>
-<script src="assets/wall.js?v=4.3.0"></script>
-<script src="assets/motion.js?v=4.3.0"></script>
-<script src="assets/pwa.js?v=4.3.0"></script>
-<script src="assets/boot.js?v=4.3.0"></script>
+<script src="assets/console-x.js?v=4.4.0"></script>
+<script src="assets/library-x.js?v=4.4.0"></script>
+<script src="assets/monitor.js?v=4.4.0"></script>
+<script src="assets/alerts.js?v=4.4.0"></script>
+<script src="assets/xp-ui.js?v=4.4.0"></script>
+<script src="assets/studio.js?v=4.4.0"></script>
+<script src="assets/studio-games.js?v=4.4.0"></script>
+<script src="assets/studio-more.js?v=4.4.0"></script>
+<script src="assets/studio-plus.js?v=4.4.0"></script>
+<script src="assets/studio-pro.js?v=4.4.0"></script>
+<script src="assets/automation.js?v=4.4.0"></script>
+<script src="assets/inspect.js?v=4.4.0"></script>
+<script src="assets/wall.js?v=4.4.0"></script>
+<script src="assets/motion.js?v=4.4.0"></script>
+<script src="assets/pwa.js?v=4.4.0"></script>
+<script src="assets/boot.js?v=4.4.0"></script>
 </body>
 </html>

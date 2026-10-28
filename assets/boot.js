@@ -123,5 +123,23 @@ $('#help-close').addEventListener('click', () => $('#dlg-help').close());
 /* start */
 STK.go((location.hash || '#console').slice(1));
 window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h && h !== state.view) STK.go(h); });
-STK.start().then(() => STK.loadProfiles());
+/* 4.4.0: say so when a phone is plugged in or taken out, whatever page is open (and on the desktop if the tab is in the background). */
+let knownReady = null;
+STK.on('state', () => {
+  const ready = STK.readyDevices().map(d => d.id);
+  if (knownReady === null) { knownReady = ready; return; }
+  const added = ready.filter(x => !knownReady.includes(x)), gone = knownReady.filter(x => !ready.includes(x));
+  knownReady = ready;
+  const name = id => { const d = state.devices.find(x => x.id === id); return (d && (d.model || d.product)) || id; };
+  added.forEach(id => { STK.toast('Phone connected: ' + name(id), 'ok'); STK.notify && STK.notify('Phone connected', name(id), 'dev-' + id); });
+  gone.forEach(id => { STK.toast('Phone disconnected.', 'bad'); STK.notify && STK.notify('Phone disconnected', 'The cable was unplugged or the phone went to sleep.', 'dev-' + id); });
+});
+
+/* 4.4.0: the start-up loader leaves once the first reading of the service and the phone is in, and has been seen for a moment. */
+const hideLoader = () => {
+  const el = document.getElementById('boot-loader'); if (!el) return;
+  const wait = Math.max(0, 900 - performance.now());
+  setTimeout(() => { document.documentElement.classList.remove('booting'); el.classList.add('out'); setTimeout(() => el.remove(), 650); }, wait);
+};
+STK.start().then(() => { STK.loadProfiles(); hideLoader(); }, hideLoader);
 })();

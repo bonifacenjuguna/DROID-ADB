@@ -64,7 +64,7 @@ function showX(name) {
   $('#lib-gallery').hidden = name !== 'gallery';
   $('#lib-backups').hidden = name !== 'backups';
   $$('#view-library .tab').forEach(b => { const on = name ? b.dataset.xtab === name : false; if (name) { b.classList.toggle('is-active', on); b.setAttribute('aria-selected', on); } });
-  if (name === 'gallery') loadGallery();
+  if (name === 'gallery') { G.type = ''; loadGallery(); }
   if (name === 'backups') renderBackups();
 }
 document.addEventListener('click', e => {
@@ -74,16 +74,16 @@ document.addEventListener('click', e => {
 });
 
 /* ---------- phone gallery ---------- */
-const G = { set: 'all', items: [], sel: new Set(), selecting: false, loading: false, cache: {}, idx: 0, id: '' };
+const G = { set: 'all', type: '', all: [], items: [], sel: new Set(), selecting: false, loading: false, cache: {}, idx: 0, id: '' };
 const SETS = [['all', 'All'], ['camera', 'Camera'], ['screenshots', 'Screenshots'], ['downloads', 'Downloads'], ['whatsapp', 'WhatsApp']];
 async function loadGallery(force) {
   const box = $('#lib-gallery'), id = STK.sel();
   if (!id) return STK.setHtml(box, `<div class="panel"><div class="empty">${icon('plug')}<b>No phone connected</b><p>Connect a phone to browse its photos and videos.</p></div></div>`);
   const key = id + '|' + G.set;
-  if (!force && G.cache[key] && Date.now() - G.cache[key].at < 60000) { G.items = G.cache[key].items; G.id = id; return paintGallery(); }
+  if (!force && G.cache[key] && Date.now() - G.cache[key].at < 60000) { G.all = G.cache[key].items; applyType(); G.id = id; return paintGallery(); }
   G.loading = true; G.id = id; paintGallery();
-  try { const r = await STK.api(`/gallery?id=${encodeURIComponent(id)}&set=${G.set}`, { timeout: 120000 }); G.items = r.items || []; G.total = r.total; G.cache[key] = { at: Date.now(), items: G.items }; }
-  catch (e) { G.items = []; STK.fail(e); }
+  try { const r = await STK.api(`/gallery?id=${encodeURIComponent(id)}&set=${G.set}`, { timeout: 120000 }); G.all = r.items || []; G.total = r.total; G.cache[key] = { at: Date.now(), items: G.all }; applyType(); }
+  catch (e) { G.all = []; G.items = []; STK.fail(e); }
   G.loading = false; G.sel.clear(); paintGallery();
 }
 function dayLabel(sec) {
@@ -93,14 +93,21 @@ function dayLabel(sec) {
   return d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: d.getFullYear() === n.getFullYear() ? undefined : 'numeric' });
 }
 const thumbUrl = (it, full) => `/api/gallery/thumb?id=${encodeURIComponent(G.id)}&path=${encodeURIComponent(it.path)}&size=${it.size}${full ? '&full=1' : ''}`;
+/* 4.4.0: the Phone page first asks Photos or Videos, then shows that kind with the folder chips. */
+function applyType() { G.items = G.type === 'videos' ? G.all.filter(i => i.kind === 'video') : G.type === 'photos' ? G.all.filter(i => i.kind === 'image') : G.all; }
 function paintGallery() {
   const box = $('#lib-gallery');
-  const head = `<div class="toolbar tight"><div class="chiprow">${SETS.map(([k, l]) => `<button class="chipbtn ${G.set === k ? 'is-active' : ''}" data-gset="${k}">${l}</button>`).join('')}</div><span class="grow"></span>
+  if (!G.type) {
+    const ph = G.all.filter(i => i.kind === 'image').length, vd = G.all.filter(i => i.kind === 'video').length, more = G.total > G.all.length ? '+' : '';
+    box.innerHTML = `<div class="gchoose"><button class="gcard" data-gtype="photos">${icon('image')}<b>Photos</b><small>${G.loading ? 'Reading the phone...' : ph + more + ' pictures'}</small></button><button class="gcard" data-gtype="videos">${icon('play')}<b>Videos</b><small>${G.loading ? 'Reading the phone...' : vd + more + ' videos'}</small></button></div><p class="hint">Pick one to browse it. Nothing is copied until you choose Copy to PC.</p>`;
+    return;
+  }
+  const head = `<div class="toolbar tight"><button class="btn sm" id="g-back">${icon('left', 'sm')}<span>Phone</span></button><b class="gtitle">${G.type === 'videos' ? 'Videos' : 'Photos'}</b><div class="chiprow">${SETS.map(([k, l]) => `<button class="chipbtn ${G.set === k ? 'is-active' : ''}" data-gset="${k}">${l}</button>`).join('')}</div><span class="grow"></span>
     <button class="btn sm ${G.selecting ? 'primary' : ''}" id="g-select">${icon('check', 'sm')}<span>Select</span></button><button class="btn sm" id="g-refresh">${icon('refresh', 'sm')}<span>Refresh</span></button></div>`;
   const bulk = G.selecting ? `<div class="bulkbar"><b>${G.sel.size} selected</b><button class="btn sm" id="g-all">Select all shown</button><button class="btn sm primary" id="g-pull" ${G.sel.size ? '' : 'disabled'}>${icon('download', 'sm')}<span>Copy to PC</span></button><button class="btn sm danger" id="g-del" ${G.sel.size ? '' : 'disabled'}>${icon('trash', 'sm')}<span>Delete from phone</span></button></div>` : '';
   let body;
   if (G.loading) body = `<div class="panel"><p class="hint">Reading the phone gallery...</p></div>`;
-  else if (!G.items.length) body = `<div class="panel"><div class="empty">${icon('image')}<b>No photos or videos found</b><p>This folder set is empty on the phone, or the phone blocked reading it.</p></div></div>`;
+  else if (!G.items.length) body = `<div class="panel"><div class="empty">${icon('image')}<b>No ${G.type === 'videos' ? 'videos' : 'photos'} found</b><p>This folder set is empty on the phone, or the phone blocked reading it.</p></div></div>`;
   else {
     let lastDay = '', html = '';
     G.items.forEach((it, i) => {
@@ -233,6 +240,8 @@ STK.annotate = annotOpen;
 /* ---------- events ---------- */
 document.addEventListener('click', e => {
   const t = e.target.closest('#lib-gallery button, #lib-backups button, #lib-backups input'); if (!t) return;
+  if (t.dataset.gtype) { G.type = t.dataset.gtype; G.sel.clear(); G.selecting = false; applyType(); return paintGallery(); }
+  if (t.id === 'g-back') { G.type = ''; G.sel.clear(); G.selecting = false; return paintGallery(); }
   if (t.dataset.gset) { G.set = t.dataset.gset; G.sel.clear(); return loadGallery(); }
   if (t.id === 'g-refresh') return loadGallery(true);
   if (t.id === 'g-select') { G.selecting = !G.selecting; G.sel.clear(); return paintGallery(); }

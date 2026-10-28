@@ -200,7 +200,7 @@ $('#lib-refresh').addEventListener('click', e => STK.busy(e.currentTarget, async
 $('#lib-folder').addEventListener('click', () => STK.post('/open-folder', { kind: L.tab }).catch(STK.fail));
 $('#cleanup-btn').addEventListener('click', e => cleanup(e.currentTarget));
 
-STK.views.library = { onShow() { render(); STK.loadLibrary(); } };
+STK.views.library = { onShow() { const b = $('#view-library [data-tab="recordings"]'); if (b) b.click(); /* 4.4.0: always open on Recordings */ render(); STK.loadLibrary(); } };
 let lastRefresh = 0;
 STK.on('state', () => {
   if (state.view === 'library' && state.sessions.some(s => s.recording) && Date.now() - lastRefresh > 4000) { lastRefresh = Date.now(); STK.loadLibrary(); }

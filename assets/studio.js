@@ -181,7 +181,7 @@ SX.applyProfile = async function (pid, opts = {}) {
   const id = STK.sel(); if (!id) return STK.toast('Connect a phone first.', 'bad');
   const p = SX.PROFILES.find(x => x.id === pid); if (!p) return;
   if (S.run && S.run.busy) return STK.toast('A profile is still being applied. One moment.');
-  const run = S.run = { id: pid, name: p.name, busy: true, steps: p.steps.map(s => ({ l: s.l, st: 'wait', note: '' })) };
+  const run = S.run = { uid: Date.now() + Math.random(), id: pid, name: p.name, busy: true, steps: p.steps.map(s => ({ l: s.l, st: 'wait', note: '' })) };
   paintRun();
   // remember what the phone looked like so the profile can be undone
   if (pid !== 'balanced' && !S.prev[id]) {
@@ -217,7 +217,7 @@ SX.applyProfile = async function (pid, opts = {}) {
 SX.restoreProfile = async function () {
   const id = STK.sel(), pv = S.prev[id]; if (!id) return;
   if (!pv) return SX.applyProfile('balanced');
-  const run = S.run = { id: 'restore', name: 'Restore', busy: true, steps: [] };
+  const run = S.run = { uid: Date.now() + Math.random(), id: 'restore', name: 'Restore', busy: true, steps: [] };
   const steps = [
     ['Animations back', () => SX.tool({ action: 'animscale', value: pv.anim == null || pv.anim >= .9 ? '1' : pv.anim <= .1 ? '0' : '0.5' }, { quiet: true })],
     ['Battery saver as before', () => SX.tool({ action: 'lowpower', on: !!pv.lowPower }, { quiet: true })],
@@ -234,13 +234,7 @@ SX.restoreProfile = async function () {
   STK.toast('Your phone settings were restored.');
   SX.loadToggles(); setTimeout(() => sample(true), 600); SX.refresh();
 };
-function paintRun() {
-  const el = document.getElementById('w-run'); if (!el) return;
-  const r = S.run;
-  if (!r) { STK.setHtml(el, ''); return; }
-  const mark = s => s === 'ok' ? icon('check', 'sm') : s === 'run' ? '<i class="sx-spin"></i>' : s === 'skip' ? icon('info', 'sm') : s === 'fail' ? icon('alert', 'sm') : '<i class="sx-dot"></i>';
-  STK.setHtml(el, `<div class="sx-run ${r.busy ? 'busy' : ''}"><header><b>${r.busy ? 'Applying' : 'Applied'} ${esc(r.name)}</b>${r.busy ? '' : `${r.id !== 'restore' && S.prev[STK.sel()] ? `<button class="btn sm" data-sx="restore" type="button">${icon('refresh', 'sm')}<span>Undo</span></button>` : ''}<button class="btn sm ghost" data-sx="closerun" type="button">Dismiss</button>`}</header><ol>${r.steps.map(s => `<li class="${s.st}"><span class="m">${mark(s.st)}</span><span class="t">${esc(s.l)}${s.note && s.st !== 'ok' ? `<small>${esc(s.note)}</small>` : ''}</span></li>`).join('')}</ol></div>`);
-}
+function paintRun() { if (SX.paintRun) SX.paintRun(); } // 4.4.0: the panel lives in studio-pro.js
 
 /* ---------- boost and cool down ---------- */
 SX.boost = async function (btn) {
@@ -304,7 +298,7 @@ function build() {
         <svg class="sx-ring big" viewBox="0 0 100 100" aria-hidden="true"><circle class="trk" cx="50" cy="50" r="42" stroke-width="7" stroke-dasharray="197.9 263.9" transform="rotate(135 50 50)"/><circle class="val" id="sx-rv" cx="50" cy="50" r="42" stroke-width="7" stroke-dasharray="0 263.9" transform="rotate(135 50 50)"/></svg>
         <div class="sx-ringtxt"><b id="sx-score">--</b><small>health</small></div></div></div>
       <div class="sx-hero-main">
-        <span class="sx-eyebrow">${icon('rocket', 'sm')}Performance Studio</span>
+        <span class="sx-eyebrow">${icon('studio', 'sm')}Performance Studio</span>
         <h2 id="sx-title">Connect a phone to begin</h2>
         <p class="sx-status" id="sx-status">Live performance, cooling and gaming tools appear here.</p>
         <div class="sx-chips" id="sx-chips"></div>
