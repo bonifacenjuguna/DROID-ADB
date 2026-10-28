@@ -36,6 +36,11 @@ Everything is configurable: quality presets, saved profiles, folders, file name 
 - scrcpy closes immediately: the toast shows the reason; full output is in `Logs/session-<id>.log`.
 - Port busy: change the port in Settings (restart needed) or close the other instance.
 
+## New in 4.3
+- Recordings now use their own quality (Settings, Recording): full phone size, 60 fps, 40 Mbps by default. Mirror quality is still set under Video. Turn "High quality for recordings" off to use the Video settings for both.
+- If the sound crackles on the PC, raise Audio buffer or Audio output buffer in Settings, Audio (Reroute).
+- The video preview in the Library keeps the rest of the dashboard quiet while it plays.
+
 ## New in 4.2
 - Click any card on Studio, Overview (or a core, or a temperature sensor) to open a large graph. Drag across it to zoom, double-click to reset, CSV saves the numbers.
 - Studio, Thermals, Cool-down assistant: Start cool-down, watch the ring, and use Undo to put the settings back. Undo still works after you reload the page.

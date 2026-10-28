@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.3.0
+A smoother Library preview, high quality recordings, steadier sound. Only the Video only and Reroute flows were tuned. The two Copy modes are untouched and are listed in docs/PENDING.md.
+
+Changed
+- Library preview. Videos and pictures are now streamed by 4 dedicated workers. Before, they shared 3 workers with the dashboard's own live updates, so a playing video could keep every one of them busy and the preview and the dashboard slowed each other down. The read buffer is 1 MB instead of 256 KB, and finished recordings can be cached by the browser so seeking and replaying do not download the file again (recordings still being written are never cached).
+- While a video plays in the Library the dashboard polls less often and Studio's background watching pauses, so the browser has the full power for playback. It returns to normal when the video closes.
+- Recording quality is separate from the mirror. New settings in Settings, Recording: High quality for recordings (on), Recording longest side (0, the full phone size), Recording frame rate (60) and Recording bitrate (40 Mbps, about 18 GB an hour). The mirror keeps using Settings, Video, so it stays light. Turn the option off to use the Video settings for both.
+- Sound played on the PC (Reroute mirror, and Copy and play on PC) now gets a little more room: Audio buffer defaults to 100 ms (scrcpy: 50 ms) and a new Audio output buffer defaults to 20 ms (scrcpy: 5 ms). The sound itself is not touched, so its quality does not change; it only adds a small delay and removes crackles. Set a value yourself in Settings, Audio to change this; 0 means the new default.
+
+Added
+- docs/PENDING.md lists what is parked for later (the Copy modes and the fallback idea).
+
+Not verified
+- Not run on a Windows PC or phone. The PowerShell changes were checked by reading, a bracket check and a check that every function they call exists. A recording at 40 Mbps needs a phone encoder that can do it; if it cannot, lower the recording bitrate.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
+
 ## 4.2.2
 Fixes a break I introduced in 4.2.0 and 4.2.1: choosing any sound mode other than Video only made Mirror and Record fail with "Unexpected backend error: The term 'Get-DeviceAudioInfo' is not recognized".
 

@@ -88,7 +88,7 @@ function Send-File {
         $res.ContentLength64 = $count
         if ($Ctx.Request.HttpMethod -ne 'HEAD' -and $count -gt 0) {
             [void]$fs.Seek($start, [IO.SeekOrigin]::Begin)
-            $buf = New-Object byte[] 262144
+            $buf = New-Object byte[] 1048576
             $left = $count
             while ($left -gt 0) {
                 $n = $fs.Read($buf, 0, [int][math]::Min($buf.Length, $left))
@@ -1125,7 +1125,13 @@ $Routes['GET /api/file'] = { param($Ctx)
     $type = $MimeTypes[[IO.Path]::GetExtension($path).ToLower()]
     $dl = ''
     if ((Get-Query $Ctx 'download') -eq '1') { $dl = [IO.Path]::GetFileName($path) }
-    Send-File $Ctx $path $type $dl
+    # 4.3.0: a finished recording can be cached by the browser, so seeking and replaying in the preview does not
+    # download it again. A file that is still being written must not be cached.
+    $cc = 'no-store'
+    try {
+        if ($kind -eq 'recordings' -and ((Get-Date) - (Get-Item -LiteralPath $path).LastWriteTime).TotalSeconds -gt 30) { $cc = 'private, max-age=600' }
+    } catch { $cc = 'no-store' }
+    Send-File $Ctx $path $type $dl $cc
 }
 
 $Routes['POST /api/file-op'] = { param($Ctx)

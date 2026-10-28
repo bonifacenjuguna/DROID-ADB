@@ -301,7 +301,7 @@ function setConn() {
   chip.className = cls; chip.innerHTML = `<i class="dot"></i><b>${label}</b>`;
   dot.className = dcls;
 }
-STK.FRONT_VERSION = '4.2.2';
+STK.FRONT_VERSION = '4.3.0';
 { const av = document.getElementById('about-version'); if (av) av.textContent = 'v' + STK.FRONT_VERSION; }
 const stale = () => !!(state.online && state.data && state.data.version && state.data.version !== STK.FRONT_VERSION);
 function setBanner() {
@@ -452,7 +452,7 @@ async function pollOnce() {
     let delay = Math.max(1, state.pollSeconds) * 1000;
     if (state.sessions.length) delay = Math.min(delay, 2000);
     if (state.failures) delay = Math.min(10000, 1500 * state.failures);
-    if (document.hidden) delay = Math.max(delay, 8000);
+    if (document.hidden || STK.quiet) delay = Math.max(delay, 8000);
     pollTimer = setTimeout(pollOnce, delay);
   }
 }

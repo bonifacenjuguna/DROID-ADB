@@ -26,6 +26,7 @@ $Shared.started = Get-Date
 $Shared.versions = @{ adb = ''; scrcpy = '' }
 $Shared.queue = New-Object 'System.Collections.Concurrent.BlockingCollection[object]' 500
 $Shared.fastQueue = New-Object 'System.Collections.Concurrent.BlockingCollection[object]' 500
+$Shared.mediaQueue = New-Object 'System.Collections.Concurrent.BlockingCollection[object]' 200
 $Shared.jobQueue = New-Object 'System.Collections.Concurrent.BlockingCollection[string]' 100
 $Shared.jobs = [hashtable]::Synchronized(@{})
 
@@ -65,6 +66,17 @@ $FastLoop = @'
 while (-not $Shared.stop) {
     $item = $null
     if (-not $Shared.fastQueue.TryTake([ref]$item, 1000)) { continue }
+    Handle-Request $item
+}
+'@
+
+# 4.3.0: videos and pictures are streamed by their own workers. A playing video keeps a worker busy for as long
+# as the browser keeps reading, and with only 3 shared fast workers it could starve the dashboard (and itself).
+$MediaLoop = @'
+
+while (-not $Shared.stop) {
+    $item = $null
+    if (-not $Shared.mediaQueue.TryTake([ref]$item, 1000)) { continue }
     Handle-Request $item
 }
 '@
@@ -155,6 +167,7 @@ try {
     [void]$Runners.Add((Start-Runner 'sched' $SchedLoop))
     for ($i = 1; $i -le $WorkerCount; $i++) { [void]$Runners.Add((Start-Runner ('worker-' + $i) $WorkerLoop)) }
     for ($i = 1; $i -le 3; $i++) { [void]$Runners.Add((Start-Runner ('fast-' + $i) $FastLoop)) }
+    for ($i = 1; $i -le 4; $i++) { [void]$Runners.Add((Start-Runner ('media-' + $i) $MediaLoop)) }
 
     $task = $null
     while ($Listener.IsListening -and -not $Shared.stop) {
@@ -184,6 +197,7 @@ try {
             if ($method -eq 'GET' -and $path -eq '/favicon.ico') { $Ctx.Response.StatusCode = 204; $Ctx.Response.Close(); continue }
             $lane = $Shared.queue
             if ($FastRoutes.ContainsKey($method + ' ' + $path)) { $lane = $Shared.fastQueue }
+            if ($method -eq 'GET' -and $path -eq '/api/file') { $lane = $Shared.mediaQueue }
             if (-not $lane.TryAdd($Ctx)) { Send-Json $Ctx @{ error = 'The backend is busy. Try again in a moment.' } 503 }
         } catch {
             Write-BackendLog ('Accept loop: ' + $_.Exception.Message)

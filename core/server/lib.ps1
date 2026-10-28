@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '4.2.2'
+$ToolkitVersion = '4.3.0'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -184,7 +184,8 @@ $Schema = @(
     (F 'audioCodec' 'audio' 'choice' '' 'Audio codec (mirror)' 'Codec used while only mirroring.' -Choices $AudioCodecs -Show @{ audioMode = @('copy_play', 'reroute') }),
     (F 'recordAudioCodec' 'audio' 'choice' 'aac' 'Audio codec (recording)' 'AAC is the safest choice for recordings.' -Choices $AudioCodecs -Show @{ audioMode = @('record_only', 'copy_play', 'reroute') }),
     (F 'audioBitrate' 'audio' 'int' 0 'Audio bitrate' '0 uses the scrcpy default.' -Min 0 -Max 512 -Picks @(0, 64, 128, 192, 256) -Unit 'kbps' -Show @{ audioMode = @('record_only', 'copy_play', 'reroute') }),
-    (F 'audioBuffer' 'audio' 'int' 0 'Audio buffer' '0 uses the scrcpy default.' -Min 0 -Max 2000 -Picks @(0, 50, 100, 200) -Unit 'ms' -Show @{ audioMode = @('copy_play', 'reroute') }),
+    (F 'audioBuffer' 'audio' 'int' 0 'Audio buffer' '0 uses the smooth default of 100 ms. Lower it for less delay, raise it if the sound crackles.' -Min 0 -Max 2000 -Picks @(0, 50, 100, 150, 200, 300) -Unit 'ms' -Show @{ audioMode = @('copy_play', 'reroute') }),
+    (F 'audioOutputBuffer' 'audio' 'int' 0 'Audio output buffer' '0 uses the smooth default of 20 ms. Raise it if the sound crackles on the PC.' -Min 0 -Max 500 -Picks @(0, 10, 20, 40, 80) -Unit 'ms' -Show @{ audioMode = @('copy_play', 'reroute') }),
     # control
     (F 'viewOnly' 'control' 'bool' $false 'View only' 'Block mouse and keyboard control of the phone.'),
     (F 'keyboard' 'control' 'choice' '' 'Keyboard mode' 'uhid works in games and with any language. aoa needs USB.' -Choices $InputModes -Show @{ viewOnly = $false }),
@@ -213,6 +214,10 @@ $Schema = @(
     (F 'recordTemplate' 'recording' 'text' 'Phone-{date}_{time}' 'Recording file name' 'Tokens: {date} {time} {serial} {model} {app}.' -Pattern '^[A-Za-z0-9 ._\-{}]{1,80}$'),
     (F 'recordTimeLimit' 'recording' 'int' 0 'Automatic stop' 'Stop recording after this many seconds. 0 means never.' -Min 0 -Max 86400 -Picks @(0, 60, 300, 600, 1800, 3600) -Unit 'sec'),
     (F 'recordWindowless' 'recording' 'bool' $false 'Record without a window' 'Records in the background. Use Stop in the dashboard to finish.'),
+    (F 'recordOwnQuality' 'recording' 'bool' $true 'High quality for recordings' 'Recordings use the three values below, whatever the mirror uses. Turn off to use the Video settings for both.'),
+    (F 'recordMaxSize' 'recording' 'int' 0 'Recording longest side' 'Pixels. 0 keeps the full phone resolution.' -Min 0 -Max 8192 -Picks @(0, 2560, 1920, 1280) -Unit 'px'),
+    (F 'recordMaxFps' 'recording' 'int' 60 'Recording frame rate' 'Higher is smoother. 60 matches most phones.' -Min 1 -Max 240 -Picks @(30, 45, 60, 90, 120) -Unit 'fps'),
+    (F 'recordBitrateMbps' 'recording' 'int' 40 'Recording bitrate' 'Higher keeps more detail and makes bigger files. 40 Mbps is about 18 GB an hour.' -Min 1 -Max 200 -Picks @(16, 24, 40, 60, 80, 120) -Unit 'Mbps'),
     (F 'recordWhileMirroring' 'recording' 'choice' 'companion' 'Record while mirroring' 'Companion starts a hidden second scrcpy recorder so the mirror window stays open. Block keeps one session per phone.' -Choices @((C 'companion' 'Hidden companion recorder'), (C 'block' 'Block (stop mirror first)'))),
     (F 'autoRecordWithMirror' 'recording' 'bool' $false 'Record whenever I mirror' 'Starts a background recording together with every mirror window. Stopping the mirror also stops that recording.'),
     (F 'showRecBadge' 'recording' 'bool' $true 'Show recording badge on the phone picture' 'Shows REC with a timer on the dashboard phone picture while recording.'),
@@ -742,7 +747,17 @@ function Resolve-AudioPlan {
     if ($isRec) { $codec = [string]$S.recordAudioCodec }
     if ($codec -ne '' -and (@($AudioCodecs | ForEach-Object { [string]$_.v }) -contains $codec)) { [void]$argv.Add('--audio-codec=' + $codec) }
     if ([int]$S.audioBitrate -gt 0) { [void]$argv.Add('--audio-bit-rate=' + $S.audioBitrate + 'K') }
-    if ([int]$S.audioBuffer -gt 0) { [void]$argv.Add('--audio-buffer=' + $S.audioBuffer) }
+    if ($plan.playsOnPc) {
+        # 4.3.0: the sound is played on this PC, so give it a little more room than scrcpy's tight defaults (50 ms and 5 ms).
+        # A bigger buffer only adds delay to the mirror's sound. It never lowers the quality of the sound.
+        $abuf = [int]$S.audioBuffer
+        if ($abuf -le 0) { $abuf = 100 }
+        [void]$argv.Add('--audio-buffer=' + $abuf)
+        $obuf = [int]$S.audioOutputBuffer
+        if ($obuf -le 0) { $obuf = 20 }
+        [void]$argv.Add('--audio-output-buffer=' + $obuf)
+    }
+    elseif ([int]$S.audioBuffer -gt 0) { [void]$argv.Add('--audio-buffer=' + $S.audioBuffer) }
     $plan.warnings = @($warn)
     return $plan
 }
@@ -1142,9 +1157,18 @@ function New-ScrcpyArgs {
         }
         if ($S.crop -ne '') { [void]$a.Add('--crop=' + $S.crop) }
     }
-    if ($S.maxSize -gt 0) { [void]$a.Add('--max-size=' + $S.maxSize) }
-    [void]$a.Add('--max-fps=' + $S.maxFps)
-    [void]$a.Add('--video-bit-rate=' + $S.bitrateMbps + 'M')
+    # 4.3.0: recordings have their own quality (high by default). The mirror keeps the Video settings.
+    $qSize = [int]$S.maxSize
+    $qFps = [int]$S.maxFps
+    $qMbps = [int]$S.bitrateMbps
+    if ($Mode -eq 'record' -and [bool]$S.recordOwnQuality) {
+        $qSize = [int]$S.recordMaxSize
+        $qFps = [int]$S.recordMaxFps
+        $qMbps = [int]$S.recordBitrateMbps
+    }
+    if ($qSize -gt 0) { [void]$a.Add('--max-size=' + $qSize) }
+    [void]$a.Add('--max-fps=' + $qFps)
+    [void]$a.Add('--video-bit-rate=' + $qMbps + 'M')
     [void]$a.Add('--video-codec=' + $S.codec)
     if ($S.videoEncoder -ne '') { [void]$a.Add('--video-encoder=' + $S.videoEncoder) }
     if ($S.captureOrientation -ne '') { [void]$a.Add('--capture-orientation=' + $S.captureOrientation) }

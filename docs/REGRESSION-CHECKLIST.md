@@ -180,7 +180,7 @@ Full steps are in docs/AUDIO.md.
 - [ ] Unplug during a session, replug, start again: the selected mode is applied; the status shows the mode that is really active.
 - [ ] Android 12 or older phone (if available): a Copy mode shows a warning and starts as Video only, or refuses the recording.
 - [ ] Streaming audio plans show the correct status for each mode; starting or stopping OBS does not stop the mirror or a recording.
-- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 4.2.2).
+- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 4.3.0).
 
 
 ## 4.2 Studio Plus and recording fix (real device)
@@ -201,3 +201,11 @@ Full steps are in docs/AUDIO.md.
 - [ ] Press Record in Reroute with no mirror open. The recording starts and the file has sound (Library, More, Check sound).
 - [ ] Console, command preview in Reroute shows no --audio-source and no --no-audio flag.
 - [ ] Copy to recording and Copy and play on PC still show their reason (Android 13 needed) instead of failing silently.
+
+## 4.3.0 smooth preview, recording quality, steadier sound (real phone)
+- [ ] Library: play a recording of 5 minutes or more in the preview. It plays without stalls; seeking does not freeze it; Studio and the dashboard still update (slowly) in the background.
+- [ ] While the preview plays, open the Console page in another tab. The dashboard stays responsive.
+- [ ] Settings, Recording: High quality for recordings is on. A new recording is the phone's full size at 60 fps. Check the file with Properties or a media player.
+- [ ] A 1-minute recording at 40 Mbps is about 300 MB. If the phone cannot do it, scrcpy exits with an encoder error: lower Recording bitrate or frame rate.
+- [ ] Reroute mirror for 10 minutes: no crackle. If there is crackle, raise Audio buffer to 150 or 200.
+- [ ] Mirror quality did not change (Settings, Video).

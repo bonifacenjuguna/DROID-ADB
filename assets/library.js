@@ -90,12 +90,14 @@ function play(name) {
   $('#video-title').textContent = name;
   $('#video-note').textContent = 'If the video does not play here, use Open in player.';
   v.onerror = () => { $('#video-note').textContent = 'This browser cannot play this file. Use Open in player instead.'; };
+  v.preload = 'auto';
+  STK.quiet = true; // 4.3.0: while a video plays the dashboard stops its busy work so playback stays smooth
   v.src = `/api/file?kind=recordings&name=${encodeURIComponent(name)}`;
   if (X().markers) X().markers(name);
   $('#dlg-video').showModal();
   v.play().catch(() => {});
 }
-$('#dlg-video').addEventListener('close', () => { const v = $('#video-el'); v.pause(); v.removeAttribute('src'); v.load(); });
+$('#dlg-video').addEventListener('close', () => { STK.quiet = false; const v = $('#video-el'); v.pause(); v.removeAttribute('src'); v.load(); });
 $('#video-close').addEventListener('click', () => $('#dlg-video').close());
 $('#video-open').addEventListener('click', () => fileOp('recordings', L.current, 'open').catch(STK.fail));
 $('#video-reveal').addEventListener('click', () => reveal('recordings', L.current));

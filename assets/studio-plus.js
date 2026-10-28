@@ -263,7 +263,7 @@ function paintWd() {
   if (el._h !== h) { el._h = h; el.innerHTML = h; }
 }
 Object.assign(SX.changes, { wd: t => { const w = wd(); w[t.dataset.k] = t.checked; STK.kv.set('xp-wd', w); } });
-setInterval(() => { if (state.view !== 'studio' && !document.hidden && STK.sel() && wd().bg && SX.sample) SX.sample(true); }, 30000);
+setInterval(() => { if (state.view !== 'studio' && !document.hidden && !STK.quiet && STK.sel() && wd().bg && SX.sample) SX.sample(true); }, 30000);
 
 /* ---------- 8. housekeeping ---------- */
 STK.on('device-changed', () => { batChart = null; BAT.apps = null; });
