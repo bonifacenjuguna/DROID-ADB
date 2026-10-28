@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '4.2.0'
+$ToolkitVersion = '4.2.1'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -622,7 +622,15 @@ function Resolve-AudioPlan {
 
     # Is this phone and this scrcpy able to do it? Only checked when the plan will really be used.
     $problem = ''
-    if ($want -and $Probe) {
+    if ($want -and $req -eq 'reroute') {
+        # 4.2.1: Reroute uses scrcpy's own default audio, exactly like 3.9.0, and nothing is checked before it starts.
+        # The checks below ran a phone and scrcpy probe first, and any hiccup there turned Reroute into video only.
+        # Only a phone already KNOWN (from the cache, no new adb call) to be older than Android 11 is refused.
+        # Anything else is reported from scrcpy's own log once the session runs.
+        $devQuick = Get-DeviceAudioInfo $Serial $false
+        if ($devQuick.ok -and [int]$devQuick.sdk -gt 0 -and [int]$devQuick.sdk -lt 30) { $problem = 'The phone runs Android ' + $devQuick.release + '. Sending phone sound to the PC needs Android 11 or newer.' }
+    }
+    elseif ($want -and $Probe) {
         $caps = Get-ScrcpyAudioCaps $true
         $dev = Get-DeviceAudioInfo $Serial $true
         if (-not $caps.ok) {
@@ -665,6 +673,8 @@ function Resolve-AudioPlan {
         } else { $plan.playsOnPc = $viewer }
     } else {
         $src = [string]$S.audioSource
+        # 4.2.1: an empty or unknown saved value used to become '--audio-source=' and scrcpy refused to start. 3.9.0 never read this value.
+        if (@($AudioSources | ForEach-Object { [string]$_.v }) -notcontains $src) { $src = 'output' }
         if ($src -eq 'playback') { [void]$warn.Add('Playback capture belongs to the two Copy modes. Reroute uses the phone sound output instead.'); $src = 'output' }
         if ($src -ne 'output') {
             [void]$argv.Add('--audio-source=' + $src)
@@ -695,14 +705,14 @@ function Resolve-AudioPlan {
     }
     if ($isRec -and $Companion -and $req -eq 'copy_play') { $plan.note = 'The mirror window plays the sound on the PC. This recorder only saves it.' }
 
-    if ($isRec -and [bool]$S.audioRequire) {
+    if ($isRec -and $req -ne 'reroute' -and [bool]$S.audioRequire) {
         $c2 = Get-ScrcpyAudioCaps $Probe
         if ($c2.flags['--require-audio']) { [void]$argv.Add('--require-audio') }
         elseif ($Probe) { [void]$warn.Add('This scrcpy cannot stop a recording when sound capture fails (--require-audio).') }
     }
     $codec = [string]$S.audioCodec
     if ($isRec) { $codec = [string]$S.recordAudioCodec }
-    if ($codec -ne '') { [void]$argv.Add('--audio-codec=' + $codec) }
+    if ($codec -ne '' -and (@($AudioCodecs | ForEach-Object { [string]$_.v }) -contains $codec)) { [void]$argv.Add('--audio-codec=' + $codec) }
     if ([int]$S.audioBitrate -gt 0) { [void]$argv.Add('--audio-bit-rate=' + $S.audioBitrate + 'K') }
     if ([int]$S.audioBuffer -gt 0) { [void]$argv.Add('--audio-buffer=' + $S.audioBuffer) }
     $plan.warnings = @($warn)

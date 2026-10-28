@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/images/droid-adb-logo.jpg" alt="DROID ADB" width="320"></p>
 
-# DROID ADB 4.2
+# DROID ADB 4.2.1
 
 A portable Windows control center for your Android phone: mirror, record, screenshot, remote-control and manage it from a local dashboard.
 

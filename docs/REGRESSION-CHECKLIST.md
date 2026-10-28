@@ -180,7 +180,7 @@ Full steps are in docs/AUDIO.md.
 - [ ] Unplug during a session, replug, start again: the selected mode is applied; the status shows the mode that is really active.
 - [ ] Android 12 or older phone (if available): a Copy mode shows a warning and starts as Video only, or refuses the recording.
 - [ ] Streaming audio plans show the correct status for each mode; starting or stopping OBS does not stop the mirror or a recording.
-- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 4.2.0).
+- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 4.2.1).
 
 
 ## 4.2 Studio Plus and recording fix (real device)
@@ -195,3 +195,9 @@ Full steps are in docs/AUDIO.md.
 - [ ] Watchdog: with the warning limit lowered below the current temperature a toast appears once, not every few seconds.
 - [ ] Install app: the button appears in Edge or Chrome, installing opens the dashboard in its own window.
 - [ ] With "Reduce motion" on in Windows the page has no animations.
+
+## 4.2.1 Reroute (real phone)
+- [ ] Settings, Audio: choose Reroute audio to PC, open the mirror. Phone sound plays on the PC and the phone itself is quiet.
+- [ ] Press Record in Reroute with no mirror open. The recording starts and the file has sound (Library, More, Check sound).
+- [ ] Console, command preview in Reroute shows no --audio-source and no --no-audio flag.
+- [ ] Copy to recording and Copy and play on PC still show their reason (Android 13 needed) instead of failing silently.

@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.2.1
+Reroute audio works again, the way it did in 3.9.0.
+
+Fixed
+- Reroute audio to PC. 4.x checked the phone and scrcpy before starting a session, and any hiccup in those checks turned Reroute into video only. Reroute now uses scrcpy's own default audio with no pre-check, exactly as 3.9.0 did. Only a phone already known (from the cache) to be older than Android 11 is refused. Problems are reported from scrcpy's own log after the session starts.
+- Recordings in Reroute no longer pass --require-audio. With it scrcpy aborted the whole recording when its sound capture hiccuped; the sound check after the recording still tells you if the file is silent.
+- A saved Audio source or Audio codec that is empty or not on the list used to become an invalid option ("--audio-source=") and stop scrcpy from starting. Unknown values are now ignored and the defaults are used. 3.9.0 never read these values, which is why old settings did not matter there.
+- Copy to recording and Copy and play on PC are unchanged and still need Android 13 or newer (the reason is shown in the audio status). They are the next ones to fix.
+
+Not verified
+- The PowerShell changes were checked by reading and a bracket check only. See docs/REGRESSION-CHECKLIST.md, section 4.2.1.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
+
 ## 4.2.0
 Studio Plus: clickable analytics, per-core load, the Cool-down assistant, a Battery page, Watchdog alerts, installable app, motion, and the recording fix.
 
