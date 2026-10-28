@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.2.2
+Fixes a break I introduced in 4.2.0 and 4.2.1: choosing any sound mode other than Video only made Mirror and Record fail with "Unexpected backend error: The term 'Get-DeviceAudioInfo' is not recognized".
+
+Fixed
+- When the scrcpy check was rewritten in 4.2.0, the function that reads the phone's Android version (`Get-DeviceAudioInfo`) was removed by mistake. Video only never calls it, which is why the default still worked. It is restored exactly as it was in 4.1.0. Every function called by the server scripts was then checked against the functions that exist, and none are missing.
+- The Reroute changes from 4.2.1 stay: no pre-check, no stop-if-no-sound flag on Reroute recordings, and stale audio source or codec values are ignored.
+
+Not verified
+- Still not run on a Windows PC or phone. Check Reroute first (docs/REGRESSION-CHECKLIST.md, section 4.2.1).
+
+After updating, run Launch.bat again so the background service restarts with the new version.
+
 ## 4.2.1
 Reroute audio works again, the way it did in 3.9.0.
 

@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '4.2.1'
+$ToolkitVersion = '4.2.2'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -601,6 +601,34 @@ function Get-ScrcpyAudioCaps {
     }
     $Shared.audioScrcpy = $caps
     return $caps
+}
+
+function Get-DeviceAudioInfo {
+    param([string]$Serial, [bool]$Probe = $true)
+    if (-not $Shared.audioDev) { $Shared.audioDev = [hashtable]::Synchronized(@{}) }
+    $key = $(if ($Serial) { $Serial } else { '_default' })
+    $hit = $Shared.audioDev[$key]
+    if ($hit) {
+        $age = ((Get-Date) - $hit.at).TotalSeconds
+        $ttl = $(if ($hit.ok) { 300 } else { 10 })
+        if ($age -lt $ttl -or -not $Probe) { return $hit }
+    }
+    if (-not $Probe) { return @{ serial = $Serial; ok = $false; unknown = $true; sdk = 0; release = ''; model = ''; manufacturer = ''; error = 'Not read yet.'; at = (Get-Date) } }
+    $info = @{ serial = $Serial; ok = $false; unknown = $false; sdk = 0; release = ''; model = ''; manufacturer = ''; error = ''; at = (Get-Date) }
+    try {
+        $r = Invoke-DeviceShell $Serial 'getprop ro.build.version.sdk; getprop ro.build.version.release; getprop ro.product.model; getprop ro.product.manufacturer' 8
+        $lines = @(($r.out -split "`r?`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+        $n = 0
+        if ($lines.Count -ge 1 -and [int]::TryParse($lines[0], [ref]$n) -and $n -gt 0) {
+            $info.sdk = $n
+            $info.ok = $true
+            if ($lines.Count -ge 2) { $info.release = $lines[1] }
+            if ($lines.Count -ge 3) { $info.model = $lines[2] }
+            if ($lines.Count -ge 4) { $info.manufacturer = $lines[3] }
+        } else { $info.error = 'The phone did not report its Android version.' }
+    } catch { $info.error = $_.Exception.Message }
+    $Shared.audioDev[$key] = $info
+    return $info
 }
 
 function Resolve-AudioPlan {

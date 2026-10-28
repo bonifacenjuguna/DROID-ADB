@@ -1,9 +1,9 @@
-/* DROID ADB service worker (4.2.1).
+/* DROID ADB service worker (4.2.2).
    Purpose: lets Chrome and Edge install the dashboard as an app and shows a friendly page when the
    local service is not running. It never touches /api/ requests, and it always prefers the network,
    so a new version of the dashboard is used right away. */
 'use strict';
-const VERSION = '4.2.1';
+const VERSION = '4.2.2';
 const CACHE = 'droid-adb-' + VERSION;
 const SHELL = ['/', '/assets/style.css', '/assets/studio.css', '/assets/xp.css', '/assets/motion.css', '/assets/core.js', '/assets/console.js', '/assets/xp-ui.js', '/assets/studio.js', '/assets/studio-plus.js', '/assets/motion.js', '/assets/manifest.webmanifest', '/assets/icon-192.png'];
 

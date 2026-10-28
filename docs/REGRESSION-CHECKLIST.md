@@ -180,7 +180,7 @@ Full steps are in docs/AUDIO.md.
 - [ ] Unplug during a session, replug, start again: the selected mode is applied; the status shows the mode that is really active.
 - [ ] Android 12 or older phone (if available): a Copy mode shows a warning and starts as Video only, or refuses the recording.
 - [ ] Streaming audio plans show the correct status for each mode; starting or stopping OBS does not stop the mirror or a recording.
-- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 4.2.1).
+- [ ] Banner does not claim the service is outdated after Launch.bat (page and service both 4.2.2).
 
 
 ## 4.2 Studio Plus and recording fix (real device)
