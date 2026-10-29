@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/images/droid-adb-logo.jpg" alt="DROID ADB" width="320"></p>
 
-# DROID ADB 5.0.0
+# DROID ADB 4.5.0
 
 A portable Windows control center for your Android phone: mirror, record, screenshot, remote-control and manage it from a local dashboard.
 
@@ -12,9 +12,6 @@ DROID ADB is powered by [scrcpy](https://github.com/Genymobile/scrcpy) v5.0.1 (G
 3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
-
-## What changed in 5.0
-5.0 adds **Capture shape** on the Console: Default (phone shape), Tablet and Window. A recording or mirror can now be the shape of a tablet or a desktop window, so OBS and TikTok LIVE Studio get a wide picture. It works by briefly resizing the phone screen (and putting it back) or by using a separate virtual display. See CHANGELOG.md.
 
 ## What changed in 4.5
 

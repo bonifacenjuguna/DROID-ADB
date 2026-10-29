@@ -220,19 +220,6 @@ Full steps are in docs/AUDIO.md.
 - [ ] Games: add a game, open Details, switch on Game Priority, press Play. Background apps are stopped, the game opens, and apps that wake up are stopped again while you play. After you leave, the guard stops.
 - [ ] Unplug and replug the phone: a Phone connected message shows on any page.
 
-## 5.0.0 capture shape (real PC, real phone)
-- [ ] Console shows Capture shape: Default, Tablet, Window. Default: a mirror and a recording are phone shaped, as in 4.5.
-- [ ] Tablet, Resize phone, then Mirror: the phone screen changes (black bars on the phone are normal), the mirror window is 16:10. Stop: the phone screen is back to its normal size and density within a few seconds, and auto-rotate is back as it was.
-- [ ] Same with Window (16:9). In OBS (Window Capture) and TikTok LIVE Studio the picture is wide, not a phone strip.
-- [ ] Mirror, then Record (runs alongside): the recording file has the same wide size as the mirror. Stop the mirror first: the recording keeps the shape and the phone is put back only after the last one stops.
-- [ ] Record on its own in Tablet: the file size matches the preset (or the scaled size the Console reported).
-- [ ] A shape bigger than the phone allows (QHD on a 1080 px wide phone) is scaled down, a note appears, and the picture keeps its shape.
-- [ ] Pull the cable during a resized session: after plugging back in, the phone returns to normal by itself. Restart the backend during a resized session: same.
-- [ ] Reset phone screen puts a deliberately changed `adb shell wm size 800x1200` back to normal.
-- [ ] Virtual display: Mirror opens a separate screen of that size (set an app to open in Settings, Video). Record while the mirror is open says it cannot, and does not record the wrong screen.
-- [ ] A custom size such as 1920x1200/240 works; a bad one (banana) is refused with a plain message and nothing on the phone changes.
-- [ ] Ctrl+K: Capture shape commands change the setting. Settings, Video shows the same values, and a profile keeps them.
-
 ## 4.5.0 saved apps (real phone)
 - [ ] Tools, Apps, three-dot menu, Save app to this PC on an app with split APKs (for example TikTok or YouTube): one .apks file appears in Downloads/AppBackups. On a simple app one .apk appears.
 - [ ] Library, Backups, Saved apps: press Install on phone for that file. The app installs and keeps its data.

@@ -1,26 +1,5 @@
 # Changelog
 
-## 5.0.0
-Capture shape: the mirror and the recording can now be the shape of a tablet or of a desktop window, not only the shape of the phone. OBS and TikTok LIVE Studio get a wide picture instead of a narrow phone strip.
-
-New
-- Console, Capture shape: three choices, **Default** (the phone shape, exactly as before), **Tablet** and **Window**. Pick a size from the list (Tablet: 10 inch 16:10 1920x1200, 11 inch 2560x1600, iPad style 4:3 2048x1536, small 1280x800, upright 1200x1920. Window: Full HD 1920x1080, QHD 2560x1440, HD+ 1600x900, HD 1280x720, Ultrawide 2560x1080) or type your own, like `1920x1200/240`. The number after the slash is the density; it decides which layout apps choose (1200 px at 240 dpi is 800 dp wide, which is what a 10 inch tablet reports). The Console shows what that means for the apps.
-- Two ways to get the shape. **Resize phone** (default) changes the phone screen size for the length of the session and puts it back when you stop. Every app works and a recording looks exactly like the mirror, also when the recording runs alongside the mirror window. **Virtual display** makes a separate screen of that size with scrcpy and leaves the phone screen alone. It starts empty (you can set an app to open on it), some apps will not open on it, and you cannot record while a mirror window is open, so the app says so instead of recording the wrong screen.
-- Safety net for Resize phone. The phone's original size, density and rotation setting are written to `Logs/shape-state.json` before anything is changed. The phone is put back when you stop, when scrcpy closes by itself, when a session fails to start, after a pulled cable (as soon as the phone is back) and after a backend restart. A Reset phone screen button is always on the Console and works even when DROID ADB has no record of resizing the phone.
-- Smart fit. Android lets a screen grow to about twice its real size on each side. A bigger shape (for example 2560x1440 on a 1080 px wide phone) is scaled down to fit with the same shape and the same layout, and the dashboard says so. A phone that still refuses is put back and you get a plain message.
-- Rotation lock while resized (on by default) stops auto-rotate from turning the wide shape sideways. The old rotation setting is put back afterwards.
-- The picture has exactly the size you picked: the Longest side limit is ignored while a shape is on (switch off Keep the exact shape size in Settings, Video to let it shrink the picture again).
-- The session list shows the shape in use. Ctrl+K has Capture shape commands.
-- Settings, Video has the same choices, so they are included in profiles and backups.
-
-Changed
-- Version 5.0.0 (a major version because capture can now change the phone's screen for a while).
-
-Not verified
-- Not run on a real phone or a real Windows PC. The Console page was tested in a real browser against a simulated service (switching, sizes, custom size, the Resized state, Reset phone screen). The PowerShell was checked by reading, a bracket check (the same check passes on every 4.5.0 file) and a check that every function it calls exists. Whether a given phone accepts the size, and whether an app opens on a virtual display, depends on the phone and cannot be known from here. Choose the shape before you open a game: changing the screen size makes Android restart or re-lay-out the app that is open.
-
-After updating, run Launch.bat again so the background service restarts with the new version.
-
 ## 4.5.0
 Apps are saved as one file, and the installer understands it.
 

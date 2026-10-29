@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '5.0.0'
+$ToolkitVersion = '4.5.0'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -156,13 +156,6 @@ $StreamAudioChoices = @((C 'none' 'Stream without game sound'), (C 'silent_pc' '
 $InputModes = @((C '' 'Default'), (C 'sdk' 'Android SDK'), (C 'uhid' 'Simulated USB (uhid)'), (C 'aoa' 'USB accessory (aoa)'), (C 'disabled' 'Disabled'))
 $Orientations = @((C '' 'Automatic'), (C '0' 'Natural'), (C '90' '90 degrees'), (C '180' '180 degrees'), (C '270' '270 degrees'), (C '@0' 'Lock natural'), (C '@90' 'Lock 90'), (C '@180' 'Lock 180'), (C '@270' 'Lock 270'))
 
-# Capture shape (5.0.0). Each size is width x height / density. The density decides which layout apps pick:
-# 1200 px at 240 dpi is 800 dp wide, which is what a 10 inch tablet reports.
-$ShapeModeChoices = @((C 'default' 'Default (phone shape)'), (C 'tablet' 'Tablet'), (C 'window' 'Window (desktop)'))
-$ShapeMethodChoices = @((C 'screen' 'Resize phone screen'), (C 'virtual' 'Virtual display'))
-$ShapeTabletChoices = @((C '1920x1200/240' 'Tablet 10 inch, 16:10 (1920x1200)'), (C '2560x1600/320' 'Tablet 11 inch sharp, 16:10 (2560x1600)'), (C '2048x1536/320' 'iPad style, 4:3 (2048x1536)'), (C '1280x800/213' 'Small tablet 8 inch, 16:10 (1280x800)'), (C '1200x1920/240' 'Tablet held upright (1200x1920)'), (C 'custom' 'Custom size'))
-$ShapeWindowChoices = @((C '1920x1080/280' 'Full HD window, 16:9 (1920x1080)'), (C '2560x1440/360' 'QHD window, 16:9 (2560x1440)'), (C '1600x900/240' 'HD+ window, 16:9 (1600x900)'), (C '1280x720/200' 'HD window, 16:9 (1280x720)'), (C '2560x1080/280' 'Ultrawide window, 21:9 (2560x1080)'), (C 'custom' 'Custom size'))
-
 $Schema = @(
     # video
     (F 'source' 'video' 'choice' 'display' 'Capture source' 'Mirror the screen, or stream the phone camera.' -Choices @((C 'display' 'Screen'), (C 'camera' 'Camera'))),
@@ -176,15 +169,6 @@ $Schema = @(
     (F 'virtualDisplaySize' 'video' 'text' '' 'Virtual display size' 'Examples: 1920x1080, 1920x1080/420 or /240 (dpi). Empty uses the main size.' -Pattern '^(\d{3,5}x\d{3,5}(/\d{2,4})?|/\d{2,4})?$' -Show @{ virtualDisplay = $true } -Placeholder '1920x1080/420'),
     (F 'crop' 'video' 'text' '' 'Crop' 'width:height:x:y in phone pixels.' -Pattern '^(\d{1,5}:\d{1,5}:\d{1,5}:\d{1,5})?$' -Show @{ source = 'display' } -Placeholder '1080:1080:0:300'),
     (F 'captureOrientation' 'video' 'choice' '' 'Capture orientation' 'Rotate or lock the captured video.' -Choices $Orientations),
-    (F 'shapeMode' 'video' 'choice' 'default' 'Capture shape' 'Default keeps the phone shape. Tablet and Window make the mirror and the recording the shape of a tablet or a desktop window, so OBS and TikTok LIVE Studio get a wide picture. You can also switch it on the Console.' -Choices $ShapeModeChoices -Show @{ source = 'display' }),
-    (F 'shapeMethod' 'video' 'choice' 'screen' 'Shape method' 'Resize phone screen works with every app, records exactly like the mirror and puts the phone back when you stop. Virtual display leaves the phone screen alone, but it starts empty, some apps will not open on it, and you cannot record while a mirror window is open.' -Choices $ShapeMethodChoices -Show @{ source = 'display'; shapeMode = @('tablet', 'window') }),
-    (F 'shapeTablet' 'video' 'choice' '1920x1200/240' 'Tablet size' 'Size and density of the tablet. Density decides which layout apps choose.' -Choices $ShapeTabletChoices -Show @{ source = 'display'; shapeMode = 'tablet' }),
-    (F 'shapeTabletCustom' 'video' 'text' '' 'Custom tablet size' 'Width x height, then an optional /density. Example: 1920x1200/240.' -Pattern '^(\d{3,5}x\d{3,5}(/\d{2,4})?)?$' -Show @{ source = 'display'; shapeMode = 'tablet'; shapeTablet = 'custom' } -Placeholder '1920x1200/240'),
-    (F 'shapeWindow' 'video' 'choice' '1920x1080/280' 'Window size' 'Size and density of the desktop window.' -Choices $ShapeWindowChoices -Show @{ source = 'display'; shapeMode = 'window' }),
-    (F 'shapeWindowCustom' 'video' 'text' '' 'Custom window size' 'Width x height, then an optional /density. Example: 1920x1080/280.' -Pattern '^(\d{3,5}x\d{3,5}(/\d{2,4})?)?$' -Show @{ source = 'display'; shapeMode = 'window'; shapeWindow = 'custom' } -Placeholder '1920x1080/280'),
-    (F 'shapeExact' 'video' 'bool' $true 'Keep the exact shape size' 'Ignore Longest side so the picture is exactly the size you picked. Turn off to let Longest side shrink it.' -Show @{ source = 'display'; shapeMode = @('tablet', 'window') }),
-    (F 'shapeLockRotation' 'video' 'bool' $true 'Lock rotation while resized' 'Stops the phone from flipping the shape sideways while its screen is resized. The old setting is put back when you stop.' -Show @{ source = 'display'; shapeMode = @('tablet', 'window'); shapeMethod = 'screen' }),
-    (F 'shapeApp' 'video' 'text' '' 'App to open on the virtual display' 'Optional package name, for example com.tencent.ig. A virtual display starts empty.' -Pattern '^([A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+)?$' -Show @{ source = 'display'; shapeMode = @('tablet', 'window'); shapeMethod = 'virtual' } -Placeholder 'com.example.game'),
     (F 'cameraFacing' 'video' 'choice' '' 'Camera facing' 'Which camera to open.' -Choices @((C '' 'Default'), (C 'front' 'Front'), (C 'back' 'Back'), (C 'external' 'External')) -Show @{ source = 'camera' }),
     (F 'cameraId' 'video' 'text' '' 'Camera id' 'Overrides the facing choice. Use scrcpy --list-cameras to find ids.' -Pattern '^[0-9]{0,3}$' -Show @{ source = 'camera' } -Placeholder 'Automatic'),
     (F 'cameraSize' 'video' 'text' '' 'Camera size' 'Example 1920x1080.' -Pattern '^(\d{3,5}x\d{3,5})?$' -Show @{ source = 'camera' } -Placeholder 'Automatic'),
@@ -1150,350 +1134,6 @@ function Get-AudioEnvironment {
 }
 
 # ---------------------------------------------------------------------------
-# Capture shape (5.0.0): Default, Tablet and Window
-#   Default : the capture has the shape of the phone (nothing is changed).
-#   Tablet / Window : the capture has the shape of a tablet or of a desktop window, so OBS and TikTok LIVE Studio
-#   get a wide picture. Two methods:
-#     screen  : the phone screen is resized for the length of the session (wm size, wm density) and put back after.
-#               Every app works and a recording looks exactly like the mirror.
-#     virtual : scrcpy makes a separate display of that size (--new-display). The phone screen is not touched.
-# What was changed on the phone is written to Logs\shape-state.json BEFORE it is changed, so the original values can
-# always be put back, even after a crash, a pulled cable or a backend restart (see Sync-PhoneShape).
-# ---------------------------------------------------------------------------
-$ShapeStateFile = Join-Path $LogDir 'shape-state.json'
-if (-not $Shared.shapeTry) { $Shared.shapeTry = [hashtable]::Synchronized(@{}) }
-
-# Turns the shape settings into one plan. Pure: it never talks to the phone, so it is safe for the command preview.
-function Resolve-ShapePlan {
-    param($S)
-    $plan = @{ mode = 'default'; active = $false; method = 'screen'; size = ''; w = 0; h = 0; dpi = 0; label = 'Default'; exact = $true; lockRotation = $true }
-    $mode = [string](Get-Prop $S 'shapeMode' 'default')
-    if ($mode -ne 'tablet' -and $mode -ne 'window') { return $plan }
-    $method = [string](Get-Prop $S 'shapeMethod' 'screen')
-    if ($method -ne 'virtual') { $method = 'screen' }
-    if ($mode -eq 'tablet') { $pick = [string](Get-Prop $S 'shapeTablet' '1920x1200/240') } else { $pick = [string](Get-Prop $S 'shapeWindow' '1920x1080/280') }
-    $text = $pick
-    if ($pick -eq 'custom') {
-        if ($mode -eq 'tablet') { $text = [string](Get-Prop $S 'shapeTabletCustom' '') } else { $text = [string](Get-Prop $S 'shapeWindowCustom' '') }
-    }
-    $w = 0
-    $h = 0
-    $dpi = 0
-    if ($text -match '^(\d{3,5})x(\d{3,5})(?:/(\d{2,4}))?$') {
-        $w = [int]$Matches[1]
-        $h = [int]$Matches[2]
-        if ($Matches[3]) { $dpi = [int]$Matches[3] }
-    } else {
-        Fail ('Type a custom ' + $mode + ' size like 1920x1200 or 1920x1200/240 in Settings, Video.')
-    }
-    if ($w -lt 320 -or $h -lt 320 -or $w -gt 7680 -or $h -gt 7680) { Fail 'The shape size must be between 320 and 7680 pixels on each side.' }
-    if ($dpi -ne 0 -and ($dpi -lt 80 -or $dpi -gt 640)) { Fail 'The shape density must be between 80 and 640 dpi.' }
-    $w = $w - ($w % 2)
-    $h = $h - ($h % 2)
-    $size = ([string]$w) + 'x' + ([string]$h)
-    if ($dpi -gt 0) { $size = $size + '/' + ([string]$dpi) }
-    if ($mode -eq 'tablet') { $word = 'Tablet' } else { $word = 'Window' }
-    $plan.mode = $mode
-    $plan.active = $true
-    $plan.method = $method
-    $plan.size = $size
-    $plan.w = $w
-    $plan.h = $h
-    $plan.dpi = $dpi
-    $plan.label = $word + ' ' + ([string]$w) + 'x' + ([string]$h)
-    $plan.exact = [bool](Get-Prop $S 'shapeExact' $true)
-    $plan.lockRotation = [bool](Get-Prop $S 'shapeLockRotation' $true)
-    return $plan
-}
-
-# One named mutex for every change to the phone screen. Held from the moment the screen is resized until the session
-# is written to the sessions file, so the background restore can never run in between.
-function Enter-ShapeLock {
-    $m = New-Object Threading.Mutex($false, 'StkShapeLock')
-    $got = $false
-    try { $got = $m.WaitOne(30000) } catch [Threading.AbandonedMutexException] { $got = $true }
-    if (-not $got) {
-        $m.Dispose()
-        Fail 'The phone screen is being changed by another request. Try again in a moment.'
-    }
-    return $m
-}
-function Exit-ShapeLock {
-    param($M)
-    if ($null -ne $M) {
-        try { $M.ReleaseMutex() } catch {}
-        try { $M.Dispose() } catch {}
-    }
-}
-
-function Read-ShapeStates {
-    if (-not (Test-Path -LiteralPath $ShapeStateFile)) { return @() }
-    return @(Get-JsonList $ShapeStateFile)
-}
-function Write-ShapeStates {
-    param($List)
-    $arr = @($List)
-    if ($arr.Count -eq 0) {
-        try { Remove-Item -LiteralPath $ShapeStateFile -Force -ErrorAction Stop } catch {}
-        return
-    }
-    Write-TextAtomic $ShapeStateFile (ConvertTo-Json -InputObject $arr -Depth 4)
-}
-function Get-ShapeStateFor {
-    param([string]$Serial)
-    foreach ($x in @(Read-ShapeStates)) { if ([string]$x.serial -eq $Serial) { return $x } }
-    return $null
-}
-function Get-ShapeStateViews {
-    $out = @()
-    try {
-        foreach ($x in @(Read-ShapeStates)) {
-            $out += , @{ serial = [string]$x.serial; label = [string](Get-Prop $x 'label' ''); w = [int](Get-Prop $x 'w' 0); h = [int](Get-Prop $x 'h' 0); dpi = [int](Get-Prop $x 'dpi' 0); fitted = [bool](Get-Prop $x 'fitted' $false) }
-        }
-    } catch {}
-    return $out
-}
-
-# The dashboard keeps the phone size for 20 seconds; forget it after the screen changes.
-function Clear-DeviceInfoCache {
-    param([string]$Serial)
-    try {
-        foreach ($k in @($Serial, '_default')) {
-            if ($k -and $Shared.info.ContainsKey($k)) { $Shared.info.Remove($k) }
-        }
-    } catch {}
-}
-
-# Reads "wm size", "wm density" and the two rotation settings in one adb call.
-function ConvertFrom-WmOutput {
-    param([string]$Text)
-    $r = @{ physW = 0; physH = 0; ovW = 0; ovH = 0; physDpi = 0; ovDpi = 0; auto = ''; user = '' }
-    if ($Text -match 'Physical size:\s*(\d+)x(\d+)') { $r.physW = [int]$Matches[1]; $r.physH = [int]$Matches[2] }
-    if ($Text -match 'Override size:\s*(\d+)x(\d+)') { $r.ovW = [int]$Matches[1]; $r.ovH = [int]$Matches[2] }
-    if ($Text -match 'Physical density:\s*(\d+)') { $r.physDpi = [int]$Matches[1] }
-    if ($Text -match 'Override density:\s*(\d+)') { $r.ovDpi = [int]$Matches[1] }
-    if ($Text -match 'rot_auto=(\S*)') { $r.auto = [string]$Matches[1] }
-    if ($Text -match 'rot_user=(\S*)') { $r.user = [string]$Matches[1] }
-    return $r
-}
-function Read-PhoneScreenState {
-    param([string]$Serial)
-    $cmd = 'wm size; wm density; echo rot_auto=$(settings get system accelerometer_rotation); echo rot_user=$(settings get system user_rotation)'
-    $r = Invoke-DeviceShell $Serial $cmd 15
-    if ($r.code -ne 0 -and ([string]$r.out).Trim() -eq '') { Fail ('The phone did not answer: ' + (([string]$r.err + ' ' + [string]$r.out).Trim())) }
-    return (ConvertFrom-WmOutput ([string]$r.out))
-}
-
-# Android lets the screen grow to about twice its real size on each side. A bigger shape is scaled down to fit, keeping
-# the same shape and the same layout (the density is scaled with it).
-function Get-ShapeFit {
-    param([int]$W, [int]$H, [int]$Dpi, [int]$PhysW, [int]$PhysH)
-    $scale = 1.0
-    if ($PhysW -gt 0 -and $W -gt (2 * $PhysW)) { $scale = [math]::Min($scale, ((2.0 * $PhysW) / $W)) }
-    if ($PhysH -gt 0 -and $H -gt (2 * $PhysH)) { $scale = [math]::Min($scale, ((2.0 * $PhysH) / $H)) }
-    if ($scale -ge 1.0) { return @{ changed = $false; w = $W; h = $H; dpi = $Dpi } }
-    $nw = [int][math]::Floor($W * $scale)
-    $nh = [int][math]::Floor($H * $scale)
-    $nw = $nw - ($nw % 2)
-    $nh = $nh - ($nh % 2)
-    $nd = 0
-    if ($Dpi -gt 0) { $nd = [int][math]::Round($Dpi * $scale) }
-    return @{ changed = $true; w = $nw; h = $nh; dpi = $nd }
-}
-
-function Send-PhoneShape {
-    param([string]$Serial, [int]$W, [int]$H, [int]$Dpi, [bool]$LockRotation)
-    $c = @(('wm size ' + [string]$W + 'x' + [string]$H))
-    if ($Dpi -gt 0) { $c += ('wm density ' + [string]$Dpi) }
-    if ($LockRotation) {
-        $c += 'settings put system accelerometer_rotation 0'
-        $c += 'settings put system user_rotation 0'
-    }
-    return (Invoke-DeviceShell $Serial ($c -join '; ') 15)
-}
-function Test-PhoneShapeApplied {
-    param([string]$Serial, [int]$W, [int]$H)
-    $now = Read-PhoneScreenState $Serial
-    $gw = $now.physW
-    $gh = $now.physH
-    if ($now.ovW -gt 0) { $gw = $now.ovW; $gh = $now.ovH }
-    return @{ ok = (($gw -eq $W) -and ($gh -eq $H)); w = $gw; h = $gh }
-}
-
-# Puts back exactly what DROID ADB found. Returns $true when the phone is confirmed back to normal.
-function Restore-PhoneShapeEntry {
-    param($St)
-    $serial = [string]$St.serial
-    Test-Serial $serial
-    $c = @()
-    $os = [string](Get-Prop $St 'origSize' '')
-    $wantW = 0
-    $wantH = 0
-    if ($os -match '^(\d{3,5})x(\d{3,5})$') {
-        $wantW = [int]$Matches[1]
-        $wantH = [int]$Matches[2]
-        $c += ('wm size ' + $os)
-    } else { $c += 'wm size reset' }
-    $od = [string](Get-Prop $St 'origDensity' '')
-    $wantD = 0
-    if ($od -match '^\d{2,4}$') {
-        $wantD = [int]$od
-        $c += ('wm density ' + $od)
-    } else { $c += 'wm density reset' }
-    if ([bool](Get-Prop $St 'rotLocked' $false)) {
-        $oa = [string](Get-Prop $St 'origAuto' '')
-        $ou = [string](Get-Prop $St 'origUser' '')
-        if ($oa -match '^[01]$') { $c += ('settings put system accelerometer_rotation ' + $oa) }
-        if ($ou -match '^[0-3]$') { $c += ('settings put system user_rotation ' + $ou) }
-    }
-    [void](Invoke-DeviceShell $serial ($c -join '; ') 15)
-    $now = Read-PhoneScreenState $serial
-    $okSize = ($now.ovW -eq $wantW) -and ($now.ovH -eq $wantH)
-    $okDpi = ($now.ovDpi -eq $wantD)
-    return ($okSize -and $okDpi)
-}
-
-# Resizes the phone screen for one session. The caller holds the shape lock. Throws (after putting the phone back)
-# when the phone refuses the size.
-function Set-PhoneShape {
-    param([string]$Serial, $Plan)
-    Test-Serial $Serial
-    $cur = Read-PhoneScreenState $Serial
-    if ($cur.physW -lt 200 -or $cur.physH -lt 200) { Fail 'DROID ADB could not read the screen size of this phone, so it did not resize it.' }
-    $states = @(Read-ShapeStates)
-    $mine = $null
-    $others = @()
-    foreach ($x in $states) { if ([string]$x.serial -eq $Serial) { $mine = $x } else { $others += , $x } }
-    $lock = [bool]$Plan.lockRotation
-    if ($null -eq $mine) {
-        $origSize = ''
-        if ($cur.ovW -gt 0) { $origSize = ([string]$cur.ovW) + 'x' + ([string]$cur.ovH) }
-        $origDpi = ''
-        if ($cur.ovDpi -gt 0) { $origDpi = [string]$cur.ovDpi }
-        $mine = @{ serial = $Serial; origSize = $origSize; origDensity = $origDpi; origAuto = [string]$cur.auto; origUser = [string]$cur.user; rotLocked = $lock; reqSize = ''; w = 0; h = 0; dpi = 0; fitted = $false; label = [string]$Plan.label; startedMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
-    } else {
-        $mine.rotLocked = ([bool](Get-Prop $mine 'rotLocked' $false) -or $lock)
-        $mine.label = [string]$Plan.label
-    }
-    # Already in the wanted shape (a restarted mirror, or a recording that follows it): change nothing.
-    $same = ([string](Get-Prop $mine 'reqSize' '') -eq [string]$Plan.size) -and ([int](Get-Prop $mine 'w' 0) -gt 0) -and ($cur.ovW -eq [int]$mine.w) -and ($cur.ovH -eq [int]$mine.h)
-    if ($same) {
-        Write-ShapeStates (@($others) + @(, $mine))
-        return @{ w = [int]$mine.w; h = [int]$mine.h; dpi = [int]$mine.dpi; fitted = [bool](Get-Prop $mine 'fitted' $false); unchanged = $true }
-    }
-    # The originals are saved BEFORE anything is changed.
-    Write-ShapeStates (@($others) + @(, $mine))
-    $w = [int]$Plan.w
-    $h = [int]$Plan.h
-    $dpi = [int]$Plan.dpi
-    $fitted = $false
-    [void](Send-PhoneShape $Serial $w $h $dpi $lock)
-    Start-Sleep -Milliseconds 400
-    $chk = Test-PhoneShapeApplied $Serial $w $h
-    if (-not $chk.ok) {
-        $fit = Get-ShapeFit $w $h $dpi $cur.physW $cur.physH
-        if ($fit.changed) {
-            $w = [int]$fit.w
-            $h = [int]$fit.h
-            $dpi = [int]$fit.dpi
-            [void](Send-PhoneShape $Serial $w $h $dpi $lock)
-            Start-Sleep -Milliseconds 400
-            $chk = Test-PhoneShapeApplied $Serial $w $h
-            $fitted = [bool]$chk.ok
-        }
-    }
-    if (-not $chk.ok) {
-        $back = $false
-        try { $back = Restore-PhoneShapeEntry $mine } catch {}
-        if ($back) { Write-ShapeStates @($others) }
-        Fail ('This phone would not switch its screen to ' + [string]$Plan.w + 'x' + [string]$Plan.h + ' (it reported ' + [string]$chk.w + 'x' + [string]$chk.h + '). Pick a smaller size, or use the Virtual display method in Settings, Video.')
-    }
-    $mine.reqSize = [string]$Plan.size
-    $mine.w = $w
-    $mine.h = $h
-    $mine.dpi = $dpi
-    $mine.fitted = $fitted
-    Write-ShapeStates (@($others) + @(, $mine))
-    Clear-DeviceInfoCache $Serial
-    $txt = 'Phone screen set to ' + [string]$Plan.label + ' for this session. It is put back when you stop.'
-    if ($fitted) { $txt = 'Phone screen set to ' + ([string]$w) + 'x' + ([string]$h) + ' (the ' + [string]$Plan.label + ' shape, scaled down because this phone allows at most twice its own size). It is put back when you stop.' }
-    Add-Activity 'system' $txt
-    Start-Sleep -Milliseconds 600
-    return @{ w = $w; h = $h; dpi = $dpi; fitted = $fitted; unchanged = $false }
-}
-
-# Puts every resized phone back once nothing is capturing it. Cheap when nothing was resized (one file check).
-# Called by the background ticker, when a session is stopped and before a session that does not want a resize.
-# A phone that is unplugged keeps its record and is put back as soon as it returns.
-function Sync-PhoneShape {
-    param([switch]$Force)
-    if (-not (Test-Path -LiteralPath $ShapeStateFile)) { return $false }
-    $lock = Enter-ShapeLock
-    $restored = $false
-    try {
-        $states = @(Read-ShapeStates)
-        if ($states.Count -eq 0) { return $false }
-        $live = @(Get-LiveSessions)
-        $keep = @()
-        foreach ($st in $states) {
-            $serial = [string]$st.serial
-            $busy = (@($live | Where-Object { (-not $serial) -or (-not $_.serial) -or ($_.serial -eq $serial) }).Count -gt 0)
-            if ($busy -and -not $Force) { $keep += , $st; continue }
-            # Skip a phone that is known to be unplugged (the device list is only filled inside the backend).
-            if ($serial -and (@($Shared.devices | Where-Object { $null -ne $_ }).Count -gt 0)) {
-                $online = (@($Shared.devices | Where-Object { $null -ne $_ -and $_.id -eq $serial -and $_.state -eq 'device' }).Count -gt 0)
-                if (-not $online) { $keep += , $st; continue }
-            }
-            $tk = 'k:' + $serial
-            $rec = $Shared.shapeTry[$tk]
-            if ((-not $Force) -and $rec) {
-                $wait = 8
-                if ([int]$rec.n -ge 5) { $wait = 60 }
-                if (((Get-Date) - $rec.at).TotalSeconds -lt $wait) { $keep += , $st; continue }
-            }
-            $ok = $false
-            try { $ok = [bool](Restore-PhoneShapeEntry $st) } catch { if (-not $rec) { Write-BackendLog ('Shape restore: ' + $_.Exception.Message) } }
-            if ($ok) {
-                $restored = $true
-                $Shared.shapeTry.Remove($tk)
-                Clear-DeviceInfoCache $serial
-                Add-Activity 'system' 'Phone screen put back to its normal size.'
-            } else {
-                $n = 1
-                if ($rec) { $n = [int]$rec.n + 1 }
-                $Shared.shapeTry[$tk] = @{ at = (Get-Date); n = $n }
-                $keep += , $st
-            }
-        }
-        Write-ShapeStates $keep
-    } finally { Exit-ShapeLock $lock }
-    return $restored
-}
-
-# The "Reset phone screen" button: always works, even when DROID ADB has no record of resizing this phone.
-function Reset-PhoneScreen {
-    param([string]$Serial)
-    Test-Serial $Serial
-    $lock = Enter-ShapeLock
-    try {
-        $mine = Get-ShapeStateFor $Serial
-        if ($null -ne $mine) {
-            $ok = [bool](Restore-PhoneShapeEntry $mine)
-            if (-not $ok) { Fail 'The phone did not accept the reset. Unlock it, check the cable and try again.' }
-            $rest = @(Read-ShapeStates | Where-Object { [string]$_.serial -ne $Serial })
-            Write-ShapeStates $rest
-        } else {
-            $r = Invoke-DeviceShell $Serial 'wm size reset; wm density reset' 15
-            if ($r.code -ne 0) { Fail ('The phone did not accept the reset: ' + (([string]$r.err + ' ' + [string]$r.out).Trim())) }
-        }
-        $Shared.shapeTry.Remove('k:' + $Serial)
-        Clear-DeviceInfoCache $Serial
-        Add-Activity 'system' 'Phone screen reset to its normal size.'
-    } finally { Exit-ShapeLock $lock }
-    return 'The phone screen is back to its normal size.'
-}
-
-# ---------------------------------------------------------------------------
 # Building the scrcpy command line
 # ---------------------------------------------------------------------------
 function New-ScrcpyArgs {
@@ -1503,9 +1143,6 @@ function New-ScrcpyArgs {
     $companion = [bool]$Once.companion
     $headless = ($Mode -eq 'record' -and ([bool]$S.recordWindowless -or $companion))
     $a = New-Object System.Collections.ArrayList
-    # 5.0.0: capture shape (Default, Tablet, Window). Pure: the phone is never touched here.
-    $shape = Resolve-ShapePlan $S
-    $shapeOn = ($shape.active -and ([string]$S.source -ne 'camera'))
     if ($Serial) { [void]$a.Add('-s ' + $Serial) }
     # video
     if ($S.source -eq 'camera') {
@@ -1513,12 +1150,7 @@ function New-ScrcpyArgs {
         if ($S.cameraId -ne '') { [void]$a.Add('--camera-id=' + $S.cameraId) } elseif ($S.cameraFacing -ne '') { [void]$a.Add('--camera-facing=' + $S.cameraFacing) }
         if ($S.cameraSize -ne '') { [void]$a.Add('--camera-size=' + $S.cameraSize) }
     } else {
-        if ($shapeOn -and $shape.method -eq 'virtual' -and -not $companion) {
-            [void]$a.Add('--new-display=' + $shape.size)
-            $vdApp = [string]$Once.startApp
-            if ($vdApp -eq '') { $vdApp = [string]$S.shapeApp }
-            if ($vdApp -ne '') { [void]$a.Add('--start-app=' + $vdApp) }
-        } elseif ($S.virtualDisplay -and -not $companion) {
+        if ($S.virtualDisplay -and -not $companion) {
             if ($S.virtualDisplaySize -ne '') { [void]$a.Add('--new-display=' + $S.virtualDisplaySize) } else { [void]$a.Add('--new-display') }
             if ($Once.startApp) { [void]$a.Add('--start-app=' + $Once.startApp) }
         } else {
@@ -1536,7 +1168,7 @@ function New-ScrcpyArgs {
         $qFps = [int]$S.recordMaxFps
         $qMbps = [int]$S.recordBitrateMbps
     }
-    if ($qSize -gt 0 -and -not ($shapeOn -and $shape.exact)) { [void]$a.Add('--max-size=' + $qSize) }
+    if ($qSize -gt 0) { [void]$a.Add('--max-size=' + $qSize) }
     [void]$a.Add('--max-fps=' + $qFps)
     [void]$a.Add('--video-bit-rate=' + $qMbps + 'M')
     [void]$a.Add('--video-codec=' + $S.codec)
@@ -1745,7 +1377,7 @@ function Get-SessionView {
     param($S)
     $size = [long]0
     if ($S.mode -eq 'record' -and $S.path -and (Test-Path -LiteralPath $S.path)) { try { $size = [long](Get-Item -LiteralPath $S.path).Length } catch {} }
-    return @{ id = $S.id; pid = [int]$S.pid; mode = $S.mode; recording = ($S.mode -eq 'record'); type = $(if ($S.mode -eq 'record') { 'Recording' } else { 'Mirroring' }); serial = [string]$S.serial; started = ([DateTimeOffset]::FromUnixTimeMilliseconds([long]$S.startedMs).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')); file = [string]$S.fileName; fileSize = $size; headless = [bool]$S.headless; companion = [bool]$S.companion; app = [string]$S.app; shape = [string](Get-Prop $S 'shape' ''); audio = (Get-Prop $S 'audio' $null); audioState = (Get-SessionAudioState $S) }
+    return @{ id = $S.id; pid = [int]$S.pid; mode = $S.mode; recording = ($S.mode -eq 'record'); type = $(if ($S.mode -eq 'record') { 'Recording' } else { 'Mirroring' }); serial = [string]$S.serial; started = ([DateTimeOffset]::FromUnixTimeMilliseconds([long]$S.startedMs).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')); file = [string]$S.fileName; fileSize = $size; headless = [bool]$S.headless; companion = [bool]$S.companion; app = [string]$S.app; audio = (Get-Prop $S 'audio' $null); audioState = (Get-SessionAudioState $S) }
 }
 
 function Get-ChildPid {
@@ -1815,19 +1447,6 @@ function Start-ToolkitScrcpy {
     } else {
         if ($viewer.Count -gt 0) { Fail 'A scrcpy window is already open for this phone. Stop it first.' }
     }
-    # 5.0.0: capture shape. Resolved first, so a bad custom size fails before anything on the phone is touched.
-    $shape = Resolve-ShapePlan $settings
-    $shapeOn = ($shape.active -and ([string]$settings.source -ne 'camera'))
-    $wantsResize = ($shapeOn -and $shape.method -eq 'screen')
-    $shapeLabel = ''
-    $shapeNote = ''
-    if ($shapeOn) { $shapeLabel = [string]$shape.label }
-    if ($shapeOn -and $shape.method -eq 'virtual') {
-        if ($companion) { Fail 'A virtual display cannot be recorded from a second window. Close the mirror and record on its own, or set Shape method to Resize phone screen in Settings, Video.' }
-        if ($Mode -eq 'mirror' -and $recorder.Count -gt 0) { Fail 'A recording is already running. With the virtual display the mirror and the recording would be two different screens. Stop the recording first, or set Shape method to Resize phone screen in Settings, Video.' }
-    }
-    # Leftovers from an earlier resize are put back first, unless this session wants a resize itself.
-    if ($mine.Count -eq 0 -and -not $wantsResize) { try { [void](Sync-PhoneShape) } catch { Write-BackendLog ('Shape restore before start: ' + $_.Exception.Message) } }
     $id = [guid]::NewGuid().ToString('N').Substring(0, 8)
     $out = ''
     $fileName = ''
@@ -1840,22 +1459,6 @@ function Start-ToolkitScrcpy {
     $plan = $sink.plan
     if ($Mode -eq 'record' -and $plan.fallback -and [bool]$settings.audioRequire) {
         Fail ('Recording not started. ' + $plan.reason + ' Pick Video only in Settings, Audio, or switch off "Stop a recording if its sound cannot be captured".')
-    }
-    $shapeLock = $null
-    $shapeApplied = $false
-    try {
-    if ($wantsResize) {
-        if ($mine.Count -eq 0) {
-            $shapeLock = Enter-ShapeLock
-            $applied = Set-PhoneShape $Serial $shape
-            $shapeApplied = $true
-            if ($applied.fitted) { $shapeNote = 'This phone allows at most twice its own size, so the picture is ' + [string]$applied.w + 'x' + [string]$applied.h + ' (same ' + [string]$shape.mode + ' shape, scaled down).' }
-        } elseif ($null -eq (Get-ShapeStateFor $Serial)) {
-            # Another session is already capturing the phone in its normal shape. The screen is not resized under it.
-            $shapeLabel = ''
-            $shapeNote = 'The phone is already being captured in its normal shape, so this one has the phone shape too. Stop both and start again to get the ' + [string]$shape.mode + ' shape.'
-            Add-Activity 'system' $shapeNote
-        }
     }
     $log = Join-Path $LogDir ('session-' + $id + '.log')
     $psi = New-Object Diagnostics.ProcessStartInfo
@@ -1876,7 +1479,7 @@ function Start-ToolkitScrcpy {
     $proc = [Diagnostics.Process]::Start($psi)
     $startTicks = [long]0
     try { $startTicks = $proc.StartTime.ToUniversalTime().Ticks } catch {}
-    $session = @{ id = $id; pid = [int]$proc.Id; procStart = $startTicks; mode = $Mode; serial = $Serial; startedMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); path = $out; fileName = $fileName; headless = ($Mode -eq 'record' -and ([bool]$settings.recordWindowless -or $companion)); companion = $companion; log = $log; app = [string]$Once.startApp; shape = $shapeLabel; shapeNote = $shapeNote; audio = (ConvertTo-AudioView $plan) }
+    $session = @{ id = $id; pid = [int]$proc.Id; procStart = $startTicks; mode = $Mode; serial = $Serial; startedMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); path = $out; fileName = $fileName; headless = ($Mode -eq 'record' -and ([bool]$settings.recordWindowless -or $companion)); companion = $companion; log = $log; app = [string]$Once.startApp; audio = (ConvertTo-AudioView $plan) }
     Use-SessionFile { $list = @(Read-Sessions); $list += , $session; Write-Sessions $list }
     # keep only the newest session logs
     try {
@@ -1884,11 +1487,6 @@ function Start-ToolkitScrcpy {
         foreach ($o in $old) { Remove-Item -LiteralPath $o.FullName -Force -ErrorAction SilentlyContinue }
     } catch {}
     return $session
-    } catch {
-        # Nothing may be left resized when the capture could not start.
-        if ($shapeApplied) { try { [void](Sync-PhoneShape) } catch { Write-BackendLog ('Shape restore after failed start: ' + $_.Exception.Message) } }
-        throw
-    } finally { Exit-ShapeLock $shapeLock }
 }
 
 # ---------------------------------------------------------------------------
