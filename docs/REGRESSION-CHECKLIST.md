@@ -219,3 +219,9 @@ Full steps are in docs/AUDIO.md.
 - [ ] Studio, Apps: Stop on one app works; a starred app cannot be stopped by Stop all others.
 - [ ] Games: add a game, open Details, switch on Game Priority, press Play. Background apps are stopped, the game opens, and apps that wake up are stopped again while you play. After you leave, the guard stops.
 - [ ] Unplug and replug the phone: a Phone connected message shows on any page.
+
+## 4.5.0 saved apps (real phone)
+- [ ] Tools, Apps, three-dot menu, Save app to this PC on an app with split APKs (for example TikTok or YouTube): one .apks file appears in Downloads/AppBackups. On a simple app one .apk appears.
+- [ ] Library, Backups, Saved apps: press Install on phone for that file. The app installs and keeps its data.
+- [ ] Tools, Apps, Install app: choose the .apks file. It installs. Choose a base .apk plus its split_config .apk files together: they install as one set.
+- [ ] Install an .xapk from the web. It installs; an .obb note appears if the game has data files.

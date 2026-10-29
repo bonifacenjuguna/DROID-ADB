@@ -843,41 +843,148 @@ $Routes['POST /api/app'] = { param($Ctx)
             $out.info = $info
         }
         'pullapk' {
+            # 4.5.0: an app is often one main APK plus extra "split" APKs. They are saved as ONE file: a plain .apk when the app
+            # has a single part, or an .apks bundle (a zip of the parts) when it has several. Install reads both.
             $r = Invoke-DeviceShell $serial ('pm path ' + $pkg) 15
             $paths = @()
             foreach ($line in ($r.out -split "`r?`n")) { if ($line -match '^package:(/[A-Za-z0-9._/=\-~]+\.apk)\s*$') { $paths += $Matches[1] } }
             if ($paths.Count -eq 0) { Fail 'Could not find that app on the phone.' }
-            $dir = Join-Path (Get-Dir 'downloads') $pkg
-            if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-            $sel = Resolve-Target $serial
-            foreach ($p in $paths) {
-                $pull = Invoke-Adb ($sel + 'pull ' + $p + ' "' + $dir + '"') 120
-                if ($pull.code -ne 0) { Fail ('Could not copy the APK: ' + ($pull.err + $pull.out).Trim()) }
-            }
-            Add-Activity 'app' ('Saved APK of ' + $pkg)
-            $out.message = 'Saved ' + $paths.Count + ' APK file(s) to ' + $dir; $out.folder = $dir
+            $ver = ''
+            $vr = Invoke-DeviceShell $serial ('dumpsys package ' + $pkg + ' | grep -m1 versionName') 15
+            if ([string]$vr.out -match 'versionName=(\S+)') { $ver = ($Matches[1] -replace '[^A-Za-z0-9._\-]', '_') }
+            if ($ver.Length -gt 30) { $ver = $ver.Substring(0, 30) }
+            $dir = Join-Path (Get-Dir 'downloads') 'AppBackups'
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            $stem = $pkg
+            if ($ver -ne '') { $stem = $pkg + '_v' + $ver }
+            $tmpDir = Join-Path $LogDir ('pullapk-' + [guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+            try {
+                $sel = Resolve-Target $serial
+                foreach ($p in $paths) {
+                    $pull = Invoke-Adb ($sel + 'pull ' + $p + ' "' + $tmpDir + '"') 120
+                    if ($pull.code -ne 0) { Fail ('Could not copy the APK: ' + ($pull.err + $pull.out).Trim()) }
+                }
+                $got = @(Get-ChildItem -LiteralPath $tmpDir -Filter '*.apk' -File | Sort-Object Name)
+                if ($got.Count -eq 0) { Fail 'The phone did not give the APK file.' }
+                if ($got.Count -eq 1) {
+                    $final = Join-Path $dir ($stem + '.apk')
+                    Copy-Item -LiteralPath $got[0].FullName -Destination $final -Force
+                } else {
+                    Add-Type -AssemblyName System.IO.Compression.FileSystem
+                    $final = Join-Path $dir ($stem + '.apks')
+                    if (Test-Path -LiteralPath $final) { Remove-Item -LiteralPath $final -Force }
+                    $zip = [IO.Compression.ZipFile]::Open($final, [IO.Compression.ZipArchiveMode]::Create)
+                    try {
+                        foreach ($g in $got) { [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $g.FullName, $g.Name, [IO.Compression.CompressionLevel]::NoCompression) }
+                        $meta = $zip.CreateEntry('droidadb.json')
+                        $sw = New-Object IO.StreamWriter($meta.Open())
+                        try { $sw.Write((@{ package = $pkg; version = $ver; parts = $got.Count; saved = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss'); by = 'DROID ADB' } | ConvertTo-Json -Compress)) } finally { $sw.Dispose() }
+                    } finally { $zip.Dispose() }
+                }
+            } finally { Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue }
+            $leaf = Split-Path -Leaf $final
+            Add-Activity 'app' ('Saved ' + $leaf)
+            $out.message = 'Saved ' + $leaf + $(if ($got.Count -gt 1) { ' (' + $got.Count + ' parts in one file)' } else { '' })
+            $out.folder = $dir; $out.file = $leaf
         }
         default { Fail 'Unknown app action.' }
     }
     Send-Json $Ctx $out
 }
 
+# 4.5.0: installs one .apk, several .apk files as one set, or a bundle (.apks, .xapk, .apkm: a zip of APKs).
+function Install-AppPackage {
+    param([string]$Serial, [string[]]$Files)
+    $sel = Resolve-Target $Serial
+    $apks = @()
+    $hasObb = $false
+    $tmpDir = Join-Path $LogDir ('unpack-' + [guid]::NewGuid().ToString('N'))
+    try {
+        $n = 0
+        foreach ($f in $Files) {
+            if ($f -match '(?i)\.(apks|xapk|apkm)$') {
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+                $zip = [IO.Compression.ZipFile]::OpenRead($f)
+                try {
+                    $total = [long]0
+                    foreach ($e in $zip.Entries) {
+                        $leaf = [IO.Path]::GetFileName($e.FullName)
+                        if ($leaf -match '(?i)\.obb$') { $hasObb = $true; continue }
+                        if ($leaf -notmatch '(?i)^[A-Za-z0-9._\-+ ()]{1,120}\.apk$') { continue }
+                        $n++
+                        if ($n -gt 60) { Fail 'That bundle has too many APK files.' }
+                        $total += [long]$e.Length
+                        if ($total -gt 4GB) { Fail 'That bundle is too large.' }
+                        $dest = Join-Path $tmpDir (('{0:00}' -f $n) + '_' + $leaf)
+                        [IO.Compression.ZipFileExtensions]::ExtractToFile($e, $dest, $true)
+                        $apks += $dest
+                    }
+                } finally { $zip.Dispose() }
+            } else { $apks += $f }
+        }
+        if ($apks.Count -eq 0) { Fail 'No APK files were found to install.' }
+        if ($apks.Count -eq 1) { $cmd = $sel + 'install -r -d "' + $apks[0] + '"' }
+        else { $cmd = $sel + 'install-multiple -r -d ' + (($apks | ForEach-Object { '"' + $_ + '"' }) -join ' ') }
+        $r = Invoke-Adb $cmd 900
+        $text = ($r.out + $r.err).Trim()
+        if ($text -notmatch 'Success') { Fail ('Install failed: ' + $text) }
+        $msg = 'Installed' + $(if ($apks.Count -gt 1) { ' (' + $apks.Count + ' parts)' } else { '' }) + '.'
+        if ($hasObb) { $msg += ' This bundle also has game data files (.obb) that are not copied; copy them to Android/obb on the phone if the game asks for them.' }
+        return $msg
+    } finally { Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
 $Routes['POST /api/install'] = { param($Ctx)
     $serial = Get-Query $Ctx 'id'
     $name = Get-Query $Ctx 'name'
-    if ($name -notmatch '^[A-Za-z0-9._ \-()]{1,100}\.apk$') { Fail 'Choose an .apk file.' }
-    $sel = Resolve-Target $serial
-    $dir = Join-Path $LogDir ('upload-' + [guid]::NewGuid().ToString('N'))
+    $stage = Get-Query $Ctx 'stage'
+    $last = ((Get-Query $Ctx 'last') -ne '0')
+    if ($name -notmatch '^[A-Za-z0-9._ \-()+]{1,120}\.(apk|apks|xapk|apkm)$') { Fail 'Choose an .apk file, or an .apks, .xapk or .apkm bundle.' }
+    if ($stage -ne '' -and $stage -notmatch '^[a-f0-9]{8,32}$') { Fail 'That install set is not valid.' }
+    [void](Resolve-Target $serial)
+    try { Get-ChildItem -LiteralPath $LogDir -Directory -Filter 'upload-set-*' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddHours(-6) } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue } catch { }
+    if ($stage -eq '') { $dir = Join-Path $LogDir ('upload-' + [guid]::NewGuid().ToString('N')) } else { $dir = Join-Path $LogDir ('upload-set-' + $stage) }
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $keep = $false
     try {
         $file = Join-Path $dir $name
         [void](Save-Upload $Ctx $file)
-        $r = Invoke-Adb ($sel + 'install -r -d "' + $file + '"') 600
-        $text = ($r.out + $r.err).Trim()
-        if ($text -notmatch 'Success') { Fail ('Install failed: ' + $text) }
-        Add-Activity 'app' ('Installed ' + $name)
-        Send-Json $Ctx @{ ok = $true; message = 'Installed ' + $name + '.' }
-    } finally { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue }
+        if (-not $last) {
+            $keep = $true
+            Send-Json $Ctx @{ ok = $true; staged = $true; message = 'Waiting for the other files...' }
+            return
+        }
+        $files = @(Get-ChildItem -LiteralPath $dir -File | Sort-Object Name | ForEach-Object { $_.FullName })
+        $msg = Install-AppPackage $serial $files
+        Add-Activity 'app' ('Installed ' + $name + $(if ($files.Count -gt 1) { ' and ' + ($files.Count - 1) + ' more' } else { '' }))
+        Send-Json $Ctx @{ ok = $true; message = $msg }
+    } finally { if (-not $keep) { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue } }
+}
+
+$Routes['GET /api/appbackups'] = { param($Ctx)
+    $dir = Join-Path (Get-Dir 'downloads') 'AppBackups'
+    $out = @()
+    if (Test-Path -LiteralPath $dir) {
+        foreach ($f in @(Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '(?i)^\.(apk|apks|xapk|apkm)$' } | Sort-Object LastWriteTimeUtc -Descending)) {
+            $out += , @{ name = $f.Name; size = [long]$f.Length; modified = $f.LastWriteTimeUtc.ToString('yyyy-MM-ddTHH:mm:ss.fffZ'); bundle = ($f.Extension -ne '.apk') }
+        }
+    }
+    Send-Json $Ctx @{ root = $dir; apps = @($out) }
+}
+
+$Routes['POST /api/appbackup-install'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $serial = [string](Get-Prop $body 'serial' '')
+    Test-Serial $serial
+    $name = [string](Get-Prop $body 'name' '')
+    if ($name -notmatch '^[A-Za-z0-9._ \-()+]{1,160}\.(apk|apks|xapk|apkm)$') { Fail 'Choose a saved app.' }
+    $file = Join-Path (Join-Path (Get-Dir 'downloads') 'AppBackups') $name
+    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { Fail 'That saved app is not in the AppBackups folder any more.' }
+    $msg = Install-AppPackage $serial @($file)
+    Add-Activity 'app' ('Installed ' + $name + ' from a saved app')
+    Send-Json $Ctx @{ ok = $true; message = $msg }
 }
 
 $Routes['GET /api/files'] = { param($Ctx)
@@ -1189,6 +1296,7 @@ $Routes['POST /api/open-folder'] = { param($Ctx)
         'screenshots' { $dir = Get-Dir 'screenshots' }
         'downloads' { $dir = Get-Dir 'downloads' }
         'backups' { $dir = Join-Path (Get-Dir 'downloads') 'Backups'; New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+        'appbackups' { $dir = Join-Path (Get-Dir 'downloads') 'AppBackups'; New-Item -ItemType Directory -Force -Path $dir | Out-Null }
         'logs' { $dir = $LogDir }
         'root' { $dir = $Root }
         default { Fail 'Unknown folder.' }

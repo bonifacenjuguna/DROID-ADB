@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.5.0
+Apps are saved as one file, and the installer understands it.
+
+Changed
+- Save app to this PC (Tools, Apps, three-dot menu) now makes ONE file in Downloads/AppBackups. An app with a single APK is saved as `package_vVERSION.apk`. An app with extra split APKs (the usual cause of getting 3 files) is saved as `package_vVERSION.apks`, a zip of all its parts with a small note inside. Before, every part was copied separately into a folder.
+- Install app (Tools, Apps) accepts an `.apk`, a bundle (`.apks`, `.xapk`, `.apkm`), or several files chosen at once. Several files are sent as one set and installed together with `adb install-multiple`, which is what an app with split APKs needs. If a bundle contains game data files (.obb) they are not copied and a note says so.
+- Library, Backups has a new Saved apps panel: each saved app with an Install on phone button, and an Open folder button. Reinstalling uses `-r -d`, so it replaces the installed version and keeps the app's data on the phone. It restores the app, not logins or game progress that only exist on a PC copy.
+- Folder backups (photos, screenshots) stay real folders, so you can browse them and the next run only copies what is new.
+
+Not verified
+- Not run on a real phone. The page was tested against a simulated service (Saved apps list, Install on phone request, a two-file install set). The PowerShell (zip bundle, install-multiple) was checked by reading, a bracket check and a check that every function it calls exists.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
+
 ## 4.4.0
 Clickable buttons fixed, a start-up loader, a new Apps page, the Boost rocket, a better profile panel, a full game library with Game Priority, a Photos / Videos Phone gallery and the new file names.
 

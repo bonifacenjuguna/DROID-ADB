@@ -13,5 +13,6 @@ Things we agreed to come back to. Nothing here is lost; none of it is switched o
 - Recording and mirroring in one scrcpy instead of a hidden second recorder, to save the phone one video encoder.
 - A smooth MP4 copy for the preview. Needs ffmpeg, which is not bundled.
 
-## Backup (needs a decision)
-- Waiting for an answer: should one backup be a single file (one zip) instead of copying many loose files and folders, and what exactly "installing app" should do with it (restore the apps from the backup, or the Install app button at the top).
+## Backup
+- Done in 4.5.0 for apps (one file per app, installable). Still open: an optional "pack a folder backup into one zip when finished" switch, if you want it.
+- Not possible without root: copying an app's private data (logins, game progress).

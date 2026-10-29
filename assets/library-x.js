@@ -157,6 +157,7 @@ $('#dlg-pic').addEventListener('keydown', e => { if (e.key === 'ArrowLeft' && !$
 /* ---------- backups ---------- */
 const PRESETS = [['camera', 'Camera photos and videos', '/sdcard/DCIM', true], ['shots', 'Screenshots', '/sdcard/Pictures/Screenshots', true], ['pictures', 'Pictures', '/sdcard/Pictures', false], ['movies', 'Movies', '/sdcard/Movies', false], ['downloads', 'Downloads', '/sdcard/Download', false], ['docs', 'Documents', '/sdcard/Documents', false], ['whatsapp', 'WhatsApp media', '/sdcard/Android/media/com.whatsapp/WhatsApp/Media', false], ['rec', 'Phone screen recordings', '/sdcard/Recordings', false]];
 let past = null;
+let abk = null; // 4.5.0: saved apps (one file each)
 async function renderBackups() {
   const box = $('#lib-backups');
   const checked = STK.store.get('backup-sel', PRESETS.filter(p => p[3]).map(p => p[0]));
@@ -167,8 +168,12 @@ async function renderBackups() {
     <label class="ff"><span>Another folder on the phone</span><input id="bk-extra" placeholder="/sdcard/MyFolder" autocomplete="off" spellcheck="false"></label>
     <div class="row"><button class="btn primary" id="bk-start">${icon('cloud', 'sm')}<span>Start backup</span></button><span class="hint">Runs in the background. Follow it with the jobs button.</span></div></section></div>
     <div class="col"><section class="panel flush"><header class="panel-head" style="padding:14px 16px 0"><h2>Backups on this PC</h2><button class="btn sm" id="bk-open">${icon('folder', 'sm')}<span>Open folder</span></button></header><div>${old}</div></section></div></div>`;
+  const apps = abk ? (abk.apps.map(a => `<div class="row-file"><span class="badge">${icon('apps')}</span><div><b>${esc(a.name)}</b><small>${a.bundle ? 'One file with all its parts' : 'One APK'} · saved ${esc(STK.ago(a.modified))}</small></div><span class="size">${bytes(a.size)}</span><div class="row-actions"><button class="btn sm primary" data-ab="install" data-name="${esc(a.name)}">${icon('upload', 'sm')}<span>Install on phone</span></button></div></div>`).join('') || '<p class="hint" style="padding:14px">No saved apps yet. In Tools, Apps, open the three-dot menu of an app and choose Save app to this PC.</p>') : '<p class="hint" style="padding:14px">Reading...</p>';
+  box.insertAdjacentHTML('beforeend', `<section class="panel flush" style="margin-top:16px"><header class="panel-head" style="padding:14px 16px 0"><h2>Saved apps</h2><button class="btn sm" id="ab-open">${icon('folder', 'sm')}<span>Open folder</span></button></header><p class="hint" style="padding:0 16px">Each app is one file. An .apk or an .apks bundle can be installed back on a phone with one tap. This restores the app, not its logins or game progress.</p><div>${apps}</div></section>`);
   if (!past) { try { past = await STK.api('/backups'); if (xtab === 'backups') renderBackups(); } catch (e) { past = { backups: [] }; } }
+  if (!abk) { try { abk = await STK.api('/appbackups'); if (xtab === 'backups') renderBackups(); } catch (e) { abk = { apps: [] }; } }
 }
+STK.on('device-changed', () => { abk = null; });
 STK.on('job-done', j => { if (j.kind === 'backup') { past = null; if (xtab === 'backups') renderBackups(); } });
 
 /* ---------- annotate ---------- */
@@ -258,6 +263,11 @@ document.addEventListener('click', e => {
   }
   if (t.dataset.bk) { const sel = $$('#bk-checks [data-bk]').filter(x => x.checked).map(x => x.dataset.bk); STK.store.set('backup-sel', sel); return; }
   if (t.id === 'bk-open') return STK.post('/open-folder', { kind: 'backups' }).catch(STK.fail);
+  if (t.id === 'ab-open') return STK.post('/open-folder', { kind: 'appbackups' }).catch(STK.fail);
+  if (t.dataset.ab === 'install') return (async () => {
+    const id = STK.sel(); if (!id) return STK.toast('Connect a phone first.', 'bad');
+    await STK.busy(t, async () => { try { const r = await STK.post('/appbackup-install', { serial: id, name: t.dataset.name }, { timeout: 900000 }); STK.toast(r.message || 'Installed.'); } catch (er) { STK.fail(er); } });
+  })();
   if (t.id === 'bk-start') return (async () => {
     const id = STK.sel(); if (!id) return STK.toast('Connect a phone first.', 'bad');
     const paths = $$('#bk-checks [data-bk]').filter(x => x.checked).map(x => PRESETS.find(p => p[0] === x.dataset.bk)[2]);

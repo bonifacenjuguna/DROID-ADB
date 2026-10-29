@@ -85,7 +85,7 @@ function renderApps() {
   const box = $('#ptab-apps');
   if (!$('#app-filter', box)) {
     STK.setHtml(box, `<section class="panel"><header class="panel-head"><h2>Apps</h2><div class="row tight"><div class="seg mini" id="app-scope"><button data-scope="user">Installed</button><button data-scope="system">System</button><button data-scope="all">All</button></div><button class="btn sm" id="app-reload">${icon('refresh', 'sm')}<span>Reload</span></button></div></header>
-    <div class="row"><div class="search"><svg class="ic sm"><use href="#i-search"/></svg><input id="app-filter" type="search" placeholder="Filter by package name" autocomplete="off" aria-label="Filter apps"></div><label class="btn" for="apk-file">${icon('upload', 'sm')}<span>Install APK</span></label><input id="apk-file" type="file" accept=".apk" hidden></div>
+    <div class="row"><div class="search"><svg class="ic sm"><use href="#i-search"/></svg><input id="app-filter" type="search" placeholder="Filter by package name" autocomplete="off" aria-label="Filter apps"></div><label class="btn" for="apk-file">${icon('upload', 'sm')}<span>Install app</span></label><input id="apk-file" type="file" accept=".apk,.apks,.xapk,.apkm" multiple hidden></div>
     <div class="progress" id="apk-progress" hidden><i></i></div><p class="hint" id="app-count"></p><div class="applist" id="app-list"></div></section>`);
     $('#app-filter').value = P.appFilter;
   }
@@ -109,7 +109,7 @@ async function appAction(pkg, action, btn, extra) {
   STK.toast(r.message || 'Done.');
   if (['uninstall', 'disable', 'enable'].includes(action) && P.tab === 'apps') loadApps(true);
   if (P.tab === 'running' && ['stop', 'clear', 'uninstall', 'disable', 'launch'].includes(action)) setTimeout(() => loadRunning(true), action === 'launch' ? 900 : 300);
-  if (action === 'pullapk' && r.folder) STK.toast('Saved. Open the downloads folder to find it.', 'ok', { label: 'Open', run: () => STK.post('/open-folder', { kind: 'downloads' }).catch(STK.fail) });
+  if (action === 'pullapk' && r.folder) STK.toast(r.message || 'Saved as one file.', 'ok', { label: 'Open', run: () => STK.post('/open-folder', { kind: 'appbackups' }).catch(STK.fail) });
   return r;
 }
 function appMenu(btn) {
@@ -120,21 +120,28 @@ function appMenu(btn) {
     { label: 'Copy package name', icon: 'copy', run: () => navigator.clipboard.writeText(pkg).then(() => STK.toast('Copied ' + pkg), () => STK.toast('Copy was blocked by the browser.', 'bad')) },
     { label: 'App info', icon: 'info', run: () => appAction(pkg, 'info') },
     { label: 'Open its settings on phone', icon: 'sliders', run: () => appAction(pkg, 'settings') },
-    { label: 'Save APK to this PC', icon: 'download', run: () => appAction(pkg, 'pullapk') },
+    { label: 'Save app to this PC (one file)', icon: 'download', run: () => appAction(pkg, 'pullapk') },
     { label: dis ? 'Enable' : 'Disable', icon: 'power', run: () => appAction(pkg, dis ? 'enable' : 'disable') },
     '-',
     { label: 'Clear data', icon: 'trash', danger: true, run: async () => { if (await STK.confirm('Clear app data?', `<p>All data of <b>${esc(pkg)}</b> (logins, settings, saves) will be erased.</p>`, 'Clear data')) appAction(pkg, 'clear'); } },
     { label: 'Uninstall', icon: 'trash', danger: true, run: async () => { if (await STK.confirm('Uninstall this app?', `<p><b>${esc(pkg)}</b> will be removed from the phone.</p>`, 'Uninstall')) appAction(pkg, 'uninstall'); } }
   ]);
 }
-async function installApk(file) {
-  if (!file) return;
-  if (!/\.apk$/i.test(file.name)) return STK.toast('Choose an .apk file.', 'bad');
+async function installApk(files) {
+  files = [].concat(files || []).filter(Boolean);
+  if (!files.length) return;
+  if (files.some(f => !/\.(apk|apks|xapk|apkm)$/i.test(f.name))) { { const fi = $('#apk-file'); if (fi) fi.value = ''; } return STK.toast('Choose .apk files, or an .apks, .xapk or .apkm bundle.', 'bad'); }
   const bar = $('#apk-progress'); bar.hidden = false;
+  /* 4.5.0: several files are sent as one set and installed together (an app with split APKs needs all of its parts at once) */
+  const stage = files.length > 1 ? Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2, '0')).join('') : '';
   try {
-    const r = await STK.upload(`/install?id=${encodeURIComponent(serial())}&name=${encodeURIComponent(file.name)}`, file, p => { $('i', bar).style.width = (p * 100).toFixed(0) + '%'; });
-    STK.toast(r.message || 'Installed.'); loadApps(true);
-  } catch (e) { STK.fail(e); } finally { bar.hidden = true; $('i', bar).style.width = '0'; $('#apk-file').value = ''; }
+    let r = null;
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i], last = i === files.length - 1;
+      r = await STK.upload(`/install?id=${encodeURIComponent(serial())}&name=${encodeURIComponent(f.name)}` + (stage ? `&stage=${stage}&last=${last ? 1 : 0}` : ''), f, p => { $('i', bar).style.width = (((i + p) / files.length) * 100).toFixed(0) + '%'; });
+    }
+    STK.toast((r && r.message) || 'Installed.'); loadApps(true);
+  } catch (e) { STK.fail(e); } finally { if (bar) { bar.hidden = true; const bi = $('i', bar); if (bi) bi.style.width = '0'; } { const fi = $('#apk-file'); if (fi) fi.value = ''; } }
 }
 
 /* ---------- running apps ---------- */
@@ -298,7 +305,7 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset && t.dataset.tog) return setToggle(t);
-  if (t.id === 'apk-file') return installApk(t.files[0]);
+  if (t.id === 'apk-file') return installApk([...t.files]);
   if (t.id === 'push-file') return pushFiles([...t.files]);
   if (t.id === 'run-auto') { STK.store.set('run-auto', t.checked); stopRun(); if (t.checked) loadRunning(); return; }
   if (t.id === 'log-auto') { stopLog(); if (t.checked) P.log.timer = setInterval(() => { if (state.view === 'phone' && P.tab === 'logcat' && !document.hidden) fetchLog(); }, 3000); }
