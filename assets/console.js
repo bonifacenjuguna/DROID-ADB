@@ -301,7 +301,7 @@ function renderSessions() {
   setHtml(chip, `<i class="dot"></i><b>${list.length ? list.length + ' open' : 'None'}</b>`);
   if (!list.length) { setHtml(box, `<div class="empty">${icon('mirror')}<b>No windows open</b><p>Mirror or record to see a live timer here.</p></div>`); return; }
   setHtml(box, (list.length > 1 ? `<div class="sess-all"><button class="btn sm danger" data-act="stopAll">${icon('stop', 'sm')}<span>Stop all</span></button></div>` : '') + list.map(s => `<div class="sess ${s.recording ? 'rec' : ''}"><span class="badge">${icon(s.recording ? 'record' : 'mirror')}</span>
-    <div><b>${s.recording ? (s.headless ? 'Recording in background' : 'Recording') : 'Mirroring'}${s.app ? ' · ' + esc(s.app) : ''}</b><div class="timer" data-since="${esc(s.started)}">${clock(s.started)}</div>
+    <div><b>${s.recording ? (s.headless ? 'Recording in background' : 'Recording') : 'Mirroring'}${s.app ? ' · ' + esc(s.app) : ''}${s.shape ? ' · ' + esc(s.shape) : ''}</b><div class="timer" data-since="${esc(s.started)}">${clock(s.started)}</div>
     <small>${s.recording && s.file ? esc(s.file) + ' · ' + bytes(s.fileSize) : (s.serial ? esc(s.serial) + ' · ' : '') + 'process ' + esc(s.pid)}</small>${sessAudio(s)}</div>
     <div class="acts"><button class="icon-btn" data-sess-log="${esc(s.id)}" title="Show scrcpy output" aria-label="Show scrcpy output">${icon('list', 'sm')}</button><button class="btn sm danger" data-sess-stop="${esc(s.id)}">${icon('stop', 'sm')}<span>Stop</span></button></div></div>`).join(''));
 }

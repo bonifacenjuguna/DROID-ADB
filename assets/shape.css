@@ -1,0 +1,26 @@
+/* DROID ADB 5.0 Capture shape. Nothing here moves or shrinks under the mouse (see 4.4.0: clicks near an edge). */
+.shape-bar { display: grid; gap: 9px; padding: 11px 12px 10px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel-2); min-width: 0; }
+.shape-bar:empty { display: none; }
+.shape-head { display: flex; align-items: center; gap: 8px; }
+.shape-head b { font: 650 13px var(--display); color: var(--ink); letter-spacing: .01em; }
+.shape-live { font-style: normal; font-size: 11px; font-weight: 650; color: var(--ok); background: var(--ok-soft); border-radius: 999px; padding: 2px 9px; }
+.shape-seg { display: flex; width: 100%; }
+.shape-seg button { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
+.shape-seg button:disabled, .shape-bar .seg button:disabled { opacity: .45; cursor: not-allowed; }
+.sg { position: relative; display: inline-block; flex: none; box-sizing: border-box; border: 1.6px solid currentColor; border-radius: 3px; }
+.sg-phone { width: 9px; height: 17px; border-radius: 3px; }
+.sg-tablet { width: 20px; height: 14px; border-radius: 3px; }
+.sg-window { width: 22px; height: 13px; border-radius: 2.5px; }
+.sg-window::before { content: ""; position: absolute; left: 0; right: 0; top: 2.5px; border-top: 1.4px solid currentColor; }
+.shape-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.shape-opts .select-wrap { flex: 1 1 210px; min-width: 0; }
+.shape-opts input[type="text"] { flex: 1 1 130px; min-width: 0; height: 34px; padding: 0 10px; border-radius: var(--r-s); border: 1px solid var(--line-strong); background: var(--ground); color: var(--ink); font: 13px var(--mono); }
+.shape-opts .seg { flex: 0 0 auto; }
+.shape-note { margin: 0; color: var(--ink-3); font-size: 12.5px; line-height: 1.5; }
+.shape-note.ok { color: var(--ok); }
+.shape-note.warn { color: var(--warn); }
+.shape-reset { display: inline-flex; align-items: center; gap: 5px; margin-left: 4px; padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: 999px; background: none; color: var(--ink-2); font: 600 11.5px var(--text); vertical-align: baseline; white-space: nowrap; }
+.shape-reset:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-3); }
+.shape-reset.is-hot { color: var(--warn); border-color: var(--warn); }
+.shape-reset:disabled { opacity: .45; cursor: not-allowed; }
+.shape-reset .ic { width: 12px; height: 12px; }

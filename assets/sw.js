@@ -1,11 +1,11 @@
-/* DROID ADB service worker (4.6.0).
+/* DROID ADB service worker (5.0.0).
    Purpose: lets Chrome and Edge install the dashboard as an app and shows a friendly page when the
    local service is not running. It never touches /api/ requests, and it always prefers the network,
    so a new version of the dashboard is used right away. */
 'use strict';
-const VERSION = '4.6.0';
+const VERSION = '5.0.0';
 const CACHE = 'droid-adb-' + VERSION;
-const SHELL = ['/', '/assets/style.css', '/assets/studio.css', '/assets/xp.css', '/assets/motion.css', '/assets/core.js', '/assets/console.js', '/assets/xp-ui.js', '/assets/studio.js', '/assets/studio-plus.js', '/assets/studio-pro.js', '/assets/shape.js', '/assets/droid-adb-mark.png', '/assets/motion.js', '/assets/manifest.webmanifest', '/assets/icon-192.png'];
+const SHELL = ['/', '/assets/style.css', '/assets/studio.css', '/assets/xp.css', '/assets/motion.css', '/assets/shape.css', '/assets/shape.js', '/assets/core.js', '/assets/console.js', '/assets/xp-ui.js', '/assets/studio.js', '/assets/studio-plus.js', '/assets/studio-pro.js', '/assets/droid-adb-mark.png', '/assets/motion.js', '/assets/manifest.webmanifest', '/assets/icon-192.png'];
 
 const OFFLINE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DROID ADB</title>
 <style>:root{color-scheme:dark light}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#020f20;color:#e9ecf1;font:16px/1.6 system-ui,Segoe UI,sans-serif}

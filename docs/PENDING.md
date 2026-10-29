@@ -8,6 +8,11 @@ Things we agreed to come back to. Nothing here is lost; none of it is switched o
 - Idea 2: show a plain message for that error ("This phone does not allow copying its sound") with a Switch to Reroute button.
 - Both modes stay in the list.
 
+## Capture shape (5.0.0)
+- A shape token for file names (like `{shape}`) and a shape badge on recordings in the Library.
+- Recording while mirroring on the Virtual display method needs one scrcpy process doing both (see the item under Recording).
+- Per-app shapes (for example Window only for one game) using the games library.
+
 ## Recording
 - A smoothness check for finished recordings (gaps in audio and video timing) in case lag is ever seen in the file itself.
 - Recording and mirroring in one scrcpy instead of a hidden second recorder, to save the phone one video encoder.
@@ -16,7 +21,3 @@ Things we agreed to come back to. Nothing here is lost; none of it is switched o
 ## Backup
 - Done in 4.5.0 for apps (one file per app, installable). Still open: an optional "pack a folder backup into one zip when finished" switch, if you want it.
 - Not possible without root: copying an app's private data (logins, game progress).
-
-## Screen shape
-- A fixed canvas with a coloured or blurred background around the phone picture (needs a video tool such as ffmpeg, which is not bundled; OBS does this today).
-- Portrait tablet shapes, and a rotate-to-fit option.

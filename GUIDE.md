@@ -36,6 +36,13 @@ Everything is configurable: quality presets, saved profiles, folders, file name 
 - scrcpy closes immediately: the toast shows the reason; full output is in `Logs/session-<id>.log`.
 - Port busy: change the port in Settings (restart needed) or close the other instance.
 
+## New in 5.0: Capture shape
+- By default a mirror or recording is the shape of the phone, so OBS or TikTok LIVE Studio show a tall, narrow picture. On the Console, Capture shape changes that: **Default** keeps the phone shape, **Tablet** gives a wide 16:10 picture, **Window** gives a wide 16:9 picture that fills a normal stream canvas.
+- Pick the shape BEFORE you open a game, then press Mirror or Record. Changing the screen size makes the app that is open restart or re-lay-out.
+- **Resize phone** (default): the phone screen changes size while you capture and goes back when you stop. Works with every app. **Virtual display**: a separate screen, the phone is untouched, but it starts empty and some apps will not open on it (you can set an app to open in Settings, Video).
+- If the phone ever stays in the wrong size, press **Reset phone screen** on the Console.
+- Bigger than the phone allows? The shape is scaled down to fit and keeps its proportions.
+
 ## New in 4.3
 - Recordings now use their own quality (Settings, Recording): full phone size, 60 fps, 40 Mbps by default. Mirror quality is still set under Video. Turn "High quality for recordings" off to use the Video settings for both.
 - If the sound crackles on the PC, raise Audio buffer or Audio output buffer in Settings, Audio (Reroute).

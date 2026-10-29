@@ -439,7 +439,7 @@ $Routes['GET /api/state'] = { param($Ctx)
         ok = $true; t = (Get-UtcNow); version = $ToolkitVersion; uptime = [int]((Get-Date) - $Shared.started).TotalSeconds
         sessions = $sessions; devices = @($Shared.devices | Where-Object { $null -ne $_ }); deviceMessage = [string]$Shared.deviceMessage; devicesAge = $age; adbLatencyMs = [int]$Shared.adbLatencyMs
         live = $liveOut; events = @($events); eventSeq = [int]$Shared.eventSeq; activity = $activity
-        disk = (Get-DiskInfo (Get-Dir 'recordings')); pollSeconds = [int]$s.pollSeconds
+        disk = (Get-DiskInfo (Get-Dir 'recordings')); pollSeconds = [int]$s.pollSeconds; shape = @(Get-ShapeStateViews)
     }
 }
 
@@ -553,6 +553,22 @@ $Routes['GET /api/device-info'] = { param($Ctx)
 
 $Routes['GET /api/sessions'] = { param($Ctx) Send-Json $Ctx @{ sessions = @(Get-LiveSessions | ForEach-Object { Get-SessionView $_ }) } }
 
+# 5.0.0: capture shape. GET shows the plan the current settings give and which phones are resized right now.
+$Routes['GET /api/shape'] = { param($Ctx)
+    $plan = $null
+    $problem = ''
+    try { $plan = Resolve-ShapePlan (Get-Settings) } catch { $problem = $_.Exception.Message }
+    Send-Json $Ctx @{ ok = $true; plan = $plan; problem = $problem; resized = @(Get-ShapeStateViews) }
+}
+
+# POST puts the phone screen back to normal. It works even when DROID ADB has no record of resizing the phone.
+$Routes['POST /api/shape/reset'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $serial = [string](Get-Prop $body 'serial' '')
+    $message = Reset-PhoneScreen $serial
+    Send-Json $Ctx @{ ok = $true; message = $message; resized = @(Get-ShapeStateViews) }
+}
+
 $Routes['POST /api/action'] = { param($Ctx)
     $body = Read-JsonBody $Ctx
     $serial = [string](Get-Prop $body 'serial' '')
@@ -571,6 +587,8 @@ $Routes['POST /api/action'] = { param($Ctx)
             if ($alive) {
                 if ($action -eq 'record') { Add-Activity 'record' ('Recording started: ' + $started.fileName + $(if ($started.companion) { ' (alongside the mirror window)' } else { '' })); $msg = 'Recording to ' + $started.fileName + '.' } else { Add-Activity 'mirror' 'Mirror window opened.'; $msg = 'Mirror window opened.' }
             } else { $msg = ''; $reason = Get-LogReason $started.log }
+            if ($alive -and [string]$started.shapeNote -ne '') { $msg = ($msg + ' ' + [string]$started.shapeNote).Trim() }
+            if (-not $alive) { try { [void](Sync-PhoneShape) } catch { Write-BackendLog ('Shape restore after a failed start: ' + $_.Exception.Message) } }
             Send-Json $Ctx @{ ok = $true; started = $alive; companion = [bool]$started.companion; message = $msg; reason = [string]$reason; session = $started.id; file = $started.fileName; audio = $au; sessions = @($live | ForEach-Object { Get-SessionView $_ }) }
         }
         'screenshot' {
@@ -590,7 +608,10 @@ $Routes['POST /api/action'] = { param($Ctx)
             if ($targets.Count -eq 0) { $message = 'Nothing was running.' }
             elseif ($forced -gt 0) { $message = 'Stopped. ' + $forced + ' session(s) had to be force-closed; a recording may be cut short.' }
             else { $message = 'Stopped cleanly.' }
-            Send-Json $Ctx @{ ok = $true; message = $message; forced = $forced; sessions = @($left | ForEach-Object { Get-SessionView $_ }) }
+            $shapeBack = $false
+            try { $shapeBack = [bool](Sync-PhoneShape) } catch { Write-BackendLog ('Shape restore on stop: ' + $_.Exception.Message) }
+            if ($shapeBack) { $message = $message + ' The phone screen is back to normal.' }
+            Send-Json $Ctx @{ ok = $true; message = $message; forced = $forced; shapeRestored = $shapeBack; sessions = @($left | ForEach-Object { Get-SessionView $_ }) }
         }
         'check' { Update-DeviceCache; $d = Get-DeviceCache; Send-Json $Ctx @{ devices = $d.devices; message = $d.message } }
         default { Send-Json $Ctx @{ error = 'Unknown action.' } 400 }
@@ -961,19 +982,6 @@ $Routes['POST /api/install'] = { param($Ctx)
         Add-Activity 'app' ('Installed ' + $name + $(if ($files.Count -gt 1) { ' and ' + ($files.Count - 1) + ' more' } else { '' }))
         Send-Json $Ctx @{ ok = $true; message = $msg }
     } finally { if (-not $keep) { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue } }
-}
-
-$Routes['GET /api/shape'] = { param($Ctx)
-    Send-Json $Ctx @{ applied = @(Get-ShapeApplied) }
-}
-
-$Routes['POST /api/shape-reset'] = { param($Ctx)
-    $body = Read-JsonBody $Ctx
-    $serial = [string](Get-Prop $body 'serial' '')
-    Test-Serial $serial
-    $ok = Restore-PhoneShape $serial
-    if (-not $ok) { Fail 'The phone did not answer. Check the cable and try again.' }
-    Send-Json $Ctx @{ ok = $true; message = 'The phone screen is back to its normal size.' }
 }
 
 $Routes['GET /api/appbackups'] = { param($Ctx)
