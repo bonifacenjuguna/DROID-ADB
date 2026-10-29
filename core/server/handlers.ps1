@@ -963,6 +963,19 @@ $Routes['POST /api/install'] = { param($Ctx)
     } finally { if (-not $keep) { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue } }
 }
 
+$Routes['GET /api/shape'] = { param($Ctx)
+    Send-Json $Ctx @{ applied = @(Get-ShapeApplied) }
+}
+
+$Routes['POST /api/shape-reset'] = { param($Ctx)
+    $body = Read-JsonBody $Ctx
+    $serial = [string](Get-Prop $body 'serial' '')
+    Test-Serial $serial
+    $ok = Restore-PhoneShape $serial
+    if (-not $ok) { Fail 'The phone did not answer. Check the cable and try again.' }
+    Send-Json $Ctx @{ ok = $true; message = 'The phone screen is back to its normal size.' }
+}
+
 $Routes['GET /api/appbackups'] = { param($Ctx)
     $dir = Join-Path (Get-Dir 'downloads') 'AppBackups'
     $out = @()

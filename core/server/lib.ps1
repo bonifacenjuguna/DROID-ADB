@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '4.5.0'
+$ToolkitVersion = '4.6.0'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -141,6 +141,9 @@ $SettingGroups = @(
 )
 
 $AudioSources = @((C 'output' 'Phone sound (output)'), (C 'playback' 'Playback capture'), (C 'mic' 'Microphone'), (C 'mic-unprocessed' 'Microphone (raw)'), (C 'mic-voice-communication' 'Microphone (voice call)'))
+$ShapeSizes = @((C 'phone' 'Phone (its own shape)'), (C '1280x800' 'Tablet 16:10, 1280x800'), (C '1600x1200' 'Tablet 4:3, 1600x1200'), (C '1920x1200' 'Tablet 16:10, 1920x1200'), (C '2048x1536' 'Tablet 4:3, 2048x1536'), (C '1280x720' 'PC 16:9, 1280x720'), (C '1920x1080' 'PC 16:9, 1920x1080'), (C '2560x1440' 'PC 16:9, 2560x1440'), (C 'custom' 'Custom size'))
+$ShapeMethods = @((C 'resize' 'Resize the phone screen'), (C 'virtual' 'Virtual screen (Android 11 or newer)'))
+$ShapeNotPhone = @('1280x800', '1600x1200', '1920x1200', '2048x1536', '1280x720', '1920x1080', '2560x1440', 'custom')
 $AudioCodecs = @((C '' 'scrcpy default'), (C 'opus' 'Opus'), (C 'aac' 'AAC'), (C 'flac' 'FLAC'), (C 'raw' 'Raw'))
 # Audio modes (4.1.0). The ids are stored in settings and checked against this list.
 $AudioModeIds = @('video_only', 'record_only', 'copy_play', 'reroute')
@@ -163,6 +166,12 @@ $Schema = @(
     (F 'maxFps' 'video' 'int' 30 'Frame rate' 'Higher is smoother and uses more CPU.' -Min 1 -Max 240 -Picks @(15, 24, 30, 45, 60, 90, 120) -Unit 'fps'),
     (F 'bitrateMbps' 'video' 'int' 8 'Bitrate' 'Higher looks better and makes larger recordings.' -Min 1 -Max 200 -Picks @(2, 4, 8, 12, 16, 24) -Unit 'Mbps'),
     (F 'codec' 'video' 'choice' 'h264' 'Video codec' 'H.265 and AV1 make smaller files but need phone support.' -Choices @((C 'h264' 'H.264'), (C 'h265' 'H.265'), (C 'av1' 'AV1'))),
+    (F 'shapeSize' 'video' 'choice' 'phone' 'Screen shape' 'Phone keeps the shape the phone has. Tablet and PC change the shape of what is mirrored and recorded, so OBS, TikTok Live and other apps receive that shape.' -Choices $ShapeSizes),
+    (F 'shapeMethod' 'video' 'choice' 'resize' 'How to change the shape' 'Resize: the phone is told it has a bigger screen (works on every phone, put back when you stop). Virtual screen: a separate screen is shown and the phone itself is not touched (Android 11 or newer, one window at a time).' -Choices $ShapeMethods -Show @{ shapeSize = $ShapeNotPhone }),
+    (F 'shapeW' 'video' 'int' 1600 'Custom width' 'Pixels.' -Min 320 -Max 7680 -Unit 'px' -Show @{ shapeSize = @('custom') }),
+    (F 'shapeH' 'video' 'int' 1200 'Custom height' 'Pixels.' -Min 320 -Max 7680 -Unit 'px' -Show @{ shapeSize = @('custom') }),
+    (F 'shapeDpi' 'video' 'int' 0 'Screen density' '0 picks a tablet-like density for the size. Higher makes everything bigger.' -Min 0 -Max 640 -Show @{ shapeSize = $ShapeNotPhone }),
+    (F 'shapeApp' 'video' 'text' '' 'App for the virtual screen' 'Package name to open on the virtual screen, like com.zhiliaoapp.musically. Leave empty to start on the home screen.' -Show @{ shapeSize = $ShapeNotPhone } -Pattern '^[A-Za-z0-9._]{0,120}$' -Placeholder 'com.tencent.ig'),
     (F 'videoEncoder' 'video' 'text' '' 'Video encoder' 'Optional. Exact encoder name, for example OMX.qcom.video.encoder.avc.' -Pattern '^[A-Za-z0-9._\-]{0,80}$' -Placeholder 'Automatic'),
     (F 'displayId' 'video' 'int' 0 'Display id' 'Mirror a secondary display. 0 is the main screen.' -Min 0 -Max 99 -Show @{ source = 'display' }),
     (F 'virtualDisplay' 'video' 'bool' $false 'Use a virtual display' 'Creates a separate display so apps can run without touching the phone screen.' -Show @{ source = 'display' }),
@@ -1136,6 +1145,78 @@ function Get-AudioEnvironment {
 # ---------------------------------------------------------------------------
 # Building the scrcpy command line
 # ---------------------------------------------------------------------------
+# ---------- 4.6.0: screen shape (tablet and PC view) ----------
+$ShapeFile = Join-Path $ConfigDir 'shape-restore.json'
+function Get-ShapeSpec {
+    param($S)
+    $size = [string]$S.shapeSize
+    if ($size -eq '' -or $size -eq 'phone') { return $null }
+    $w = 0
+    $h = 0
+    if ($size -eq 'custom') { $w = [int]$S.shapeW; $h = [int]$S.shapeH }
+    elseif ($size -match '^(\d{3,4})x(\d{3,4})$') { $w = [int]$Matches[1]; $h = [int]$Matches[2] }
+    if ($w -lt 320 -or $h -lt 320 -or $w -gt 7680 -or $h -gt 7680) { return $null }
+    $dpi = [int]$S.shapeDpi
+    if ($dpi -le 0) {
+        $dpi = [int][math]::Round([math]::Min($w, $h) * 0.2)
+        if ($dpi -lt 160) { $dpi = 160 }
+        if ($dpi -gt 480) { $dpi = 480 }
+    }
+    $method = [string]$S.shapeMethod
+    if ($method -ne 'virtual') { $method = 'resize' }
+    return @{ w = $w; h = $h; dpi = $dpi; method = $method; app = [string]$S.shapeApp }
+}
+function Get-ShapeApplied {
+    try {
+        if (Test-Path -LiteralPath $ShapeFile) {
+            $j = Get-Content -LiteralPath $ShapeFile -Raw | ConvertFrom-Json
+            return @($j.serials | Where-Object { $_ } | ForEach-Object { [string]$_ })
+        }
+    } catch { }
+    return @()
+}
+function Save-ShapeApplied {
+    param([string[]]$Serials)
+    try { (@{ serials = @($Serials) } | ConvertTo-Json -Compress) | Set-Content -LiteralPath $ShapeFile -Encoding ASCII } catch { }
+}
+# Resize method: tell the phone it has another screen size and density. Remembered on disk so it is put back even after a crash.
+function Set-PhoneShape {
+    param([string]$Serial, [hashtable]$Spec)
+    $r = Invoke-DeviceShell $Serial ('wm size ' + $Spec.w + 'x' + $Spec.h + '; wm density ' + $Spec.dpi) 20
+    $txt = (([string]$r.out) + ' ' + ([string]$r.err)).Trim()
+    if ($r.code -ne 0 -or $txt -match '(?i)exception|not allowed|permission denied|bad|invalid|error') {
+        try { [void](Invoke-DeviceShell $Serial 'wm size reset; wm density reset' 15) } catch { }
+        Fail ('The phone refused to change its screen size. ' + $txt)
+    }
+    $list = @(Get-ShapeApplied)
+    if ($list -notcontains $Serial) { $list += $Serial; Save-ShapeApplied $list }
+    if (-not $Shared.shapeAt) { $Shared.shapeAt = @{} }
+    $Shared.shapeAt[$Serial] = Get-Date
+    Start-Sleep -Milliseconds 900
+}
+function Restore-PhoneShape {
+    param([string]$Serial)
+    try { [void](Invoke-DeviceShell $Serial 'wm size reset; wm density reset' 20) } catch { Write-BackendLog ('Could not put the screen size back: ' + $_.Exception.Message); return $false }
+    Save-ShapeApplied @(Get-ShapeApplied | Where-Object { $_ -ne $Serial })
+    Add-Activity 'system' 'The phone screen size was put back to normal.'
+    return $true
+}
+# Called by the background ticker: once no scrcpy window or recording is left for a phone whose screen was resized, put it back.
+function Invoke-ShapeRestore {
+    $applied = @(Get-ShapeApplied)
+    if ($applied.Count -eq 0) { return }
+    $live = @(Get-LiveSessions)
+    $ready = @((Get-DeviceCache).devices | Where-Object { $_.state -eq 'device' } | ForEach-Object { [string]$_.id })
+    foreach ($serial in $applied) {
+        if (@($live | Where-Object { $_.serial -eq $serial -or -not $_.serial }).Count -gt 0) { continue }
+        if ($ready -notcontains $serial) { continue }
+        $at = $null
+        if ($Shared.shapeAt) { $at = $Shared.shapeAt[$serial] }
+        if ($at -and ((Get-Date) - $at).TotalSeconds -lt 25) { continue }
+        [void](Restore-PhoneShape $serial)
+    }
+}
+
 function New-ScrcpyArgs {
     param($S, [string]$Mode, [string]$Serial, [string]$OutFile, [hashtable]$Once, [hashtable]$PlanSink = $null, [bool]$Probe = $true)
     Test-Serial $Serial
@@ -1171,6 +1252,11 @@ function New-ScrcpyArgs {
     if ($qSize -gt 0) { [void]$a.Add('--max-size=' + $qSize) }
     [void]$a.Add('--max-fps=' + $qFps)
     [void]$a.Add('--video-bit-rate=' + $qMbps + 'M')
+    $shapeSpec = Get-ShapeSpec $S
+    if ($shapeSpec -and $shapeSpec.method -eq 'virtual') {
+        [void]$a.Add('--new-display=' + $shapeSpec.w + 'x' + $shapeSpec.h + '/' + $shapeSpec.dpi)
+        if ($shapeSpec.app -match '^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$') { [void]$a.Add('--start-app=' + $shapeSpec.app) }
+    }
     [void]$a.Add('--video-codec=' + $S.codec)
     if ($S.videoEncoder -ne '') { [void]$a.Add('--video-encoder=' + $S.videoEncoder) }
     if ($S.captureOrientation -ne '') { [void]$a.Add('--capture-orientation=' + $S.captureOrientation) }
@@ -1446,6 +1532,17 @@ function Start-ToolkitScrcpy {
         }
     } else {
         if ($viewer.Count -gt 0) { Fail 'A scrcpy window is already open for this phone. Stop it first.' }
+    }
+    # 4.6.0: tablet / PC view
+    $shape = Get-ShapeSpec $settings
+    if ($shape) {
+        if ($shape.method -eq 'virtual') {
+            if ($mine.Count -gt 0) { Fail 'A virtual screen can only be shown by one scrcpy window at a time. Stop the other window first, or set Screen shape to Resize in Settings, Video.' }
+            $vdev = Get-DeviceAudioInfo $Serial $true
+            if ($vdev.ok -and [int]$vdev.sdk -gt 0 -and [int]$vdev.sdk -lt 30) { Fail ('A virtual screen needs Android 11 or newer and this phone runs Android ' + $vdev.release + '. Set Screen shape to Resize in Settings, Video.') }
+        } else {
+            Set-PhoneShape $Serial $shape
+        }
     }
     $id = [guid]::NewGuid().ToString('N').Substring(0, 8)
     $out = ''

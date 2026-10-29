@@ -16,3 +16,7 @@ Things we agreed to come back to. Nothing here is lost; none of it is switched o
 ## Backup
 - Done in 4.5.0 for apps (one file per app, installable). Still open: an optional "pack a folder backup into one zip when finished" switch, if you want it.
 - Not possible without root: copying an app's private data (logins, game progress).
+
+## Screen shape
+- A fixed canvas with a coloured or blurred background around the phone picture (needs a video tool such as ffmpeg, which is not bundled; OBS does this today).
+- Portrait tablet shapes, and a rotate-to-fit option.

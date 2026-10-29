@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.6.0
+Screen shape: a tablet view and a PC view for the mirror and the recording.
+
+New
+- Console, Screen shape bar (under Mirror, Record and Screenshot): Phone, Tablet or PC, a size, and a method. Sizes: Tablet 16:10 1280x800, 4:3 1600x1200, 16:10 1920x1200, 4:3 2048x1536; PC 16:9 1280x720, 1920x1080, 2560x1440; or a custom size in Settings, Video. The shape applies to Mirror and to Record, so what you send to OBS, TikTok Live or a call has that shape. Also in Settings, Video and on the command palette (Ctrl+K): Screen shape: Phone / Tablet / PC.
+- Method Resize (works on every phone): while a mirror or recording runs, the phone is told it has a bigger screen (`wm size` and `wm density`), so apps draw their tablet layout. The density is chosen for the size, or set your own. The phone's own screen may show black bars meanwhile. It is put back to normal by itself when the last mirror or recording for that phone ends, after a crash, and when the phone is plugged in again. A Put the phone screen back button appears while it is resized.
+- Method Virtual screen (Android 11 or newer): scrcpy creates a separate screen of that size (`--new-display`) and shows it; the phone itself is not touched. Optionally name an app to open on it. One scrcpy window at a time (a recording next to a mirror is not possible on a virtual screen, and the message says so). Some apps and games do not support a second screen.
+
+Notes
+- Nothing changes unless you pick Tablet or PC. Phone is the default and behaves as before.
+- The picture can only get a new shape by changing what the phone draws (Resize or Virtual). A phone screen cannot be padded into a bigger canvas by scrcpy; that is done in OBS.
+
+Not verified
+- Not run on a real phone: the Resize and Virtual screen steps need testing on your phone (some phones show the resized screen stretched, some with black bars; some apps ignore a second screen). The page was tested against a simulated service. The PowerShell was checked by reading, a bracket and quote check, and a check that every function it calls exists.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
+
 ## 4.5.0
 Apps are saved as one file, and the installer understands it.
 

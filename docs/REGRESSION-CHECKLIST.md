@@ -225,3 +225,12 @@ Full steps are in docs/AUDIO.md.
 - [ ] Library, Backups, Saved apps: press Install on phone for that file. The app installs and keeps its data.
 - [ ] Tools, Apps, Install app: choose the .apks file. It installs. Choose a base .apk plus its split_config .apk files together: they install as one set.
 - [ ] Install an .xapk from the web. It installs; an .obb note appears if the game has data files.
+
+## 4.6.0 screen shape (real phone)
+- [ ] Console, Screen shape: Tablet, size 1600x1200, method Resize. Press Mirror. The window is 4:3 and the phone shows its tablet layout. Press Stop: within about half a minute the phone screen is back to normal.
+- [ ] With Resize on, press Record as well (mirror open): the recording is 4:3, and after both stop the phone is back to normal.
+- [ ] Unplug the cable while resized, plug it in again: the phone is put back by itself.
+- [ ] Put the phone screen back button works.
+- [ ] Method Virtual (Android 11 or newer): Mirror shows a 1600x1200 screen and the phone's own screen is untouched. Naming an app opens it there.
+- [ ] Virtual with a mirror already open, then Record: a clear message says one window at a time.
+- [ ] PC 1920x1080: the recording opens in OBS as 16:9.
