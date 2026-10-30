@@ -963,35 +963,6 @@ $Routes['POST /api/install'] = { param($Ctx)
     } finally { if (-not $keep) { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue } }
 }
 
-$Routes['GET /api/shape'] = { param($Ctx)
-    Send-Json $Ctx @{ applied = @(Get-ShapeApplied) }
-}
-
-$Routes['POST /api/shape-reset'] = { param($Ctx)
-    $body = Read-JsonBody $Ctx
-    $serial = [string](Get-Prop $body 'serial' '')
-    Test-Serial $serial
-    $ok = Restore-PhoneShape $serial
-    if (-not $ok) { Fail 'The phone did not answer. Check the cable and try again.' }
-    Send-Json $Ctx @{ ok = $true; message = 'The phone screen is back to its normal size.' }
-}
-
-# 4.7.0: change the shape of mirror and record windows that are already open
-$Routes['POST /api/window-shape'] = { param($Ctx)
-    $body = Read-JsonBody $Ctx
-    $serial = [string](Get-Prop $body 'serial' '')
-    $aspect = [double](Get-Prop $body 'aspect' 0)
-    $spec = Get-ShapeSpec (Get-Settings)
-    if ($spec) { $w = [int]$spec.w; $h = [int]$spec.h }
-    else {
-        if ($aspect -lt 0.2 -or $aspect -gt 5) { $aspect = 0.46 }
-        $h = 900
-        $w = [int][math]::Round($h * $aspect)
-    }
-    $r = Set-MirrorWindowShape $serial $w $h
-    Send-Json $Ctx @{ ok = $true; windows = $r.windows; size = $r.size }
-}
-
 $Routes['GET /api/appbackups'] = { param($Ctx)
     $dir = Join-Path (Get-Dir 'downloads') 'AppBackups'
     $out = @()

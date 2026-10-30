@@ -16,7 +16,3 @@ Things we agreed to come back to. Nothing here is lost; none of it is switched o
 ## Backup
 - Done in 4.5.0 for apps (one file per app, installable). Still open: an optional "pack a folder backup into one zip when finished" switch, if you want it.
 - Not possible without root: copying an app's private data (logins, game progress).
-
-## Window shape
-- A tablet or PC shaped recording file (the file keeps the phone shape). It needs a video tool such as ffmpeg, which is not bundled; a Library button could make a padded copy once ffmpeg.exe is in a folder.
-- A custom background colour for the bars around the picture (scrcpy always draws them dark; OBS can place a colour behind the window).
