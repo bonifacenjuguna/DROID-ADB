@@ -225,3 +225,17 @@ Full steps are in docs/AUDIO.md.
 - [ ] Library, Backups, Saved apps: press Install on phone for that file. The app installs and keeps its data.
 - [ ] Tools, Apps, Install app: choose the .apks file. It installs. Choose a base .apk plus its split_config .apk files together: they install as one set.
 - [ ] Install an .xapk from the web. It installs; an .obb note appears if the game has data files.
+
+## 4.7.0 window shape (real PC)
+- [ ] Console, Window shape: Tablet 1600x1200. Press Mirror. The window opens 4:3 (or the biggest 4:3 that fits your screen) with the phone screen inside and dark bars at the sides. Touch and clicking still work.
+- [ ] With the mirror open, click PC, then Phone, then Tablet. The open window changes shape each time, with no restart and no wait.
+- [ ] Press Record with Tablet chosen. The record window has the same shape; the saved file is the normal phone shape.
+- [ ] OBS: add a Window Capture of the mirror window. The source is tablet shaped.
+- [ ] The phone screen is never resized. If an older version left it resized, it is put back by itself.
+
+## 4.7.1 (real phone)
+- [ ] Open PUBG Mobile with the dashboard connected and Studio open. The game does not crash. Watch for 2 minutes.
+- [ ] Add PUBG to the Games library. Open it from the phone: nothing is changed on the phone for about 40 seconds, then its profile is applied. The game does not crash.
+- [ ] Game Priority is off by default in a game's Details. Switch it on, press Play: other apps are stopped, the game opens.
+- [ ] Reroute mirror: sound delay feels like before (no extra delay).
+- [ ] Window shape: Tablet, press Mirror. The window takes the shape within a few seconds. If not, press Apply to the open window and tell me what it says.

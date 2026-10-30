@@ -111,10 +111,12 @@ SX.loadToggles = async function () {
 /* ---------- live sampling ---------- */
 async function sample(force) {
   if (S.busy) return;
+  /* 4.7.1: while a mirror or recording runs, or a game is in front, ask the phone far less often so it stays smooth */
+  if (!force && SX.calm && SX.calm() && Date.now() - (S.lastAt || 0) < 9000) return;
   if (!force && (state.view !== 'studio' || document.hidden)) return;
   const id = STK.sel();
   if (!id) { paintAll(); return; }
-  S.busy = true;
+  S.busy = true; S.lastAt = Date.now();
   try {
     const r = await STK.api('/perf?id=' + encodeURIComponent(id), { timeout: 30000 });
     const h = H(id);

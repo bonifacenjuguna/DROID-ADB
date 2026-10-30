@@ -240,7 +240,7 @@ document.addEventListener('click', e => {
 });
 
 /* ---------- 7. Watchdog ---------- */
-const WD0 = { heat: true, throttle: true, battery: true, memory: true, bg: true, low: 15 };
+const WD0 = { heat: true, throttle: true, battery: true, memory: true, bg: false, low: 15 };
 const wd = () => ({ ...WD0, ...(STK.kv.get('xp-wd', {}) || {}) });
 const fired = {};
 function alertOnce(key, text, kind, action) {
@@ -259,11 +259,11 @@ function watch(r) {
 function paintWd() {
   const el = $('#xp-wd'); if (!el) return;
   const w = wd(), sw = (k, label, hint) => `<label class="xp-wd-row"><span><b>${label}</b><small>${hint}</small></span><input type="checkbox" role="switch" data-sxc="wd" data-k="${k}" ${w[k] ? 'checked' : ''}></label>`;
-  const h = sw('heat', 'Overheating', 'At your warning temperature') + sw('throttle', 'Throttling', 'When Android slows the phone') + sw('battery', 'Low battery', 'At ' + w.low + '% or less') + sw('memory', 'Memory nearly full', 'At 93% or more') + sw('bg', 'Keep watching in the background', 'Checks every 30 seconds on other pages while this tab is open');
+  const h = sw('heat', 'Overheating', 'At your warning temperature') + sw('throttle', 'Throttling', 'When Android slows the phone') + sw('battery', 'Low battery', 'At ' + w.low + '% or less') + sw('memory', 'Memory nearly full', 'At 93% or more') + sw('bg', 'Keep watching in the background', 'Checks every 30 seconds on other pages while this tab is open. Paused while you mirror, record or play');
   if (el._h !== h) { el._h = h; el.innerHTML = h; }
 }
 Object.assign(SX.changes, { wd: t => { const w = wd(); w[t.dataset.k] = t.checked; STK.kv.set('xp-wd', w); } });
-setInterval(() => { if (state.view !== 'studio' && !document.hidden && !STK.quiet && STK.sel() && wd().bg && SX.sample) SX.sample(true); }, 30000);
+setInterval(() => { if (state.view !== 'studio' && !document.hidden && !STK.quiet && STK.sel() && wd().bg && !(SX.calm && SX.calm()) && SX.sample) SX.sample(true); }, 30000);
 
 /* ---------- 8. housekeeping ---------- */
 STK.on('device-changed', () => { batChart = null; BAT.apps = null; });

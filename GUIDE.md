@@ -59,3 +59,8 @@ Open Studio (the rocket icon) for the Performance Studio. Pick a profile on Over
 - **Error messages** are short sentences. For the original technical text open **Settings, Error log** (or press **Details** on an error notice).
 - **Camera** (Remote controls) wakes the phone and opens its camera app.
 - **Studio, Gaming kit**: live battery and temperature, quick switches, Free memory, Performance mode, Android Game Mode and frame stats. Games in Game mode can also free memory and use Game Mode automatically.
+
+## New in 4.7
+- Console, Window shape: pick Phone, Tablet or PC. The mirror and record window takes that shape, with your normal phone screen scaled to fit inside. OBS, TikTok Live and other apps that capture the window get that shape.
+- An open window changes shape right away when you click. The phone is never changed and nothing is virtual.
+

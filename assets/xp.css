@@ -539,3 +539,15 @@ button.xp-core { font: inherit; cursor: pointer; }
 @media (max-width: 560px) { .xp-gd-ses > div { grid-template-columns: 1fr 1fr; } .xp-gd-hero { padding: 16px; } }
 
 .xp-launch.done .xp-lc-puffs, .xp-launch.launch .xp-lc-puffs { display: none; }
+
+/* ============================ 4.6 Screen shape ============================ */
+.shape-bar { margin: 14px 0 2px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); display: grid; gap: 8px; }
+.shape-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.shape-lbl { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13px; color: var(--ink-2); }
+.shape-seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
+.shape-seg button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 9px; cursor: pointer; transition: background-color .2s, color .2s; }
+.shape-seg button:hover { color: var(--ink); }
+.shape-seg button.is-active { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.shape-seg.mini button { padding: 5px 10px; }
+.shape-bar select { background: var(--panel); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 10px; padding: 7px 10px; font: inherit; font-size: 13px; }
+.shape-note { margin: 0; color: var(--ink-3); font-size: 12.5px; line-height: 1.5; }

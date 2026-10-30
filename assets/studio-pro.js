@@ -103,7 +103,7 @@ SX.paintRun = function () {
 };
 
 /* ====================== 3. protected apps and sweeping ====================== */
-const DEF_PROTECT = /inputmethod|keyboard|launcher|systemui|com\.android\.(phone|server\.telecom|dialer|providers|incallui)|dialer|\.gms$|\.gsf|vending|droid.?adb/i;
+const DEF_PROTECT = /inputmethod|keyboard|launcher|systemui|com\.android\.(phone|server\.telecom|dialer|providers|incallui)|dialer|\.gms$|\.gsf|vending|droid.?adb|transsion|hios|xos|game(space|mode|assist|turbo|center|booster|sdk)|playgames|webview|trichrome|permissioncontroller|packageinstaller|oplus|coloros|heytap|miui|samsung|huawei|vivo\.|oppo|realme/i;
 const MSG_PROTECT = /messag|\.sms|\.mms|whatsapp|telegram|signal|viber|imo\./i;
 const prot = () => STK.kv.get('xp-protect', []) || [];
 const isProtected = (pkg, msgs = true) => prot().includes(pkg) || DEF_PROTECT.test(pkg) || (msgs && MSG_PROTECT.test(pkg));
@@ -112,7 +112,9 @@ async function runningApps(serial) {
   return (r.apps || []).filter(a => a.user !== false);
 }
 async function sweep(serial, keepPkg, msgs, onStep) {
-  const list = (await runningApps(serial)).filter(a => a.package !== keepPkg && !a.foreground && !isProtected(a.package, msgs));
+  /* apps from the same maker as the game (for example com.tencent.* for PUBG) are the game's own helpers, so they are never stopped */
+  const maker = keepPkg ? keepPkg.split('.').slice(0, 2).join('.') + '.' : '';
+  const list = (await runningApps(serial)).filter(a => a.package !== keepPkg && !a.foreground && !(maker && a.package.startsWith(maker)) && !isProtected(a.package, msgs));
   let stopped = 0, kb = 0;
   for (const a of list.slice(0, 30)) {
     try { await STK.post('/app', { serial, package: a.package, action: 'stop' }, { timeout: 30000 }); stopped++; kb += a.rssKb || 0; if (onStep) onStep(stopped, list.length, a); } catch (e) { /* the phone refused this one */ }
@@ -178,7 +180,7 @@ Object.assign(SX.changes, { bgmsg: t => { STK.kv.set('xp-keepmsg', t.checked); p
 const gx = () => SX.gx;
 const GL = { q: '', sort: STK.store.get('xp-gsort', 'recent') };
 const ago = ms => { const s = Math.max(0, (Date.now() - ms) / 1000); return s < 90 ? 'just now' : s < 5400 ? Math.round(s / 60) + ' min ago' : s < 129600 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' days ago'; };
-const gguard = g => ({ sweep: true, watch: true, every: 20, msgs: true, ...(g.guard || {}) });
+const gguard = g => ({ enabled: false, sweep: true, watch: false, every: 45, msgs: true, ...(g.guard || {}) });
 SX.gamesLibrary = function () {
   const X = gx(); if (!X) return '';
   const gl = X.games(), p = X.pt(), lp = STK.kv.get('lastplayed', {}) || {}, ss = X.sessions(), act = X.active[STK.sel()], fav = STK.kv.get('xp-gfav', []) || [];
@@ -195,7 +197,7 @@ SX.gamesLibrary = function () {
       <div class="gtop"><button type="button" class="av" data-sx="gdetails" data-i="${i}" aria-label="Open details of ${esc(name)}">${esc(X.initials(name))}</button><div class="nm"><b>${esc(name)}</b><small>${esc(g.pkg)}</small></div>
         <button type="button" class="favbtn ${isFav ? 'on' : ''}" data-sx="gfav" data-pkg="${esc(g.pkg)}" aria-label="${isFav ? 'Unpin' : 'Pin'} ${esc(name)}" title="${isFav ? 'Pinned to the top' : 'Pin to the top'}">${icon('star', 'sm')}</button></div>
       ${live ? `<div class="livebar"><i></i>Playing now · ${esc(X.fmtDur((Date.now() - act.startedAt) / 1000))}</div>` : `<div class="lastp">${last ? 'Last played ' + ago(last) : 'Not played yet'}</div>`}
-      <div class="chips">${pr ? `<span class="sx-chip accent">${icon(pr.ic, 'sm')}${esc(pr.name)}</span>` : ''}${gd.sweep || gd.watch ? chip('Game Priority', 'bolt') : ''}${g.dnd ? chip('Do not disturb') : ''}${g.record ? chip('Records') : ''}${g.mirror ? chip('Mirrors') : ''}${g.gamemode ? chip('Game Mode') : ''}</div>
+      <div class="chips">${pr ? `<span class="sx-chip accent">${icon(pr.ic, 'sm')}${esc(pr.name)}</span>` : ''}${gd.enabled ? chip('Game Priority', 'bolt') : ''}${g.dnd ? chip('Do not disturb') : ''}${g.record ? chip('Records') : ''}${g.mirror ? chip('Mirrors') : ''}${g.gamemode ? chip('Game Mode') : ''}</div>
       <div class="stats"><span>${icon('clock', 'sm')}${played ? esc(X.fmtDur(played)) : '0 min'}</span><span>${icon('game', 'sm')}${gs.length} session${gs.length === 1 ? '' : 's'}</span><span>${icon('thermo', 'sm')}${peak ? peak.toFixed(0) + ' °C' : '-'}</span></div>
       <div class="acts"><button class="btn sm primary" type="button" data-sx="gprio" data-i="${i}" title="Stop background apps, then open the game">${icon('rocket', 'sm')}<span>Play</span></button><button class="btn sm" type="button" data-sx="glaunch" data-i="${i}" title="Open the game without changing anything">${icon('play', 'sm')}<span>Open</span></button><button class="btn sm" type="button" data-sx="gdetails" data-i="${i}">${icon('info', 'sm')}<span>Details</span></button>
         <label class="switch sm" title="Switch on its profile by itself when this game opens"><input type="checkbox" data-sxc="gon" data-i="${i}" ${on ? 'checked' : ''} aria-label="Auto profile"><i></i></label></div></article>`;
@@ -207,6 +209,13 @@ SX.gamesLibrary = function () {
 };
 document.addEventListener('input', e => { if (e.target.id === 'xp-gq') { GL.q = e.target.value; const el = document.getElementById('w-glib'); if (el) { const pos = e.target.selectionStart; SX.W('w-glib', SX.gamesLibrary()); const n = document.getElementById('xp-gq'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (er) { /* ignore */ } } } } });
 document.addEventListener('click', e => { const b = e.target.closest('#studio-root [data-gsort]'); if (!b) return; GL.sort = b.dataset.gsort; STK.store.set('xp-gsort', GL.sort); SX.W('w-glib', SX.gamesLibrary()); });
+
+/* true while a mirror or recording runs or a game is in front: Studio then asks the phone far less often */
+SX.calm = () => {
+  if ((state.sessions || []).length) return true;
+  const fg = (STK.live() || {}).fgPackage; if (!fg) return false;
+  const X = gx(); return !!(X && (X.games().some(g => g.pkg === fg) || X.KNOWN[fg]));
+};
 
 /* ---- Game Priority: stop background apps, keep stopping the ones that wake up ---- */
 const GUARD = { timers: {}, stat: {}, busy: {}, away: {} };
@@ -222,9 +231,9 @@ function startGuard(serial, g) {
     if (GUARD.busy[serial]) return; GUARD.busy[serial] = true;
     try { const r = await sweep(serial, g.pkg, o.msgs); const st = GUARD.stat[serial]; st.stopped += r.stopped; st.mb += r.mb; st.at = Date.now(); } catch (e) { /* try again next time */ }
     GUARD.busy[serial] = false;
-  }, Math.max(8, Number(o.every) || 20) * 1000);
+  }, Math.max(30, Number(o.every) || 45) * 1000);
 }
-STK.on('sx-game-enter', ({ serial, g }) => { const o = gguard(g); GUARD.stat[serial] = { stopped: 0, mb: 0, pkg: g.pkg }; if (o.sweep) sweep(serial, g.pkg, o.msgs).then(r => { const st = GUARD.stat[serial]; if (st) { st.stopped += r.stopped; st.mb += r.mb; } if (r.stopped) STK.toast('Game Priority: stopped ' + r.stopped + ' background apps (about ' + r.mb + ' MB).'); }).catch(() => {}); startGuard(serial, g); });
+STK.on('sx-game-enter', ({ serial, g }) => { const o = gguard(g); if (!o.enabled) return; GUARD.stat[serial] = { stopped: 0, mb: 0, pkg: g.pkg }; if (o.sweep) sweep(serial, g.pkg, o.msgs).then(r => { const st = GUARD.stat[serial]; if (st) { st.stopped += r.stopped; st.mb += r.mb; } if (r.stopped) STK.toast('Game Priority: stopped ' + r.stopped + ' background apps (about ' + r.mb + ' MB).'); }).catch(() => {}); startGuard(serial, g); });
 STK.on('sx-game-exit', ({ serial, g }) => { stopGuard(serial); const st = GUARD.stat[serial]; if (st && st.stopped) STK.toast('Game Priority kept ' + st.stopped + ' apps out of the way during this game.'); });
 STK.on('device-changed', () => { Object.keys(GUARD.timers).forEach(stopGuard); });
 
@@ -263,10 +272,11 @@ function detailsHtml(i) {
   return `<div class="xp-gd-hero" style="--h:${X.hue(g.pkg)}"><span class="av">${esc(X.initials(name))}</span><div class="who"><h2>${esc(name)}</h2><small>${esc(g.pkg)}</small><div class="chips">${live ? '<span class="sx-chip ok">Playing now</span>' : ''}${pr ? `<span class="sx-chip accent">${icon(pr.ic, 'sm')}${esc(pr.name)} profile</span>` : '<span class="sx-chip">No profile</span>'}${g.on === false ? '<span class="sx-chip">Auto profile off</span>' : ''}</div></div><button class="icon-btn" type="button" data-gd="close" aria-label="Close">${icon('x')}</button></div>
   <div class="sx-sums xp-gd-stats">${tile('Play time', p ? esc(X.fmtDur(p)) : '0 min', 'Tracked while the dashboard is open')}${tile('Sessions', gs.length, gs.length ? 'Average ' + (avgT ? avgT.toFixed(0) + ' °C' : '-') : 'None yet')}${tile('Last played', lp ? ago(lp) : '-', lp ? new Date(lp).toLocaleDateString() : 'Not yet')}${tile('Hottest', peak ? peak.toFixed(0) + ' °C' : '-', perH != null ? perH.toFixed(0) + '% battery per hour' : 'Battery use appears after 5 min sessions')}</div>
   <section class="xp-gd-sec"><h3>${icon('rocket', 'sm')}Game Priority <small>Advanced optimization: this game gets the phone to itself</small></h3>
-    ${sw('sweep', 'Stop background apps when the game starts', 'Closes everything that is not in front, protected, or a call or message app')}
-    ${sw('watch', 'Keep stopping apps that wake up', 'Checks while you play and stops anything that starts again')}
+    ${sw('enabled', 'Use Game Priority when this game opens', 'Off by default. It starts about 40 seconds after the game opens, so the game can finish loading first')}
+    ${sw('sweep', 'Stop background apps', 'Closes everything that is not in front, protected, or a call or message app')}
+    ${sw('watch', 'Keep stopping apps that wake up', 'Checks while you play and stops anything that starts again. Heavy games can dislike this, so it is off by default')}
     ${sw('msgs', 'Keep calls and messages working', 'WhatsApp, Telegram, SMS and similar are left alone')}
-    <label class="xp-gd-row"><span><b>Check every</b><small>How often the guard looks while you play</small></span><select data-gd="every" aria-label="Check every">${[10, 20, 40, 60].map(s => `<option value="${s}" ${Number(gd.every) === s ? 'selected' : ''}>${s} seconds</option>`).join('')}</select></label>
+    <label class="xp-gd-row"><span><b>Check every</b><small>How often the guard looks while you play</small></span><select data-gd="every" aria-label="Check every">${[30, 45, 60, 120].map(s => `<option value="${s}" ${Number(gd.every) === s ? 'selected' : ''}>${s} seconds</option>`).join('')}</select></label>
     <p class="hint">Starred apps are always kept${mine.length ? ': ' + esc(mine.map(nice).join(', ')) : ''}. Manage them on the Apps page.</p>${stat}
     <div class="xp-gd-acts"><button class="btn primary" type="button" data-gd="play">${icon('rocket', 'sm')}<span>Play with Game Priority</span></button><button class="btn" type="button" data-gd="clear">${icon('bolt', 'sm')}<span>Stop background apps now</span></button></div></section>
   <section class="xp-gd-sec"><h3>${icon('sliders', 'sm')}When it opens <small>Switched on by itself, restored when you leave</small></h3><div class="chips">${pr ? `<span class="sx-chip accent">${icon(pr.ic, 'sm')}${esc(pr.name)}</span>` : ''}${g.dnd ? '<span class="sx-chip">Do not disturb</span>' : ''}${g.touches ? '<span class="sx-chip">Show touches</span>' : ''}${g.freemem ? '<span class="sx-chip">Free memory</span>' : ''}${g.gamemode ? '<span class="sx-chip">Android Game Mode</span>' : ''}${g.mirror ? '<span class="sx-chip">Mirrors</span>' : ''}${g.record ? '<span class="sx-chip">Records</span>' : ''}${!pr && !g.dnd && !g.touches && !g.freemem && !g.gamemode && !g.mirror && !g.record ? '<span class="hint">Nothing selected.</span>' : ''}</div><div class="xp-gd-acts"><button class="btn" type="button" data-gd="edit">${icon('pencil', 'sm')}<span>Edit these</span></button><button class="btn" type="button" data-gd="opt" title="Recompile the game for faster start-up">${icon('bolt', 'sm')}<span>Speed up start-up</span></button><button class="btn" type="button" data-gd="mon">${icon('pulse', 'sm')}<span>Watch smoothness</span></button></div></section>

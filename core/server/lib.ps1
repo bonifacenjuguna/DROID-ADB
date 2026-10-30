@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '4.5.0'
+$ToolkitVersion = '4.7.1'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -141,6 +141,7 @@ $SettingGroups = @(
 )
 
 $AudioSources = @((C 'output' 'Phone sound (output)'), (C 'playback' 'Playback capture'), (C 'mic' 'Microphone'), (C 'mic-unprocessed' 'Microphone (raw)'), (C 'mic-voice-communication' 'Microphone (voice call)'))
+$ShapeSizes = @((C 'phone' 'Phone (its own shape)'), (C '1280x800' 'Tablet 16:10, 1280x800'), (C '1600x1200' 'Tablet 4:3, 1600x1200'), (C '1920x1200' 'Tablet 16:10, 1920x1200'), (C '2048x1536' 'Tablet 4:3, 2048x1536'), (C '1280x720' 'PC 16:9, 1280x720'), (C '1920x1080' 'PC 16:9, 1920x1080'), (C '2560x1440' 'PC 16:9, 2560x1440'), (C 'custom' 'Custom size'))
 $AudioCodecs = @((C '' 'scrcpy default'), (C 'opus' 'Opus'), (C 'aac' 'AAC'), (C 'flac' 'FLAC'), (C 'raw' 'Raw'))
 # Audio modes (4.1.0). The ids are stored in settings and checked against this list.
 $AudioModeIds = @('video_only', 'record_only', 'copy_play', 'reroute')
@@ -163,6 +164,9 @@ $Schema = @(
     (F 'maxFps' 'video' 'int' 30 'Frame rate' 'Higher is smoother and uses more CPU.' -Min 1 -Max 240 -Picks @(15, 24, 30, 45, 60, 90, 120) -Unit 'fps'),
     (F 'bitrateMbps' 'video' 'int' 8 'Bitrate' 'Higher looks better and makes larger recordings.' -Min 1 -Max 200 -Picks @(2, 4, 8, 12, 16, 24) -Unit 'Mbps'),
     (F 'codec' 'video' 'choice' 'h264' 'Video codec' 'H.265 and AV1 make smaller files but need phone support.' -Choices @((C 'h264' 'H.264'), (C 'h265' 'H.265'), (C 'av1' 'AV1'))),
+    (F 'shapeSize' 'video' 'choice' 'phone' 'Window shape' 'Phone keeps the window the shape of the phone. Tablet and PC make the mirror and record window that shape, with your normal phone screen scaled to fit inside. The phone itself is not changed. OBS, TikTok Live and other apps that capture the window get that shape. The recording file keeps the phone shape.' -Choices $ShapeSizes),
+    (F 'shapeW' 'video' 'int' 1600 'Custom window width' 'Pixels.' -Min 320 -Max 7680 -Unit 'px' -Show @{ shapeSize = @('custom') }),
+    (F 'shapeH' 'video' 'int' 1200 'Custom window height' 'Pixels.' -Min 320 -Max 7680 -Unit 'px' -Show @{ shapeSize = @('custom') }),
     (F 'videoEncoder' 'video' 'text' '' 'Video encoder' 'Optional. Exact encoder name, for example OMX.qcom.video.encoder.avc.' -Pattern '^[A-Za-z0-9._\-]{0,80}$' -Placeholder 'Automatic'),
     (F 'displayId' 'video' 'int' 0 'Display id' 'Mirror a secondary display. 0 is the main screen.' -Min 0 -Max 99 -Show @{ source = 'display' }),
     (F 'virtualDisplay' 'video' 'bool' $false 'Use a virtual display' 'Creates a separate display so apps can run without touching the phone screen.' -Show @{ source = 'display' }),
@@ -184,8 +188,8 @@ $Schema = @(
     (F 'audioCodec' 'audio' 'choice' '' 'Audio codec (mirror)' 'Codec used while only mirroring.' -Choices $AudioCodecs -Show @{ audioMode = @('copy_play', 'reroute') }),
     (F 'recordAudioCodec' 'audio' 'choice' 'aac' 'Audio codec (recording)' 'AAC is the safest choice for recordings.' -Choices $AudioCodecs -Show @{ audioMode = @('record_only', 'copy_play', 'reroute') }),
     (F 'audioBitrate' 'audio' 'int' 0 'Audio bitrate' '0 uses the scrcpy default.' -Min 0 -Max 512 -Picks @(0, 64, 128, 192, 256) -Unit 'kbps' -Show @{ audioMode = @('record_only', 'copy_play', 'reroute') }),
-    (F 'audioBuffer' 'audio' 'int' 0 'Audio buffer' '0 uses the smooth default of 100 ms. Lower it for less delay, raise it if the sound crackles.' -Min 0 -Max 2000 -Picks @(0, 50, 100, 150, 200, 300) -Unit 'ms' -Show @{ audioMode = @('copy_play', 'reroute') }),
-    (F 'audioOutputBuffer' 'audio' 'int' 0 'Audio output buffer' '0 uses the smooth default of 20 ms. Raise it if the sound crackles on the PC.' -Min 0 -Max 500 -Picks @(0, 10, 20, 40, 80) -Unit 'ms' -Show @{ audioMode = @('copy_play', 'reroute') }),
+    (F 'audioBuffer' 'audio' 'int' 0 'Audio buffer' '0 keeps the scrcpy default (50 ms), which has the lowest delay. Raise it only if the sound crackles.' -Min 0 -Max 2000 -Picks @(0, 50, 100, 150, 200, 300) -Unit 'ms' -Show @{ audioMode = @('copy_play', 'reroute') }),
+    (F 'audioOutputBuffer' 'audio' 'int' 0 'Audio output buffer' '0 keeps the scrcpy default (5 ms). Raise it only if the sound crackles on the PC.' -Min 0 -Max 500 -Picks @(0, 10, 20, 40, 80) -Unit 'ms' -Show @{ audioMode = @('copy_play', 'reroute') }),
     # control
     (F 'viewOnly' 'control' 'bool' $false 'View only' 'Block mouse and keyboard control of the phone.'),
     (F 'keyboard' 'control' 'choice' '' 'Keyboard mode' 'uhid works in games and with any language. aoa needs USB.' -Choices $InputModes -Show @{ viewOnly = $false }),
@@ -750,14 +754,12 @@ function Resolve-AudioPlan {
     if ($codec -ne '' -and (@($AudioCodecs | ForEach-Object { [string]$_.v }) -contains $codec)) { [void]$argv.Add('--audio-codec=' + $codec) }
     if ([int]$S.audioBitrate -gt 0) { [void]$argv.Add('--audio-bit-rate=' + $S.audioBitrate + 'K') }
     if ($plan.playsOnPc) {
-        # 4.3.0: the sound is played on this PC, so give it a little more room than scrcpy's tight defaults (50 ms and 5 ms).
-        # A bigger buffer only adds delay to the mirror's sound. It never lowers the quality of the sound.
+        # 4.7.1: the own buffers of scrcpy (50 ms and 5 ms) give the lowest delay and are used unless you set a value in Settings, Audio.
+        # 4.3.0 to 4.7.0 added 100 ms and 20 ms by default, which is extra delay on Reroute.
         $abuf = [int]$S.audioBuffer
-        if ($abuf -le 0) { $abuf = 100 }
-        [void]$argv.Add('--audio-buffer=' + $abuf)
+        if ($abuf -gt 0) { [void]$argv.Add('--audio-buffer=' + $abuf) }
         $obuf = [int]$S.audioOutputBuffer
-        if ($obuf -le 0) { $obuf = 20 }
-        [void]$argv.Add('--audio-output-buffer=' + $obuf)
+        if ($obuf -gt 0) { [void]$argv.Add('--audio-output-buffer=' + $obuf) }
     }
     elseif ([int]$S.audioBuffer -gt 0) { [void]$argv.Add('--audio-buffer=' + $S.audioBuffer) }
     $plan.warnings = @($warn)
@@ -1136,6 +1138,138 @@ function Get-AudioEnvironment {
 # ---------------------------------------------------------------------------
 # Building the scrcpy command line
 # ---------------------------------------------------------------------------
+# ---------- 4.7.0: window shape (tablet and PC view) ----------
+# The mirror and record window is made tablet or PC shaped. The phone is not touched and no second screen is made.
+$ShapeFile = Join-Path $ConfigDir 'shape-restore.json'
+function Get-ShapeSpec {
+    param($S)
+    $size = [string]$S.shapeSize
+    if ($size -eq '' -or $size -eq 'phone') { return $null }
+    $w = 0
+    $h = 0
+    if ($size -eq 'custom') { $w = [int]$S.shapeW; $h = [int]$S.shapeH }
+    elseif ($size -match '^(\d{3,4})x(\d{3,4})$') { $w = [int]$Matches[1]; $h = [int]$Matches[2] }
+    if ($w -lt 320 -or $h -lt 320 -or $w -gt 7680 -or $h -gt 7680) { return $null }
+    return @{ w = $w; h = $h }
+}
+function Initialize-WindowApi {
+    if ('DroidWin' -as [type]) { return }
+    Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+public static class DroidWin {
+    delegate bool EnumProc(IntPtr h, IntPtr l);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc p, IntPtr l);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("user32.dll")] static extern int GetWindowTextLength(IntPtr h);
+    public static IntPtr[] ForProcess(int pid) {
+        List<IntPtr> list = new List<IntPtr>();
+        EnumWindows(delegate (IntPtr h, IntPtr l) { uint p; GetWindowThreadProcessId(h, out p); if (p == (uint)pid && IsWindowVisible(h) && GetWindowTextLength(h) > 0) list.Add(h); return true; }, IntPtr.Zero);
+        return list.ToArray();
+    }
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+    [StructLayout(LayoutKind.Sequential)] public struct MONITORINFO { public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags; }
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+    [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT r);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int cy, uint flags);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
+    [DllImport("user32.dll")] static extern bool IsZoomed(IntPtr h);
+    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
+    [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr h, uint flags);
+    [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr m, ref MONITORINFO mi);
+    public static bool SetClient(IntPtr h, int cw, int ch, out int rw, out int rh) {
+        rw = 0; rh = 0;
+        if (IsIconic(h) || IsZoomed(h)) ShowWindow(h, 9);
+        RECT w, c;
+        if (!GetWindowRect(h, out w) || !GetClientRect(h, out c)) return false;
+        int dw = (w.R - w.L) - (c.R - c.L), dh = (w.B - w.T) - (c.B - c.T);
+        MONITORINFO mi = new MONITORINFO(); mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+        IntPtr m = MonitorFromWindow(h, 2);
+        int availW = 100000, availH = 100000, wl = 0, wt = 0, wr = 100000, wb = 100000;
+        if (m != IntPtr.Zero && GetMonitorInfo(m, ref mi)) { wl = mi.rcWork.L; wt = mi.rcWork.T; wr = mi.rcWork.R; wb = mi.rcWork.B; availW = wr - wl; availH = wb - wt; }
+        double s = Math.Min(1.0, Math.Min((availW - dw) / (double)cw, (availH - dh) / (double)ch));
+        if (s <= 0) s = 1.0;
+        rw = (int)Math.Floor(cw * s); rh = (int)Math.Floor(ch * s);
+        int ow = rw + dw, oh = rh + dh;
+        int x = Math.Max(wl, Math.Min(w.L, wr - ow)), y = Math.Max(wt, Math.Min(w.T, wb - oh));
+        return SetWindowPos(h, IntPtr.Zero, x, y, ow, oh, 0x0004 | 0x0010);
+    }
+}
+'@
+}
+function Get-WorkArea {
+    if ($Shared.workArea) { return $Shared.workArea }
+    $wa = @{ w = 1600; h = 900 }
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        $r = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+        $wa = @{ w = [int]$r.Width; h = [int]$r.Height }
+    } catch { }
+    $Shared.workArea = $wa
+    return $wa
+}
+# size the window will open at: the chosen shape, scaled down (same shape) so it fits on the screen of this PC
+function Get-ShapeWindowSize {
+    param($Spec)
+    $wa = Get-WorkArea
+    $sc = [math]::Min(1.0, [math]::Min(($wa.w - 24) / [double]$Spec.w, ($wa.h - 64) / [double]$Spec.h))
+    if ($sc -le 0) { $sc = 1.0 }
+    return @{ w = [int][math]::Floor($Spec.w * $sc); h = [int][math]::Floor($Spec.h * $sc) }
+}
+# change the shape of mirror or record windows that are already open (no restart, no change to the phone)
+function Set-MirrorWindowShape {
+    param([string]$Serial, [int]$W, [int]$H)
+    Initialize-WindowApi
+    $procs = @(Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue)
+    $n = 0
+    $last = ''
+    foreach ($cp in $procs) {
+        if ($Serial -and $procs.Count -gt 1 -and $cp.CommandLine -and ($cp.CommandLine -notmatch [regex]::Escape($Serial))) { continue }
+        foreach ($hwnd in [DroidWin]::ForProcess([int]$cp.ProcessId)) {
+            $rw = 0
+            $rh = 0
+            if ([DroidWin]::SetClient($hwnd, $W, $H, [ref]$rw, [ref]$rh)) { $n++; $last = $rw.ToString() + 'x' + $rh.ToString() }
+        }
+    }
+    return @{ windows = $n; size = $last }
+}
+
+# older versions could leave a phone screen resized. This puts such a phone back once, and is then idle.
+function Get-ShapeApplied {
+    try {
+        if (Test-Path -LiteralPath $ShapeFile) {
+            $j = Get-Content -LiteralPath $ShapeFile -Raw | ConvertFrom-Json
+            return @($j.serials | Where-Object { $_ } | ForEach-Object { [string]$_ })
+        }
+    } catch { }
+    return @()
+}
+function Save-ShapeApplied {
+    param([string[]]$Serials)
+    try {
+        if (@($Serials).Count -eq 0) { if (Test-Path -LiteralPath $ShapeFile) { Remove-Item -LiteralPath $ShapeFile -Force } }
+        else { (@{ serials = @($Serials) } | ConvertTo-Json -Compress) | Set-Content -LiteralPath $ShapeFile -Encoding ASCII }
+    } catch { }
+}
+function Restore-PhoneShape {
+    param([string]$Serial)
+    try { [void](Invoke-DeviceShell $Serial 'wm size reset; wm density reset' 20) } catch { Write-BackendLog ('Could not put the screen size back: ' + $_.Exception.Message); return $false }
+    Save-ShapeApplied @(Get-ShapeApplied | Where-Object { $_ -ne $Serial })
+    Add-Activity 'system' 'The phone screen size was put back to normal.'
+    return $true
+}
+function Invoke-ShapeRestore {
+    $applied = @(Get-ShapeApplied)
+    if ($applied.Count -eq 0) { return }
+    $ready = @((Get-DeviceCache).devices | Where-Object { $_.state -eq 'device' } | ForEach-Object { [string]$_.id })
+    foreach ($serial in $applied) {
+        if ($ready -notcontains $serial) { continue }
+        [void](Restore-PhoneShape $serial)
+    }
+}
+
 function New-ScrcpyArgs {
     param($S, [string]$Mode, [string]$Serial, [string]$OutFile, [hashtable]$Once, [hashtable]$PlanSink = $null, [bool]$Probe = $true)
     Test-Serial $Serial
@@ -1203,8 +1337,15 @@ function New-ScrcpyArgs {
         if ($S.alwaysOnTop) { [void]$a.Add('--always-on-top') }
         if ($S.fullscreen) { [void]$a.Add('--fullscreen') }
         if ($S.borderless) { [void]$a.Add('--window-borderless') }
-        if ($S.windowWidth -gt 0) { [void]$a.Add('--window-width=' + $S.windowWidth) }
-        if ($S.windowHeight -gt 0) { [void]$a.Add('--window-height=' + $S.windowHeight) }
+        $shapeSpec = Get-ShapeSpec $S
+        if ($shapeSpec) {
+            $ws = Get-ShapeWindowSize $shapeSpec
+            [void]$a.Add('--window-width=' + $ws.w)
+            [void]$a.Add('--window-height=' + $ws.h)
+        } else {
+            if ($S.windowWidth -gt 0) { [void]$a.Add('--window-width=' + $S.windowWidth) }
+            if ($S.windowHeight -gt 0) { [void]$a.Add('--window-height=' + $S.windowHeight) }
+        }
         if ($S.disableScreensaver) { [void]$a.Add('--disable-screensaver') }
         if ($S.noKeyRepeat) { [void]$a.Add('--no-key-repeat') }
         if ($S.printFps) { [void]$a.Add('--print-fps') }

@@ -71,8 +71,12 @@ async function enter(serial, g) {
   if (G.entering[serial]) return; G.entering[serial] = true;
   const a = G.active[serial] = { pkg: g.pkg, g, prevSettings: null, prevToggles: null, rec: false, mir: false, startedAt: Date.now(), gm: false, profile: false, restore: false, temps: [], bat0: (STK.live() || {}).battery, peak: 0 };
   G.misses[serial] = 0; refreshIfOpen();
-  STK.toast('Game mode on: ' + gname(g));
+  STK.toast('Game mode on: ' + gname(g) + '. It is switched on once the game has finished loading.');
   try {
+    /* 4.7.1: nothing is changed on the phone while the game is still starting. Heavy games can crash if commands such as
+       free memory or app stops arrive during loading. The wait can be changed with kv xp-settle (seconds, default 40). */
+    const settle = Math.max(0, Number(STK.kv.get('xp-settle', 40))) * 1000;
+    for (let t = 0; t < settle; t += 1000) { await new Promise(r => setTimeout(r, 1000)); if (G.active[serial] !== a) return; }
     try { const t = await STK.api('/toggles?id=' + encodeURIComponent(serial), { timeout: 30000 }); a.prevToggles = t.toggles || {}; } catch (e) { /* optional */ }
     if (g.profile) { a.restore = !S.prev[serial]; try { await SX.applyProfile(g.profile, { quiet: true, pkg: g.pkg }); a.profile = true; } catch (e) { /* profile steps report themselves */ } }
     if (g.dnd) await setT(serial, 'dnd', true);
