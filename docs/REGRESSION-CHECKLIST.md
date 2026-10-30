@@ -225,3 +225,10 @@ Full steps are in docs/AUDIO.md.
 - [ ] Library, Backups, Saved apps: press Install on phone for that file. The app installs and keeps its data.
 - [ ] Tools, Apps, Install app: choose the .apks file. It installs. Choose a base .apk plus its split_config .apk files together: they install as one set.
 - [ ] Install an .xapk from the web. It installs; an .obb note appears if the game has data files.
+
+## 4.7.0 window shape (real PC)
+- [ ] Console, Window shape: Tablet 1600x1200. Press Mirror. The window opens 4:3 (or the biggest 4:3 that fits your screen) with the phone screen inside and dark bars at the sides. Touch and clicking still work.
+- [ ] With the mirror open, click PC, then Phone, then Tablet. The open window changes shape each time, with no restart and no wait.
+- [ ] Press Record with Tablet chosen. The record window has the same shape; the saved file is the normal phone shape.
+- [ ] OBS: add a Window Capture of the mirror window. The source is tablet shaped.
+- [ ] The phone screen is never resized. If an older version left it resized, it is put back by itself.

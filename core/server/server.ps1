@@ -89,6 +89,7 @@ while (-not $Shared.stop) {
     try {
         Update-DeviceCache
         [void](Get-LiveSessions)
+        try { Invoke-ShapeRestore } catch {}
         try { Invoke-AutoReconnect } catch {}
         $n++
         if ($n % 60 -eq 0) { $Shared.versions = Get-ServerVersions }
