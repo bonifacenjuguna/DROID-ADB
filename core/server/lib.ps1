@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '4.7.1'
+$ToolkitVersion = '4.9.0'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -142,6 +142,8 @@ $SettingGroups = @(
 
 $AudioSources = @((C 'output' 'Phone sound (output)'), (C 'playback' 'Playback capture'), (C 'mic' 'Microphone'), (C 'mic-unprocessed' 'Microphone (raw)'), (C 'mic-voice-communication' 'Microphone (voice call)'))
 $ShapeSizes = @((C 'phone' 'Phone (its own shape)'), (C '1280x800' 'Tablet 16:10, 1280x800'), (C '1600x1200' 'Tablet 4:3, 1600x1200'), (C '1920x1200' 'Tablet 16:10, 1920x1200'), (C '2048x1536' 'Tablet 4:3, 2048x1536'), (C '1280x720' 'PC 16:9, 1280x720'), (C '1920x1080' 'PC 16:9, 1920x1080'), (C '2560x1440' 'PC 16:9, 2560x1440'), (C 'custom' 'Custom size'))
+$ShapeFills = @((C 'off' 'Off: the whole screen, with bars'), (C 'middle' 'Fill, keep the middle'), (C 'start' 'Fill, keep the top or left'), (C 'end' 'Fill, keep the bottom or right'))
+$ShapeNotPhone = @('1280x800', '1600x1200', '1920x1200', '2048x1536', '1280x720', '1920x1080', '2560x1440', 'custom')
 $AudioCodecs = @((C '' 'scrcpy default'), (C 'opus' 'Opus'), (C 'aac' 'AAC'), (C 'flac' 'FLAC'), (C 'raw' 'Raw'))
 # Audio modes (4.1.0). The ids are stored in settings and checked against this list.
 $AudioModeIds = @('video_only', 'record_only', 'copy_play', 'reroute')
@@ -165,6 +167,7 @@ $Schema = @(
     (F 'bitrateMbps' 'video' 'int' 8 'Bitrate' 'Higher looks better and makes larger recordings.' -Min 1 -Max 200 -Picks @(2, 4, 8, 12, 16, 24) -Unit 'Mbps'),
     (F 'codec' 'video' 'choice' 'h264' 'Video codec' 'H.265 and AV1 make smaller files but need phone support.' -Choices @((C 'h264' 'H.264'), (C 'h265' 'H.265'), (C 'av1' 'AV1'))),
     (F 'shapeSize' 'video' 'choice' 'phone' 'Window shape' 'Phone keeps the window the shape of the phone. Tablet and PC make the mirror and record window that shape, with your normal phone screen scaled to fit inside. The phone itself is not changed. OBS, TikTok Live and other apps that capture the window get that shape. The recording file keeps the phone shape.' -Choices $ShapeSizes),
+    (F 'shapeFill' 'video' 'choice' 'off' 'Fill the window' 'Off keeps the whole phone screen with dark bars. Fill crops the picture to the shape of the window so it fills it, and the recording file gets that shape too. The parts that do not fit are cut: the top and bottom of a tall picture, or the sides of a wide one. It is worked out when you press Mirror or Record, so press it again after turning the phone.' -Choices $ShapeFills -Show @{ shapeSize = $ShapeNotPhone }),
     (F 'shapeW' 'video' 'int' 1600 'Custom window width' 'Pixels.' -Min 320 -Max 7680 -Unit 'px' -Show @{ shapeSize = @('custom') }),
     (F 'shapeH' 'video' 'int' 1200 'Custom window height' 'Pixels.' -Min 320 -Max 7680 -Unit 'px' -Show @{ shapeSize = @('custom') }),
     (F 'videoEncoder' 'video' 'text' '' 'Video encoder' 'Optional. Exact encoder name, for example OMX.qcom.video.encoder.avc.' -Pattern '^[A-Za-z0-9._\-]{0,80}$' -Placeholder 'Automatic'),
@@ -1270,6 +1273,37 @@ function Invoke-ShapeRestore {
     }
 }
 
+# 4.9.0: Fill. Works out the crop (in the natural orientation of the phone, as scrcpy expects) that gives the picture the shape of the window.
+function Get-FillCrop {
+    param([string]$Serial, $Spec, [string]$Anchor)
+    try {
+        $r = Invoke-DeviceShell $Serial 'wm size; dumpsys display | grep -m1 -oE "rotation [0-9]"' 15
+        $txt = [string]$r.out
+        $wn = 0
+        $hn = 0
+        if ($txt -match '(?m)Override size:\s*(\d+)x(\d+)') { $wn = [int]$Matches[1]; $hn = [int]$Matches[2] }
+        elseif ($txt -match '(?m)Physical size:\s*(\d+)x(\d+)') { $wn = [int]$Matches[1]; $hn = [int]$Matches[2] }
+        if ($wn -le 0 -or $hn -le 0) { return '' }
+        $rot = 0
+        if ($txt -match 'rotation\s+(\d)') { $rot = [int]$Matches[1] }
+        $odd = (($rot % 2) -eq 1)
+        if ($odd) { $fw = $hn; $fh = $wn } else { $fw = $wn; $fh = $hn }
+        $aspect = [double]$Spec.w / [double]$Spec.h
+        if (($fw / [double]$fh) -gt $aspect) { $ch = $fh; $cw = [int][math]::Floor($fh * $aspect) } else { $cw = $fw; $ch = [int][math]::Floor($fw / $aspect) }
+        $cw = $cw - ($cw % 2)
+        $ch = $ch - ($ch % 2)
+        if ($cw -ge $fw -and $ch -ge $fh) { return '' }
+        $x = 0
+        $y = 0
+        if ($cw -lt $fw) { if ($Anchor -eq 'middle') { $x = [int][math]::Floor(($fw - $cw) / 2) } elseif ($Anchor -eq 'end') { $x = $fw - $cw } }
+        if ($ch -lt $fh) { if ($Anchor -eq 'middle') { $y = [int][math]::Floor(($fh - $ch) / 2) } elseif ($Anchor -eq 'end') { $y = $fh - $ch } }
+        $x = $x - ($x % 2)
+        $y = $y - ($y % 2)
+        if ($odd) { return ([string]$ch + ':' + [string]$cw + ':' + [string]$y + ':' + [string]$x) }
+        return ([string]$cw + ':' + [string]$ch + ':' + [string]$x + ':' + [string]$y)
+    } catch { return '' }
+}
+
 function New-ScrcpyArgs {
     param($S, [string]$Mode, [string]$Serial, [string]$OutFile, [hashtable]$Once, [hashtable]$PlanSink = $null, [bool]$Probe = $true)
     Test-Serial $Serial
@@ -1292,6 +1326,10 @@ function New-ScrcpyArgs {
             if ($Once.startApp -and -not $companion) { [void]$a.Add('--start-app=' + $Once.startApp) }
         }
         if ($S.crop -ne '') { [void]$a.Add('--crop=' + $S.crop) }
+        elseif ($Probe -and (@('middle', 'start', 'end') -contains [string]$S.shapeFill)) {
+            $fillSpec = Get-ShapeSpec $S
+            if ($fillSpec) { $fillCrop = Get-FillCrop $Serial $fillSpec ([string]$S.shapeFill); if ($fillCrop -ne '') { [void]$a.Add('--crop=' + $fillCrop) } }
+        }
     }
     # 4.3.0: recordings have their own quality (high by default). The mirror keeps the Video settings.
     $qSize = [int]$S.maxSize

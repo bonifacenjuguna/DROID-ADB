@@ -78,11 +78,13 @@ async function enter(serial, g) {
     const settle = Math.max(0, Number(STK.kv.get('xp-settle', 40))) * 1000;
     for (let t = 0; t < settle; t += 1000) { await new Promise(r => setTimeout(r, 1000)); if (G.active[serial] !== a) return; }
     try { const t = await STK.api('/toggles?id=' + encodeURIComponent(serial), { timeout: 30000 }); a.prevToggles = t.toggles || {}; } catch (e) { /* optional */ }
-    if (g.profile) { a.restore = !S.prev[serial]; try { await SX.applyProfile(g.profile, { quiet: true, pkg: g.pkg }); a.profile = true; } catch (e) { /* profile steps report themselves */ } }
+    /* Play (Games tab) applies the whole profile before the game opens, and leaves a note here so it is restored when you leave */
+    const pre = SX.preLaunch && SX.preLaunch.serial === serial && SX.preLaunch.pkg === g.pkg && Date.now() - SX.preLaunch.t < 180000;
+    if (pre) { a.restore = true; a.profile = true; SX.preLaunch = null; }
+    else if (g.profile) { a.restore = !S.prev[serial]; try { await SX.applyProfile(g.profile, { quiet: true, pkg: g.pkg, running: true }); a.profile = true; } catch (e) { /* profile steps report themselves */ } }
     if (g.dnd) await setT(serial, 'dnd', true);
     if (g.touches) await setT(serial, 'touches', true);
-    if (g.freemem && !g.profile) { try { await STK.post('/perf-tools', { serial, action: 'freemem' }, { timeout: 30000 }); } catch (e) { /* optional step */ } }
-    if (g.gamemode) { try { const r = await STK.post('/perf-tools', { serial, action: 'gamemode', pkg: g.pkg, mode: 'performance' }, { timeout: 30000 }); if (r.applied) a.gm = true; else STK.toast(r.message, 'bad'); } catch (e) { STK.toast(e.message, 'bad'); } }
+    /* 4.8.0: freeing memory and Game Mode are not run while the game is running (they can crash it); Play does them before it opens */
     const p = presets().find(x => x.id === g.preset);
     if (p) {
       const prev = {}; for (const k of Object.keys(p.v)) prev[k] = (state.settings || {})[k]; a.prevSettings = prev;

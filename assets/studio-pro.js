@@ -244,6 +244,10 @@ async function playWithPriority(i, btn) {
   const run = async () => {
     try {
       if (o.sweep) { if (label) label.textContent = 'Clearing...'; const r = await sweep(serial, g.pkg, o.msgs, (n, tot) => { if (label) label.textContent = n + ' / ' + tot; }); GUARD.stat[serial] = { stopped: r.stopped, mb: r.mb, pkg: g.pkg, at: Date.now() }; STK.toast(r.stopped ? 'Stopped ' + r.stopped + ' background apps (about ' + r.mb + ' MB). Opening ' + X.gname(g) + '.' : 'Nothing was in the way. Opening ' + X.gname(g) + '.'); }
+      if (g.profile) { if (label) label.textContent = 'Profile...'; try { await SX.applyProfile(g.profile, { quiet: true, pkg: g.pkg }); } catch (e) { /* the steps report themselves */ } }
+      if (g.freemem && !g.profile) { try { await STK.post('/perf-tools', { serial, action: 'freemem' }, { timeout: 30000 }); } catch (e) { /* optional */ } }
+      if (g.gamemode) { try { await STK.post('/perf-tools', { serial, action: 'gamemode', pkg: g.pkg, mode: 'performance' }, { timeout: 30000 }); } catch (e) { /* optional */ } }
+      SX.preLaunch = { serial, pkg: g.pkg, t: Date.now() };
       if (label) label.textContent = 'Opening...';
       await SX.tool({ action: 'launch', pkg: g.pkg }, { quiet: true });
       startGuard(serial, g);

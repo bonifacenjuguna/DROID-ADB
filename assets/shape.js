@@ -10,6 +10,7 @@ const SIZES = {
 };
 const kindOf = v => (!v || v === 'phone') ? 'phone' : SIZES.tablet.some(x => x[0] === v) ? 'tablet' : SIZES.pc.some(x => x[0] === v) ? 'pc' : 'custom';
 const cfg = () => state.settings || {};
+const FILLS = [['off', 'Fill: off (whole screen, bars)'], ['middle', 'Fill: keep the middle'], ['start', 'Fill: keep top or left'], ['end', 'Fill: keep bottom or right']];
 let applied = [];
 
 async function loadApplied() {
@@ -47,18 +48,20 @@ function sizeText(v) {
   if (v === 'custom') return (s.shapeW || '?') + '×' + (s.shapeH || '?');
   return String(v).replace('x', '×');
 }
-function note(k, v) {
+function note(k, v, f) {
   if (k === 'phone') return 'The mirror and record window keeps the shape of the phone.';
-  return 'The mirror and record window is ' + sizeText(v) + ' shaped, with your normal phone screen scaled to fit inside and plain dark bars around it. A window that is open changes right away; new ones open at this shape. The phone itself is not changed. If your screen is smaller, the window is made as large as fits, in the same shape.';
+  const base = 'The mirror and record window is ' + sizeText(v) + ' shaped. A window that is open changes right away; new ones open at this shape. The phone itself is not changed. If your screen is smaller, the window is made as large as fits, in the same shape.';
+  if (!f || f === 'off') return base + ' Your normal phone screen is scaled to fit inside, with plain dark bars around it.';
+  return base + ' Fill is on: the picture is cropped to the shape of the window so it fills it, and the recording file gets that shape too. The part that does not fit is cut (the top and bottom of a tall picture, the sides of a wide one). It is worked out when you press Mirror or Record, so press it again after turning the phone.';
 }
 function html() {
-  const s = cfg(), v = s.shapeSize || 'phone', k = kindOf(v);
+  const s = cfg(), v = s.shapeSize || 'phone', k = kindOf(v), f = s.shapeFill || 'off';
   const seg = [['phone', 'Phone', 'phone'], ['tablet', 'Tablet', 'grid'], ['pc', 'PC', 'terminal']].map(([id, l, ic]) => `<button type="button" data-shape-kind="${id}" class="${(k === id || (k === 'custom' && id === 'tablet')) ? 'is-active' : ''}" aria-pressed="${k === id}">${icon(ic, 'sm')}<span>${l}</span></button>`).join('');
   const list = k === 'pc' ? SIZES.pc : SIZES.tablet;
   const opts = (k === 'phone' ? [] : list.map(([id, l]) => `<option value="${id}" ${v === id ? 'selected' : ''}>${l}</option>`)).concat(k === 'custom' ? [`<option value="custom" selected>Custom · ${esc(sizeText('custom'))}</option>`] : []).join('');
   const apply = (k !== 'phone' && (state.sessions || []).length) ? `<button class="btn sm" type="button" data-shape-act="apply">${icon('refresh', 'sm')}<span>Apply to the open window</span></button>` : '';
   const reset = applied.includes(STK.sel()) ? `<button class="btn sm" type="button" data-shape-act="reset">${icon('refresh', 'sm')}<span>Put the phone screen back (left resized by an older version)</span></button>` : '';
-  return `<div class="shape-row"><span class="shape-lbl">${icon('expand', 'sm')}Window shape</span><div class="seg shape-seg" role="group" aria-label="Window shape">${seg}</div>${k === 'phone' ? '' : `<select id="shape-size" aria-label="Size">${opts}</select>`}${apply}${reset}</div><p class="shape-note">${esc(note(k, v))}</p>`;
+  return `<div class="shape-row"><span class="shape-lbl">${icon('expand', 'sm')}Window shape</span><div class="seg shape-seg" role="group" aria-label="Window shape">${seg}</div>${k === 'phone' ? '' : `<select id="shape-size" aria-label="Size">${opts}</select><select id="shape-fill" aria-label="Fill">${FILLS.map(([id, l]) => `<option value="${id}" ${f === id ? 'selected' : ''}>${l}</option>`).join('')}</select>`}${apply}${reset}</div><p class="shape-note">${esc(note(k, v, f))}</p>`;
 }
 function mount() {
   if ($('#shape-bar')) return;
@@ -82,6 +85,7 @@ document.addEventListener('click', async e => {
   }
 });
 document.addEventListener('change', e => {
+  if (e.target.id === 'shape-fill') return save({ shapeFill: e.target.value });
   if (e.target.id !== 'shape-size') return;
   const v = e.target.value, mem = STK.store.get('shape-last', {}), k = kindOf(v);
   if (k === 'tablet' || k === 'pc') { mem[k] = v; STK.store.set('shape-last', mem); }

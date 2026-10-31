@@ -239,3 +239,16 @@ Full steps are in docs/AUDIO.md.
 - [ ] Game Priority is off by default in a game's Details. Switch it on, press Play: other apps are stopped, the game opens.
 - [ ] Reroute mirror: sound delay feels like before (no extra delay).
 - [ ] Window shape: Tablet, press Mirror. The window takes the shape within a few seconds. If not, press Apply to the open window and tell me what it says.
+
+## 4.8.0 (real phone)
+- [ ] PUBG Mobile in the Games library with the Gaming profile. Open it by hand and play 10 minutes with the mirror open: no crash.
+- [ ] The same, opened with Play from the Games tab: the profile and Free memory happen before it opens; no crash.
+- [ ] Studio Overview while mirroring: values still update (about every 9 seconds); the game does not stutter.
+- [ ] After leaving the game, the phone is back to its normal settings.
+
+## 4.9.0 fill (real phone)
+- [ ] Console, Window shape: Tablet 1600x1200, Fill keep the middle. Phone upright: press Mirror. The window is 4:3 and the picture fills it with no bars (the middle of the screen).
+- [ ] Rotate the phone to landscape, press Mirror again: the picture fills the window with the middle of the game; nothing is stretched.
+- [ ] Fill keep the top or left, then keep the bottom or right: the visible part moves.
+- [ ] Record with Fill on: the saved file is 4:3 and plays fine in the Library preview.
+- [ ] Fill Off: back to the whole screen with bars.

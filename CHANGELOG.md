@@ -1,5 +1,34 @@
 # Changelog
 
+## 4.9.0
+Fill: an optional switch that makes the picture fill the tablet or PC shaped window.
+
+New
+- Console, Window shape bar: a Fill choice next to the size: Off (default, the whole screen with dark bars), Fill keeping the middle, Fill keeping the top or left, Fill keeping the bottom or right. With Fill on, the picture is cropped to the shape of the window, so it fills it with no bars, and it stays proportional (nothing is stretched out of shape). Fill also applies to the recording, so the saved file has the tablet or PC shape too. The part that does not fit is cut: the top and bottom of a tall picture, the sides of a wide one. In Settings, Video as Fill the window.
+- How it works: when you press Mirror or Record the service reads the phone size and its rotation and gives scrcpy a crop with the shape of the window (scrcpy expects it in the natural orientation of the phone, and the service converts for a turned phone). It is worked out at that moment, so press Mirror or Record again after turning the phone.
+- Nothing changes unless you choose a Fill option.
+
+Not verified
+- Not run on a real phone. The crop numbers were checked by hand for a portrait phone and a turned phone (for example a 1080x2400 phone in landscape and a 4:3 window gives 1080:1440:0:480). If the picture looks wrong after rotating the phone, press Mirror again, and tell me what you see.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
+
+## 4.8.0
+A steadier phone while you play. Games such as PUBG Mobile were lasting about 40 seconds and then crashing.
+
+Fixed
+- The 40 second mark. After the wait added in 4.7.1, a game in the Games library got its whole profile applied while it was running. The Gaming and Turbo profiles include Free memory (`am kill-all`), which closes background processes, including the game's own helpers such as its anti-cheat and login services. That is the most likely cause of the crash that came a little later. While a game is running, a profile now skips Free memory, Best refresh rate (a display mode switch) and Game Mode; DND, animations and similar steps still apply. Those steps are applied by Play in the Games tab, before the game opens (Play applies the profile, frees memory, sets Game Mode and then opens the game; the profile is restored when you leave). The Free memory and Game Mode options of a game are no longer run while it is running.
+- Readings while you play. With a mirror or recording running, or a library game in front, Studio now asks for a light reading that makes no `dumpsys` calls at all (before, every reading ran four of them: battery, thermal, display and Wi-Fi), once every 9 seconds. Slow-changing values are kept from the last full reading. With nothing running, readings are unchanged.
+
+Notes
+- To change how long a game is left alone after it opens, use the key `xp-settle` (seconds, default 40).
+- If a game still crashes, tell me which option was on (Game Priority, the profile, Mirror or Record) and I can narrow it further. A good test: turn the game's profile off in Details and open it with only the mirror running.
+
+Not verified
+- Not run on a real phone. The page was tested against a simulated service (light readings, skipped steps); the PowerShell was checked by reading, a bracket and quote check, and a check that every function it calls exists.
+
+After updating, run Launch.bat again so the background service restarts with the new version.
+
 ## 4.7.1
 Window shape applied reliably, and the crash and lag regressions I introduced are fixed.
 

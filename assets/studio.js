@@ -118,7 +118,15 @@ async function sample(force) {
   if (!id) { paintAll(); return; }
   S.busy = true; S.lastAt = Date.now();
   try {
-    const r = await STK.api('/perf?id=' + encodeURIComponent(id), { timeout: 30000 });
+    const light = !force && SX.calm && SX.calm();
+    const r = await STK.api('/perf?id=' + encodeURIComponent(id) + (light ? '&light=1' : ''), { timeout: 30000 });
+    if (light) {
+      /* 4.8.0: the light reading skips every dumpsys call; keep the slow-changing values from the last full reading */
+      const prev = S.last[id] || {}, lv = STK.live() || {};
+      ['supportedHz', 'lockMin', 'lockPeak', 'lowPower', 'brightness', 'animScale', 'wifi', 'perfSupported', 'thermalStatus', 'batt', 'batteryC', 'voltage', 'plugged'].forEach(k => { if (r[k] == null && prev[k] != null) r[k] = prev[k]; });
+      if (r.battery == null) r.battery = lv.battery != null ? lv.battery : prev.battery;
+      if (r.charging == null) r.charging = lv.charging != null ? lv.charging : prev.charging;
+    }
     const h = H(id);
     push(h.cpu, r.cpu); push(h.mem, r.memPct); push(h.temp, r.tempC); push(h.gpuC, r.gpuC); push(h.skin, r.skinC); push(h.batC, r.batteryC); push(h.bat, r.battery); push(h.t, r.at);
     S.last[id] = r; S.err = null;
@@ -194,8 +202,12 @@ SX.applyProfile = async function (pid, opts = {}) {
     savePrev();
   }
   let ok = 0, skipped = 0, failed = 0;
+  /* 4.8.0: while a game is running, steps that kill processes or switch the display mode are skipped (they can crash heavy games
+     such as PUBG Mobile). They are applied by Play in the Games tab, before the game opens. */
+  const unsafeNow = st => !!(opts.running && ((st.body && ['boost', 'refresh'].includes(st.body.action)) || st.k === 'hzmax' || st.k === 'gamemode'));
   for (let i = 0; i < p.steps.length; i++) {
     run.steps[i].st = 'run'; paintRun();
+    if (unsafeNow(p.steps[i])) { run.steps[i].st = 'skip'; run.steps[i].note = 'Skipped while the game is running. Use Play to apply it before the game opens.'; skipped++; paintRun(); continue; }
     try {
       const r = await runStep(p.steps[i], opts.pkg || SX.pkg());
       if (r && r.skipped) { run.steps[i].st = 'skip'; run.steps[i].note = r.skipped; skipped++; }
