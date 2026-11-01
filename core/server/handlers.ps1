@@ -475,6 +475,7 @@ function Save-SettingsPatch {
     }
     if (-not $new.windowTitle) { $new.windowTitle = 'DROID ADB' }
     Save-Settings $new
+    if ([bool]$new.runAtLogin -ne [bool]$current.runAtLogin) { [void](Sync-RunAtLogin ([bool]$new.runAtLogin)) }
     return @{ settings = $new; restartRequired = [bool](([int]$new.port -ne [int]$Shared.port) -or ([int]$new.serverWorkers -ne [int]$Shared.workerCount)) }
 }
 
@@ -988,7 +989,8 @@ $Routes['POST /api/window-shape'] = { param($Ctx)
         $h = 900
         $w = [int][math]::Round($h * $aspect)
     }
-    $r = Set-MirrorWindowShape $serial $w $h
+    $grow = ([string](Get-Settings).shapeFill -eq 'height' -and $null -ne $spec)
+    $r = Set-MirrorWindowShape $serial $w $h $grow
     Send-Json $Ctx @{ ok = $true; windows = $r.windows; size = $r.size }
 }
 

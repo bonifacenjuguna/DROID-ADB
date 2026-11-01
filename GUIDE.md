@@ -1,7 +1,7 @@
 # DROID ADB - Quick Guide
 
 ## First run
-1. Extract the full ZIP, run `Launch.bat`. The dashboard opens at http://127.0.0.1:47821/.
+1. Extract the full ZIP, run `Launch.vbs` (silent, no window). The dashboard opens at http://127.0.0.1:47821/.
 2. If the banner says the backend is not answering, wait a few seconds (it restarts itself) or run `Launch.bat` again.
 
 ## Shortcut and app install

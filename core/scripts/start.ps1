@@ -1,5 +1,6 @@
-# Starts (or stops) the DROID ADB backend. Used by Launch.bat and Stop.bat.
-param([switch]$Stop, [switch]$NoBrowser)
+# Starts (or stops) the DROID ADB backend. Used by Launch.vbs (silent), Launch.bat and Stop.bat.
+# -IfNotRunning: do nothing if the service already answers (used at sign-in and by the droidadb:// link).
+param([switch]$Stop, [switch]$NoBrowser, [switch]$IfNotRunning)
 $ErrorActionPreference = 'Continue'
 $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path (Join-Path (Join-Path $global:StkRoot 'core') 'server') 'lib.ps1')
@@ -35,6 +36,21 @@ if ($Stop) {
 $s = Get-Settings
 $port = [int]$s.port
 $url = 'http://127.0.0.1:' + $port + '/'
+
+# 4.10.0: keep the Windows startup shortcut and the droidadb:// link pointing at this folder (current user only).
+if ($OnWindows) {
+    [void](Register-DroidProtocol)
+    if ([bool]$s.runAtLogin) { [void](Sync-RunAtLogin $true) }
+}
+if ($IfNotRunning) {
+    try {
+        $r0 = Invoke-WebRequest -UseBasicParsing -Uri ($url + 'api/ping') -TimeoutSec 2
+        if ($r0.StatusCode -eq 200) {
+            if ($s.openBrowser -and -not $NoBrowser) { Start-Process $url }
+            exit 0
+        }
+    } catch {}
+}
 
 Write-Host '[1/3] Stopping any previous backend...'
 Stop-Previous

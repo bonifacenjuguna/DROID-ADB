@@ -1,9 +1,9 @@
-/* DROID ADB service worker (4.9.0).
+/* DROID ADB service worker (4.10.0).
    Purpose: lets Chrome and Edge install the dashboard as an app and shows a friendly page when the
    local service is not running. It never touches /api/ requests, and it always prefers the network,
    so a new version of the dashboard is used right away. */
 'use strict';
-const VERSION = '4.9.0';
+const VERSION = '4.10.0';
 const CACHE = 'droid-adb-' + VERSION;
 const SHELL = ['/', '/assets/style.css', '/assets/studio.css', '/assets/xp.css', '/assets/motion.css', '/assets/core.js', '/assets/console.js', '/assets/xp-ui.js', '/assets/studio.js', '/assets/studio-plus.js', '/assets/studio-pro.js', '/assets/shape.js', '/assets/droid-adb-mark.png', '/assets/motion.js', '/assets/manifest.webmanifest', '/assets/icon-192.png'];
 
@@ -12,9 +12,8 @@ const OFFLINE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><met
 main{max-width:520px;padding:28px;text-align:center}img{width:72px;height:72px;border-radius:18px}h1{font-size:22px;margin:16px 0 6px}p{color:#a5aebc;margin:6px 0}
 button{margin-top:18px;padding:11px 20px;border-radius:10px;border:0;background:#f2b544;color:#1c1405;font:600 15px system-ui;cursor:pointer}</style></head>
 <body><main><img src="/assets/icon-192.png" alt=""><h1>DROID ADB is not running</h1>
-<p>The local service did not answer. Double-click <b>Launch.bat</b> in the DROID ADB folder, then try again.</p>
-<button onclick="location.reload()">Try again</button></main>
-<script>setInterval(()=>fetch('/api/ping',{cache:'no-store'}).then(r=>r.ok&&location.reload()).catch(()=>{}),3000)</script></body></html>`;
+<p id="msg">The local service is not running. Press the button to start it. Nothing else needs to be opened.</p>\n<button id="go">Start DROID ADB</button>\n<p id="hint" style="font-size:13px">The first time, your browser asks to open DROID ADB. Tick <b>Always allow</b> so it never asks again. If nothing happens, double-click <b>Launch.vbs</b> in the DROID ADB folder once.</p></main>
+<script>document.getElementById('go').onclick=()=>{document.getElementById('msg').textContent='Starting DROID ADB... this takes a few seconds.';document.getElementById('go').disabled=true;location.href='droidadb://start';setTimeout(()=>{document.getElementById('go').disabled=false},12000)};setInterval(()=>fetch('/api/ping',{cache:'no-store'}).then(r=>r.ok&&location.reload()).catch(()=>{}),3000)</script></body></html>`;
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {

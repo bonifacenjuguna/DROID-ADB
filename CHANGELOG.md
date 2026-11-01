@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.10.0
+Enlarged tablet view, a sharper stream, and a silent launcher: no terminal window at all.
+
+New
+- Enlarge (new default for Fill). In Console, Window shape, with Tablet or PC chosen, the window now opens as tall as your screen allows and the picture is scaled up in proportion so it fills the window from top to bottom. Nothing is stretched. Any space left is only at the left and right. The old Off, Fill middle, Fill top or left and Fill bottom or right choices are still there. If the phone is turned and its picture is wider than the window, only a little of its sides is cut (the middle is kept) so the top and bottom stay whole.
+- Sharper when enlarged. With Enlarge, the stream is raised to at least 1920 px (longest side) and 16 Mbps, on the capture side only. Higher values you already set are kept. Nothing about the phone display or its settings is changed.
+- Silent launcher. New Launch.vbs starts the service with no window and opens the dashboard. Launch.bat now just hands over to it. The Desktop shortcut (Create-Desktop-Shortcut.bat) now uses Launch.vbs, so no window flashes. If something goes wrong you get a normal message box with the last lines of the log, instead of a terminal.
+- Start when I sign in. Settings, Dashboard and backend, Start DROID ADB when I sign in to Windows. It adds (or removes) a shortcut in your own Windows Startup folder; the service then runs hidden from sign-in. No admin rights.
+- Start button in the web. If the installed web app (or a browser tab) opens while the service is off, it shows a Start DROID ADB button. It opens a droidadb://start link that is registered for your Windows user only (HKCU, no admin) the first time you run Launch.vbs, Launch.bat or the service starts. Your browser asks once; tick Always allow. The page then reloads by itself when the service answers.
+
+Notes
+- Windows only. The very first start must be done once with Launch.vbs (or the Desktop shortcut) so the droidadb:// link is registered; after that the Start button works. If you move the folder, run Launch.vbs again so the link points at the new place.
+- If the browser blocks the link, double-click Launch.vbs once and try the button again.
+- Stop.bat still works and still shows briefly.
+
+Not verified
+- Not run on a Windows PC or phone. The PowerShell and the VBScript were checked by reading and bracket checks; the page code by a syntax check. Please test: Tablet with Enlarge (portrait and rotated), the Startup switch, the Desktop shortcut, and the Start button with the service stopped.
+
+After updating, run Launch.vbs (or the Desktop shortcut) so the background service restarts with the new version. Press Mirror again to get the enlarged window.
+
 ## 4.9.0
 Fill: an optional switch that makes the picture fill the tablet or PC shaped window.
 

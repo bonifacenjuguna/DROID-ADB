@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '4.9.0'
+$ToolkitVersion = '4.10.0'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -142,7 +142,7 @@ $SettingGroups = @(
 
 $AudioSources = @((C 'output' 'Phone sound (output)'), (C 'playback' 'Playback capture'), (C 'mic' 'Microphone'), (C 'mic-unprocessed' 'Microphone (raw)'), (C 'mic-voice-communication' 'Microphone (voice call)'))
 $ShapeSizes = @((C 'phone' 'Phone (its own shape)'), (C '1280x800' 'Tablet 16:10, 1280x800'), (C '1600x1200' 'Tablet 4:3, 1600x1200'), (C '1920x1200' 'Tablet 16:10, 1920x1200'), (C '2048x1536' 'Tablet 4:3, 2048x1536'), (C '1280x720' 'PC 16:9, 1280x720'), (C '1920x1080' 'PC 16:9, 1920x1080'), (C '2560x1440' 'PC 16:9, 2560x1440'), (C 'custom' 'Custom size'))
-$ShapeFills = @((C 'off' 'Off: the whole screen, with bars'), (C 'middle' 'Fill, keep the middle'), (C 'start' 'Fill, keep the top or left'), (C 'end' 'Fill, keep the bottom or right'))
+$ShapeFills = @((C 'height' 'Enlarge: fill top to bottom, bars at the sides'), (C 'off' 'Off: the whole screen, with bars'), (C 'middle' 'Fill, keep the middle'), (C 'start' 'Fill, keep the top or left'), (C 'end' 'Fill, keep the bottom or right'))
 $ShapeNotPhone = @('1280x800', '1600x1200', '1920x1200', '2048x1536', '1280x720', '1920x1080', '2560x1440', 'custom')
 $AudioCodecs = @((C '' 'scrcpy default'), (C 'opus' 'Opus'), (C 'aac' 'AAC'), (C 'flac' 'FLAC'), (C 'raw' 'Raw'))
 # Audio modes (4.1.0). The ids are stored in settings and checked against this list.
@@ -167,7 +167,7 @@ $Schema = @(
     (F 'bitrateMbps' 'video' 'int' 8 'Bitrate' 'Higher looks better and makes larger recordings.' -Min 1 -Max 200 -Picks @(2, 4, 8, 12, 16, 24) -Unit 'Mbps'),
     (F 'codec' 'video' 'choice' 'h264' 'Video codec' 'H.265 and AV1 make smaller files but need phone support.' -Choices @((C 'h264' 'H.264'), (C 'h265' 'H.265'), (C 'av1' 'AV1'))),
     (F 'shapeSize' 'video' 'choice' 'phone' 'Window shape' 'Phone keeps the window the shape of the phone. Tablet and PC make the mirror and record window that shape, with your normal phone screen scaled to fit inside. The phone itself is not changed. OBS, TikTok Live and other apps that capture the window get that shape. The recording file keeps the phone shape.' -Choices $ShapeSizes),
-    (F 'shapeFill' 'video' 'choice' 'off' 'Fill the window' 'Off keeps the whole phone screen with dark bars. Fill crops the picture to the shape of the window so it fills it, and the recording file gets that shape too. The parts that do not fit are cut: the top and bottom of a tall picture, or the sides of a wide one. It is worked out when you press Mirror or Record, so press it again after turning the phone.' -Choices $ShapeFills -Show @{ shapeSize = $ShapeNotPhone }),
+    (F 'shapeFill' 'video' 'choice' 'height' 'Fill the window' 'Enlarge (default) makes the window as tall as your screen allows and scales the picture proportionally so it fills the window from top to bottom. Any space left is at the left and right only. Nothing is stretched, and the stream is made sharper to match. Off keeps the whole phone screen with dark bars. Fill crops the picture to the shape of the window so it fills it, and the recording file gets that shape too. The parts that do not fit are cut: the top and bottom of a tall picture, or the sides of a wide one. It is worked out when you press Mirror or Record, so press it again after turning the phone.' -Choices $ShapeFills -Show @{ shapeSize = $ShapeNotPhone }),
     (F 'shapeW' 'video' 'int' 1600 'Custom window width' 'Pixels.' -Min 320 -Max 7680 -Unit 'px' -Show @{ shapeSize = @('custom') }),
     (F 'shapeH' 'video' 'int' 1200 'Custom window height' 'Pixels.' -Min 320 -Max 7680 -Unit 'px' -Show @{ shapeSize = @('custom') }),
     (F 'videoEncoder' 'video' 'text' '' 'Video encoder' 'Optional. Exact encoder name, for example OMX.qcom.video.encoder.avc.' -Pattern '^[A-Za-z0-9._\-]{0,80}$' -Placeholder 'Automatic'),
@@ -243,6 +243,7 @@ $Schema = @(
     (F 'port' 'toolkit' 'int' 47821 'Backend port' 'The dashboard address is http://127.0.0.1:PORT/.' -Min 1024 -Max 65535 -Restart $true),
     (F 'serverWorkers' 'toolkit' 'int' 8 'Backend workers' 'Requests handled at the same time. More helps slow phones.' -Min 2 -Max 32 -Restart $true),
     (F 'openBrowser' 'toolkit' 'bool' $true 'Open the dashboard on launch' 'Open your browser when Launch.bat finishes.' -Restart $true),
+    (F 'runAtLogin' 'toolkit' 'bool' $false 'Start DROID ADB when I sign in to Windows' 'Puts a small shortcut in your Windows Startup folder. The service then runs hidden from the moment you sign in, with no window. Turn it off to remove the shortcut. No admin rights are needed.'),
     (F 'pollSeconds' 'toolkit' 'int' 3 'Refresh interval' 'How often the dashboard checks the backend.' -Min 1 -Max 30 -Picks @(1, 2, 3, 5, 10) -Unit 'sec'),
     (F 'previewSeconds' 'toolkit' 'int' 3 'Live preview interval' 'How often the Console preview takes a new picture.' -Min 1 -Max 60 -Picks @(2, 3, 5, 10) -Unit 'sec'),
     (F 'liveSeconds' 'toolkit' 'int' 2 'Phone status refresh' 'How often battery, rotation and screen state are read while the dashboard is open.' -Min 1 -Max 30 -Picks @(1, 2, 3, 5, 10) -Unit 'sec'),
@@ -1182,7 +1183,7 @@ public static class DroidWin {
     [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
     [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr h, uint flags);
     [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr m, ref MONITORINFO mi);
-    public static bool SetClient(IntPtr h, int cw, int ch, out int rw, out int rh) {
+    public static bool SetClient(IntPtr h, int cw, int ch, bool grow, out int rw, out int rh) {
         rw = 0; rh = 0;
         if (IsIconic(h) || IsZoomed(h)) ShowWindow(h, 9);
         RECT w, c;
@@ -1192,7 +1193,7 @@ public static class DroidWin {
         IntPtr m = MonitorFromWindow(h, 2);
         int availW = 100000, availH = 100000, wl = 0, wt = 0, wr = 100000, wb = 100000;
         if (m != IntPtr.Zero && GetMonitorInfo(m, ref mi)) { wl = mi.rcWork.L; wt = mi.rcWork.T; wr = mi.rcWork.R; wb = mi.rcWork.B; availW = wr - wl; availH = wb - wt; }
-        double s = Math.Min(1.0, Math.Min((availW - dw) / (double)cw, (availH - dh) / (double)ch));
+        double s = Math.Min(grow ? 100.0 : 1.0, Math.Min((availW - dw) / (double)cw, (availH - dh) / (double)ch));
         if (s <= 0) s = 1.0;
         rw = (int)Math.Floor(cw * s); rh = (int)Math.Floor(ch * s);
         int ow = rw + dw, oh = rh + dh;
@@ -1215,15 +1216,17 @@ function Get-WorkArea {
 }
 # size the window will open at: the chosen shape, scaled down (same shape) so it fits on the screen of this PC
 function Get-ShapeWindowSize {
-    param($Spec)
+    param($Spec, [bool]$Grow = $false)
     $wa = Get-WorkArea
-    $sc = [math]::Min(1.0, [math]::Min(($wa.w - 24) / [double]$Spec.w, ($wa.h - 64) / [double]$Spec.h))
+    $cap = 1.0
+    if ($Grow) { $cap = 100.0 }
+    $sc = [math]::Min($cap, [math]::Min(($wa.w - 24) / [double]$Spec.w, ($wa.h - 64) / [double]$Spec.h))
     if ($sc -le 0) { $sc = 1.0 }
     return @{ w = [int][math]::Floor($Spec.w * $sc); h = [int][math]::Floor($Spec.h * $sc) }
 }
 # change the shape of mirror or record windows that are already open (no restart, no change to the phone)
 function Set-MirrorWindowShape {
-    param([string]$Serial, [int]$W, [int]$H)
+    param([string]$Serial, [int]$W, [int]$H, [bool]$Grow = $false)
     Initialize-WindowApi
     $procs = @(Get-CimInstance Win32_Process -Filter "Name='scrcpy.exe'" -ErrorAction SilentlyContinue)
     $n = 0
@@ -1233,7 +1236,7 @@ function Set-MirrorWindowShape {
         foreach ($hwnd in [DroidWin]::ForProcess([int]$cp.ProcessId)) {
             $rw = 0
             $rh = 0
-            if ([DroidWin]::SetClient($hwnd, $W, $H, [ref]$rw, [ref]$rh)) { $n++; $last = $rw.ToString() + 'x' + $rh.ToString() }
+            if ([DroidWin]::SetClient($hwnd, $W, $H, $Grow, [ref]$rw, [ref]$rh)) { $n++; $last = $rw.ToString() + 'x' + $rh.ToString() }
         }
     }
     return @{ windows = $n; size = $last }
@@ -1293,6 +1296,12 @@ function Get-FillCrop {
         $cw = $cw - ($cw % 2)
         $ch = $ch - ($ch % 2)
         if ($cw -ge $fw -and $ch -ge $fh) { return '' }
+        # Enlarge: never cut the top or bottom. Only a picture wider than the window loses a little of its sides (middle kept).
+        if ($Anchor -eq 'height') {
+            if ($cw -ge $fw) { return '' }
+            $Anchor = 'middle'
+            $ch = $fh
+        }
         $x = 0
         $y = 0
         if ($cw -lt $fw) { if ($Anchor -eq 'middle') { $x = [int][math]::Floor(($fw - $cw) / 2) } elseif ($Anchor -eq 'end') { $x = $fw - $cw } }
@@ -1326,7 +1335,7 @@ function New-ScrcpyArgs {
             if ($Once.startApp -and -not $companion) { [void]$a.Add('--start-app=' + $Once.startApp) }
         }
         if ($S.crop -ne '') { [void]$a.Add('--crop=' + $S.crop) }
-        elseif ($Probe -and (@('middle', 'start', 'end') -contains [string]$S.shapeFill)) {
+        elseif ($Probe -and (@('height', 'middle', 'start', 'end') -contains [string]$S.shapeFill)) {
             $fillSpec = Get-ShapeSpec $S
             if ($fillSpec) { $fillCrop = Get-FillCrop $Serial $fillSpec ([string]$S.shapeFill); if ($fillCrop -ne '') { [void]$a.Add('--crop=' + $fillCrop) } }
         }
@@ -1339,6 +1348,11 @@ function New-ScrcpyArgs {
         $qSize = [int]$S.recordMaxSize
         $qFps = [int]$S.recordMaxFps
         $qMbps = [int]$S.recordBitrateMbps
+    }
+    # 4.10.0: an enlarged window shows the picture bigger, so the stream is made sharper (capture side only, the phone display is untouched).
+    if (-not $headless -and [string]$S.shapeFill -eq 'height' -and (Get-ShapeSpec $S)) {
+        if ($qSize -gt 0 -and $qSize -lt 1920) { $qSize = 1920 }
+        if ($qMbps -lt 16) { $qMbps = 16 }
     }
     if ($qSize -gt 0) { [void]$a.Add('--max-size=' + $qSize) }
     [void]$a.Add('--max-fps=' + $qFps)
@@ -1377,7 +1391,7 @@ function New-ScrcpyArgs {
         if ($S.borderless) { [void]$a.Add('--window-borderless') }
         $shapeSpec = Get-ShapeSpec $S
         if ($shapeSpec) {
-            $ws = Get-ShapeWindowSize $shapeSpec
+            $ws = Get-ShapeWindowSize $shapeSpec ([string]$S.shapeFill -eq 'height')
             [void]$a.Add('--window-width=' + $ws.w)
             [void]$a.Add('--window-height=' + $ws.h)
         } else {
@@ -1773,4 +1787,53 @@ function Invoke-AdbBytes {
     $e = ''
     try { if ($errTask.Wait(2000)) { $e = [string]$errTask.Result } } catch {}
     return @{ code = [int]$p.ExitCode; bytes = $ms.ToArray(); err = $e }
+}
+
+# ---------- 4.10.0: silent launcher, run at login, droidadb:// link ----------
+# All of this lives in the current Windows user only (Startup folder and HKCU). No admin rights.
+function Get-LauncherPath { return (Join-Path $Root 'Launch.vbs') }
+function Get-StartupLinkPath {
+    return (Join-Path ([Environment]::GetFolderPath('Startup')) 'DROID ADB.lnk')
+}
+# Adds or removes the Startup shortcut so the hidden service starts when you sign in.
+function Sync-RunAtLogin {
+    param([bool]$Enable)
+    if (-not $OnWindows) { return $false }
+    try {
+        $link = Get-StartupLinkPath
+        if ($Enable) {
+            $vbs = Get-LauncherPath
+            if (-not (Test-Path -LiteralPath $vbs)) { return $false }
+            $shell = New-Object -ComObject WScript.Shell
+            $l = $shell.CreateShortcut($link)
+            $l.TargetPath = (Join-Path $env:WINDIR 'System32\wscript.exe')
+            $l.Arguments = '"' + $vbs + '" login'
+            $l.WorkingDirectory = $Root
+            $l.WindowStyle = 7
+            $l.Description = 'Starts DROID ADB hidden when you sign in'
+            $ico = Join-Path (Join-Path (Join-Path $Root 'core') 'branding') 'droid-adb.ico'
+            if (Test-Path -LiteralPath $ico) { $l.IconLocation = $ico + ',0' }
+            $l.Save()
+        } elseif (Test-Path -LiteralPath $link) { Remove-Item -LiteralPath $link -Force }
+        return $true
+    } catch { Write-BackendLog ('Run at login: ' + $_.Exception.Message); return $false }
+}
+# Registers droidadb:// for this Windows user, so the installed web app can start the service when it is off.
+function Register-DroidProtocol {
+    if (-not $OnWindows) { return $false }
+    try {
+        $vbs = Get-LauncherPath
+        if (-not (Test-Path -LiteralPath $vbs)) { return $false }
+        $base = 'HKCU:\Software\Classes\droidadb'
+        New-Item -Path $base -Force | Out-Null
+        Set-ItemProperty -Path $base -Name '(Default)' -Value 'URL:DROID ADB'
+        Set-ItemProperty -Path $base -Name 'URL Protocol' -Value ''
+        New-Item -Path ($base + '\DefaultIcon') -Force | Out-Null
+        $ico = Join-Path (Join-Path (Join-Path $Root 'core') 'branding') 'droid-adb.ico'
+        Set-ItemProperty -Path ($base + '\DefaultIcon') -Name '(Default)' -Value ($ico + ',0')
+        New-Item -Path ($base + '\shell\open\command') -Force | Out-Null
+        $cmd = '"' + (Join-Path $env:WINDIR 'System32\wscript.exe') + '" "' + $vbs + '" "%1"'
+        Set-ItemProperty -Path ($base + '\shell\open\command') -Name '(Default)' -Value $cmd
+        return $true
+    } catch { Write-BackendLog ('droidadb link: ' + $_.Exception.Message); return $false }
 }

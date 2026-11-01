@@ -252,3 +252,12 @@ Full steps are in docs/AUDIO.md.
 - [ ] Fill keep the top or left, then keep the bottom or right: the visible part moves.
 - [ ] Record with Fill on: the saved file is 4:3 and plays fine in the Library preview.
 - [ ] Fill Off: back to the whole screen with bars.
+
+## 4.10.0 enlarge, sharpness, silent launcher (real PC and phone)
+- [ ] Tablet 1600x1200 or 1920x1200, Fill: Enlarge. Phone upright, press Mirror: the window is as tall as the screen allows, the picture touches top and bottom, bars only at the sides, nothing stretched, taps land in the right place.
+- [ ] Rotate the phone to landscape, press Mirror again: top and bottom stay whole; only a little of the sides may be cut.
+- [ ] The picture is sharper than before (check the command preview: --max-size=1920 or higher, --video-bit-rate=16M or higher). The phone screen size/density is not changed (adb shell wm size shows no Override).
+- [ ] Double-click Launch.vbs: no window flashes, the dashboard opens. Stop the service, break a file name on purpose: a message box appears instead of a terminal.
+- [ ] Desktop shortcut (Create-Desktop-Shortcut.bat again) opens with no window.
+- [ ] Settings, Start DROID ADB when I sign in: on creates DROID ADB in the Startup folder, off removes it. Sign out and in: the service runs hidden.
+- [ ] Stop.bat, then open the installed web app: it shows the Start DROID ADB button. Press it, allow the browser prompt (tick Always allow): the dashboard returns by itself.
