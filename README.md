@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/images/droid-adb-logo.jpg" alt="DROID ADB" width="320"></p>
 
-# DROID ADB 4.10.0
+# DROID ADB 4.11.0
 
 A portable Windows control center for your Android phone: mirror, record, screenshot, remote-control and manage it from a local dashboard.
 
@@ -12,6 +12,10 @@ DROID ADB is powered by [scrcpy](https://github.com/Genymobile/scrcpy) v5.0.1 (G
 3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
+
+## What changed in 4.11
+
+4.11 adds the Stretch viewer (Console, next to Screenshot): a second window that shows the mirror enlarged or stretched to fill it, with no grey bars. Choose between no distortion (crops the sides) and full stretch (no crop), or any mix. The phone is not changed. See CHANGELOG.md.
 
 ## What changed in 4.10
 
@@ -97,7 +101,7 @@ To get the desktop shortcut, double-click `Create-Desktop-Shortcut.bat`. To inst
 - **Much more to do.** Quick phone settings, app manager, phone file browser, phone log, adb shell, screen preview, wireless pairing and discovery, power actions, background recording, countdown, mirror a single app, library playback, rename and bulk delete, system check.
 
 ## Layout
-- `index.html`, `assets/`: dashboard.
+- `index.html`, `assets/`: dashboard. `assets/viewer.html` and `viewer.js` are the Stretch viewer window.
 - `core/server/`: PowerShell backend (`server.ps1`, `supervisor.ps1`, `lib.ps1`, `handlers.ps1`, `routes-store.ps1`, `routes-phone.ps1`).
 - `core/scripts/`: `start.ps1`, `launch.ps1` (used by `Mirror.bat` and `Record.bat`).
 - `branding/`: the full DROID ADB logo set. `core/branding/`: icons used for the mirror window and the desktop shortcut (see the README.txt inside).

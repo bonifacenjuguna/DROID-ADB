@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.11.0
+Stretch viewer: a second window that shows the mirror enlarged or stretched to fill it, with no bars. Nothing on the phone changes and no virtual screen is used.
+
+New
+- Console, Stretch viewer button (next to Screenshot). It opens `assets/viewer.html` in its own window. Press Start capture there and choose the window called DROID ADB (the mirror window). The viewer cuts away the dark bars and draws the picture to fill its own window, live.
+- Mode: Fill the window or Fit (bars). In Fill, the Stretch slider goes from 0% (no distortion, the sides are cropped) to 100% (no crop, the picture is stretched to the window). In between is a mix: a little crop and a little stretch. Zoom (100 to 300%) and Move left/right and up/down choose which part you see when something is cropped.
+- Picture area (Adjust): Auto uses the phone's shape to find the picture inside the captured window (and Detect black bars when Fill is on in Window shape, or a Crop is set). Phone shape, Detect black bars and Trim only can be chosen by hand. Trim top, bottom, left and right remove the title bar and border if the mirror window is not Borderless.
+- Touch control (off by default): click and drag in the viewer to tap and swipe on the phone, through the normal backend (the same tap and swipe as the Console picture).
+- Fullscreen (F or double-click), hide the bar (H). Settings are remembered in the browser.
+- The mirror window can be any shape; the viewer is independent of Window shape. Turn on Settings, Window, Borderless window for the cleanest capture.
+
+Notes
+- The viewer uses the browser's own window capture, so Chrome or Edge asks you to choose the window each time you press Start capture. This cannot be skipped. The mirror window must stay open and not minimized (it can be behind other windows).
+- The picture goes through a capture and a redraw, so expect a little extra delay (about 50 to 100 ms) and some extra GPU use. Use the normal mirror window for fast games and the viewer for streaming and watching.
+- The recording file is not changed. The viewer is only a view.
+
+Not verified
+- Tested in a headless Chrome with a fake capture source (it starts, draws, and the controls work) and the stretch and fit maths were checked by hand. Not run with a real scrcpy window on Windows, and touch control was not tested against a phone. Check docs/REGRESSION-CHECKLIST.md, section 4.11.0.
+
+After updating, run Launch.bat once so the new version is loaded.
+
 ## 4.10.0
 Starting DROID ADB: no terminal window, Start with Windows, a Start button in the web page, and a tray icon.
 

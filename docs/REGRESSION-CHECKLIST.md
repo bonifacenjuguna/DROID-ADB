@@ -261,3 +261,13 @@ Full steps are in docs/AUDIO.md.
 - [ ] With the service already running, press Start (or sign in again): it does not restart; the dashboard just opens.
 - [ ] The tray icon: double-click opens the dashboard; Restart service works; Quit DROID ADB stops the service and removes the icon.
 - [ ] Switch off Start button in the web page: the droidadb link is removed (the banner button then does nothing).
+
+## 4.11.0 Stretch viewer
+1. Console shows a Stretch viewer button next to Screenshot. It opens a new window (allow pop-ups if the browser blocks it).
+2. Press Mirror, then Start capture in the viewer and choose the DROID ADB window. The viewer shows the phone filling its window (Stretch 100%).
+3. Stretch 0%: no distortion, the sides are cropped. 50%: in between. Mode Fit: the whole picture with bars.
+4. Rotate the phone: the picture follows (Auto). With Window shape Fill on, Picture area switches to Detect black bars by itself.
+5. A mirror window with a title bar: use Trim top (or turn on Borderless window) so the bar is not in the picture.
+6. Touch control on: a tap and a swipe in the viewer land on the right place on the phone, in portrait and in landscape, with Zoom 100% and with Zoom above 100%.
+7. Stop capture, close the mirror window, close the viewer: nothing stays running. Fullscreen (F) and hide bar (H) work.
+8. The mirror and record windows and the recording file behave exactly as in 4.10.

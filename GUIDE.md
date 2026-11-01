@@ -36,6 +36,12 @@ Everything is configurable: quality presets, saved profiles, folders, file name 
 - scrcpy closes immediately: the toast shows the reason; full output is in `Logs/session-<id>.log`.
 - Port busy: change the port in Settings (restart needed) or close the other instance.
 
+## New in 4.11
+- Stretch viewer (Console, next to Screenshot): opens a second window that shows the mirror enlarged to fill it. Open Mirror first and keep its window open. In the viewer press Start capture and choose the window called DROID ADB.
+- Stretch slider: 100% fills the window with no crop (the picture is stretched), 0% keeps the picture proportional and crops the sides. Zoom and Move choose the part you see.
+- Adjust: Trim removes the title bar and border (or turn on Borderless window in Settings). Touch control lets you click and drag to tap and swipe the phone.
+- Fullscreen: F or double-click. H hides the bar.
+
 ## New in 4.10
 - No terminal window any more. Launch, the desktop shortcut and Stop work silently. Run Create-Desktop-Shortcut.bat again to get the silent shortcut.
 - Settings, DROID ADB: Start with Windows, Start button in the web page, and Tray icon.
