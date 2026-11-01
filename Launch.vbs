@@ -1,37 +1,45 @@
-' DROID ADB silent launcher: starts the service with no window and opens the dashboard.
-' Double-click it, or use the DROID ADB desktop shortcut. Problems show as a normal message box.
-' Arguments (used by the Windows Startup shortcut and by the droidadb:// link):
-'   login           start hidden only if it is not running yet, do not open the browser
-'   droidadb://...  same as login (the installed web app's Start button)
+' DROID ADB silent launcher. Starts the background service without showing any window.
+' Double-click it, point a shortcut at it, or let Windows or the web page start it.
+'   Launch.vbs                 start (or restart) the service and open the dashboard
+'   Launch.vbs nobrowser       start the service only, no browser (used at Windows start-up)
+'   Launch.vbs url "droidadb://start"   used by the Start button in the web page
 Option Explicit
-Dim sh, fso, root, ps, mode, arg, cmd, rc, logf, tail, ts, lines, i, ping
+Dim sh, fso, root, i, a, noBrowser, keepRunning, cmd, rc, errFile, msg, ts
 Set sh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 root = fso.GetParentFolderName(WScript.ScriptFullName)
-ps = root & "\core\scripts\start.ps1"
-If Not fso.FileExists(ps) Or Not fso.FileExists(root & "\core\server\server.ps1") Or Not fso.FileExists(root & "\index.html") Then
-  MsgBox "DROID ADB files are missing. Please download the complete ZIP again.", 16, "DROID ADB"
+sh.CurrentDirectory = root
+noBrowser = False
+keepRunning = False
+For i = 0 To WScript.Arguments.Count - 1
+  a = LCase(WScript.Arguments(i))
+  If a = "nobrowser" Then
+    noBrowser = True
+    keepRunning = True
+  ElseIf a = "url" Then
+    keepRunning = True
+  End If
+Next
+If Not fso.FileExists(root & "\core\scripts\start.ps1") Then
+  MsgBox "The launcher script is missing. Download the complete ZIP again.", 16, "DROID ADB"
   WScript.Quit 1
 End If
-mode = ""
-If WScript.Arguments.Count > 0 Then arg = LCase(WScript.Arguments(0)) Else arg = ""
-cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & ps & """"
-If arg = "login" Or Left(arg, 11) = "droidadb://" Then cmd = cmd & " -IfNotRunning -NoBrowser"
-sh.CurrentDirectory = root
+errFile = root & "\Logs\launch-error.txt"
+On Error Resume Next
+If fso.FileExists(errFile) Then fso.DeleteFile errFile, True
+On Error GoTo 0
+cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & root & "\core\scripts\start.ps1"""
+If noBrowser Then cmd = cmd & " -NoBrowser"
+If keepRunning Then cmd = cmd & " -KeepRunning"
 rc = sh.Run(cmd, 0, True)
 If rc <> 0 Then
-  tail = ""
-  logf = root & "\Logs\backend-error.log"
-  If fso.FileExists(logf) Then
-    Set ts = fso.OpenTextFile(logf, 1)
-    If Not ts.AtEndOfStream Then lines = Split(ts.ReadAll, vbCrLf)
+  msg = "DROID ADB could not start."
+  If fso.FileExists(errFile) Then
+    Set ts = fso.OpenTextFile(errFile, 1)
+    If Not ts.AtEndOfStream Then msg = msg & vbCrLf & vbCrLf & Left(ts.ReadAll, 600)
     ts.Close
-    If IsArray(lines) Then
-      For i = UBound(lines) - 5 To UBound(lines)
-        If i >= 0 Then If Len(Trim(lines(i))) > 0 Then tail = tail & lines(i) & vbCrLf
-      Next
-    End If
   End If
-  MsgBox "DROID ADB could not start." & vbCrLf & vbCrLf & tail & vbCrLf & "Details: Logs\backend-error.log", 16, "DROID ADB"
+  msg = msg & vbCrLf & vbCrLf & "More detail is in the Logs folder (backend-error.log)."
+  MsgBox msg, 16, "DROID ADB"
   WScript.Quit 1
 End If

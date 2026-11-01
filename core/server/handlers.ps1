@@ -475,7 +475,6 @@ function Save-SettingsPatch {
     }
     if (-not $new.windowTitle) { $new.windowTitle = 'DROID ADB' }
     Save-Settings $new
-    if ([bool]$new.runAtLogin -ne [bool]$current.runAtLogin) { [void](Sync-RunAtLogin ([bool]$new.runAtLogin)) }
     return @{ settings = $new; restartRequired = [bool](([int]$new.port -ne [int]$Shared.port) -or ([int]$new.serverWorkers -ne [int]$Shared.workerCount)) }
 }
 
@@ -484,6 +483,8 @@ $Routes['POST /api/settings'] = { param($Ctx)
     $patch = Get-Prop $body 'patch' $body
     if ($patch -isnot [hashtable]) { Fail 'Nothing to save.' }
     $r = Save-SettingsPatch $patch
+    # 4.10.0: Start with Windows and the Start button link follow their switches straight away
+    if ($patch.ContainsKey('startWithWindows') -or $patch.ContainsKey('webStartLink')) { try { Sync-WindowsIntegration } catch { } }
     Send-Json $Ctx (@{ ok = $true } + $r)
 }
 
@@ -989,8 +990,7 @@ $Routes['POST /api/window-shape'] = { param($Ctx)
         $h = 900
         $w = [int][math]::Round($h * $aspect)
     }
-    $grow = ([string](Get-Settings).shapeFill -eq 'height' -and $null -ne $spec)
-    $r = Set-MirrorWindowShape $serial $w $h $grow
+    $r = Set-MirrorWindowShape $serial $w $h
     Send-Json $Ctx @{ ok = $true; windows = $r.windows; size = $r.size }
 }
 

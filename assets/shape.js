@@ -1,4 +1,4 @@
-/* DROID ADB 4.10 Window shape. A small bar on the Console page: Phone, Tablet or PC, with a size. The mirror and record window
+/* DROID ADB 4.7 Window shape. A small bar on the Console page: Phone, Tablet or PC, with a size. The mirror and record window
    takes that shape (your normal phone screen scaled to fit inside), so OBS, TikTok Live or a call that captures the window
    gets it. The phone itself is never changed. A window that is already open changes shape right away. */
 (() => {
@@ -10,7 +10,7 @@ const SIZES = {
 };
 const kindOf = v => (!v || v === 'phone') ? 'phone' : SIZES.tablet.some(x => x[0] === v) ? 'tablet' : SIZES.pc.some(x => x[0] === v) ? 'pc' : 'custom';
 const cfg = () => state.settings || {};
-const FILLS = [['height', 'Enlarge: fill top to bottom'], ['off', 'Fill: off (whole screen, bars)'], ['middle', 'Fill: keep the middle'], ['start', 'Fill: keep top or left'], ['end', 'Fill: keep bottom or right']];
+const FILLS = [['off', 'Fill: off (whole screen, bars)'], ['middle', 'Fill: keep the middle'], ['start', 'Fill: keep top or left'], ['end', 'Fill: keep bottom or right']];
 let applied = [];
 
 async function loadApplied() {
@@ -51,12 +51,11 @@ function sizeText(v) {
 function note(k, v, f) {
   if (k === 'phone') return 'The mirror and record window keeps the shape of the phone.';
   const base = 'The mirror and record window is ' + sizeText(v) + ' shaped. A window that is open changes right away; new ones open at this shape. The phone itself is not changed. If your screen is smaller, the window is made as large as fits, in the same shape.';
-  if (f === 'height') return base + ' Enlarge is on: the window opens as tall as your screen allows and the picture is scaled up in proportion so it fills it from top to bottom, with no stretching. Any space left is at the left and right. The stream is also made sharper (at least 1920 px and 16 Mbps) so the bigger picture stays clear. Press Mirror or Record again after turning the phone.';
   if (!f || f === 'off') return base + ' Your normal phone screen is scaled to fit inside, with plain dark bars around it.';
   return base + ' Fill is on: the picture is cropped to the shape of the window so it fills it, and the recording file gets that shape too. The part that does not fit is cut (the top and bottom of a tall picture, the sides of a wide one). It is worked out when you press Mirror or Record, so press it again after turning the phone.';
 }
 function html() {
-  const s = cfg(), v = s.shapeSize || 'phone', k = kindOf(v), f = s.shapeFill || 'height';
+  const s = cfg(), v = s.shapeSize || 'phone', k = kindOf(v), f = s.shapeFill || 'off';
   const seg = [['phone', 'Phone', 'phone'], ['tablet', 'Tablet', 'grid'], ['pc', 'PC', 'terminal']].map(([id, l, ic]) => `<button type="button" data-shape-kind="${id}" class="${(k === id || (k === 'custom' && id === 'tablet')) ? 'is-active' : ''}" aria-pressed="${k === id}">${icon(ic, 'sm')}<span>${l}</span></button>`).join('');
   const list = k === 'pc' ? SIZES.pc : SIZES.tablet;
   const opts = (k === 'phone' ? [] : list.map(([id, l]) => `<option value="${id}" ${v === id ? 'selected' : ''}>${l}</option>`)).concat(k === 'custom' ? [`<option value="custom" selected>Custom · ${esc(sizeText('custom'))}</option>`] : []).join('');

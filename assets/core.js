@@ -301,7 +301,7 @@ function setConn() {
   chip.className = cls; chip.innerHTML = `<i class="dot"></i><b>${label}</b>`;
   dot.className = dcls;
 }
-STK.FRONT_VERSION = '4.10.1';
+STK.FRONT_VERSION = '4.10.0';
 { const av = document.getElementById('about-version'); if (av) av.textContent = 'v' + STK.FRONT_VERSION; }
 const stale = () => !!(state.online && state.data && state.data.version && state.data.version !== STK.FRONT_VERSION);
 function setBanner() {
@@ -312,7 +312,7 @@ function setBanner() {
     html = `${STK.icon('alert')}<p><b>The background service is still the old version (${String(state.data.version)}).</b> The page is new (${STK.FRONT_VERSION}) but the fixes run inside the service. Restart it once to load them. Running mirror windows keep going.</p><button class="btn sm primary" id="banner-stale" type="button">Restart service now</button>`;
   } else if (!state.online && state.failures >= 3) {
     cls += ' bad';
-    html = `${STK.icon('alert')}<p><b>The backend is not answering.</b> It restarts itself automatically, so this usually clears in a few seconds. Your controls stay as they were and the page keeps retrying. If it stays like this, run <b>Launch.bat</b> again.</p><button class="btn sm" id="banner-retry" type="button">Retry now</button>`;
+    html = `${STK.icon('alert')}<p><b>The DROID ADB service is not answering.</b> If it is only restarting, this clears in a few seconds and the page keeps retrying. If it is not running, press Start. Your browser may ask once to open DROID ADB: choose Open (and tick always allow).</p><a class="btn sm primary" id="banner-start" href="droidadb://start">Start DROID ADB</a><button class="btn sm" id="banner-retry" type="button">Retry now</button>`;
   } else if (state.online && state.devicesAge > 30 && state.devices.length) {
     html = `${STK.icon('alert')}<p><b>ADB has not answered for ${state.devicesAge} seconds.</b> The device list may be out of date.</p><button class="btn sm" id="banner-adb" type="button">Restart ADB</button>`;
   } else if (state.online && state.status && state.status.restartRequired) {
@@ -323,6 +323,12 @@ function setBanner() {
   if (b.innerHTML !== html) b.innerHTML = html;
 }
 STK.refreshBanner = setBanner;
+/* 4.10.0: after the Start button (droidadb link) is used, check every 2 seconds for up to a minute */
+document.addEventListener('click', e => {
+  if (!e.target.closest('#banner-start')) return;
+  STK.toast('Starting DROID ADB. If the browser asks, choose Open.');
+  let n = 0; const t = setInterval(() => { if (state.online || ++n > 30) { clearInterval(t); return; } pollNow(); }, 2000);
+});
 document.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return;
   if (t.id === 'banner-retry') { pollNow(); }

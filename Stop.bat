@@ -1,6 +1,4 @@
 @echo off
-setlocal
-cd /d "%~dp0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "core\scripts\start.ps1" -Stop
-timeout /t 2 >nul
-endlocal
+rem Stops the DROID ADB service and the tray icon.
+start "" wscript.exe //nologo "%~dp0Stop.vbs"
+exit /b 0

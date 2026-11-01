@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/images/droid-adb-logo.jpg" alt="DROID ADB" width="320"></p>
 
-# DROID ADB 4.10.1
+# DROID ADB 4.10.0
 
 A portable Windows control center for your Android phone: mirror, record, screenshot, remote-control and manage it from a local dashboard.
 
@@ -8,10 +8,14 @@ DROID ADB is powered by [scrcpy](https://github.com/Genymobile/scrcpy) v5.0.1 (G
 
 ## Start
 1. Extract the whole ZIP to a writable folder.
-2. Double-click `Launch.vbs` (no window; `Launch.bat` does the same). It starts the backend under a supervisor and opens http://127.0.0.1:47821/ (port is a setting).
+2. Double-click `Launch.bat`. It starts the backend under a supervisor and opens http://127.0.0.1:47821/ (port is a setting).
 3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
+
+## What changed in 4.10
+
+4.10 starts DROID ADB quietly: no terminal window (Launch.vbs), optional Start with Windows, a Start button in the web page when the service is off, and a tray icon. See CHANGELOG.md.
 
 ## What changed in 4.7
 

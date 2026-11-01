@@ -1,7 +1,7 @@
 # DROID ADB - Quick Guide
 
 ## First run
-1. Extract the full ZIP, run `Launch.vbs` (silent, no window). The dashboard opens at http://127.0.0.1:47821/.
+1. Extract the full ZIP, run `Launch.bat`. The dashboard opens at http://127.0.0.1:47821/.
 2. If the banner says the backend is not answering, wait a few seconds (it restarts itself) or run `Launch.bat` again.
 
 ## Shortcut and app install
@@ -35,6 +35,12 @@ Everything is configurable: quality presets, saved profiles, folders, file name 
 - No device: check cable, USB debugging, authorization; use Restart ADB on Devices, or run the system check.
 - scrcpy closes immediately: the toast shows the reason; full output is in `Logs/session-<id>.log`.
 - Port busy: change the port in Settings (restart needed) or close the other instance.
+
+## New in 4.10
+- No terminal window any more. Launch, the desktop shortcut and Stop work silently. Run Create-Desktop-Shortcut.bat again to get the silent shortcut.
+- Settings, DROID ADB: Start with Windows, Start button in the web page, and Tray icon.
+- If the service is not running, the red banner has a Start DROID ADB button. Your browser asks once to open DROID ADB: choose Open and tick always allow.
+- The tray icon (near the Windows clock): double-click opens the dashboard; right-click for Restart, Start with Windows and Quit.
 
 ## New in 4.3
 - Recordings now use their own quality (Settings, Recording): full phone size, 60 fps, 40 Mbps by default. Mirror quality is still set under Video. Turn "High quality for recordings" off to use the Video settings for both.

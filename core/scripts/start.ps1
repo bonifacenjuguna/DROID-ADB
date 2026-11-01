@@ -1,15 +1,28 @@
-# Starts (or stops) the DROID ADB backend. Used by Launch.vbs (silent), Launch.bat and Stop.bat.
-# -IfNotRunning: do nothing if the service already answers (used at sign-in and by the droidadb:// link).
-param([switch]$Stop, [switch]$NoBrowser, [switch]$IfNotRunning)
+# Starts (or stops) the DROID ADB backend. Used by Launch.vbs / Launch.bat and Stop.vbs / Stop.bat.
+#   -NoBrowser    do not open the dashboard (used at Windows start-up)
+#   -KeepRunning  if this version is already running, leave it alone and only open the dashboard (used by the Start button and Windows start-up)
+param([switch]$Stop, [switch]$NoBrowser, [switch]$KeepRunning)
 $ErrorActionPreference = 'Continue'
 $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path (Join-Path (Join-Path $global:StkRoot 'core') 'server') 'lib.ps1')
 $ServerDir = Join-Path (Join-Path $Root 'core') 'server'
 $Supervisor = Join-Path $ServerDir 'supervisor.ps1'
 
+# 4.10.0: the tray icon (small icon near the clock). One copy only; it ends by itself when the service is gone.
+function Start-Tray {
+    if (-not $OnWindows) { return }
+    $tray = Join-Path $PSScriptRoot 'tray.ps1'
+    if (-not (Test-Path -LiteralPath $tray)) { return }
+    $pidFile = Join-Path $LogDir 'tray.pid'
+    if (Test-Path -LiteralPath $pidFile) {
+        try { $tp = [int](Get-Content -LiteralPath $pidFile -ErrorAction Stop | Select-Object -First 1); if (Get-Process -Id $tp -ErrorAction SilentlyContinue) { return } } catch {}
+    }
+    try { Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-WindowStyle', 'Hidden', '-File', ('"' + $tray + '"')) -WindowStyle Hidden } catch {}
+}
+
 function Stop-Previous {
     # Stop the supervisor first so it does not restart the backend, then the backend.
-    foreach ($name in @('supervisor.pid', 'backend.pid')) {
+    foreach ($name in @('tray.pid', 'supervisor.pid', 'backend.pid')) {
         $f = Join-Path $LogDir $name
         if (Test-Path -LiteralPath $f) {
             try { $id = [int](Get-Content -LiteralPath $f -ErrorAction Stop | Select-Object -First 1); Stop-Process -Id $id -Force -ErrorAction SilentlyContinue } catch {}
@@ -37,15 +50,12 @@ $s = Get-Settings
 $port = [int]$s.port
 $url = 'http://127.0.0.1:' + $port + '/'
 
-# 4.10.0: keep the Windows startup shortcut and the droidadb:// link pointing at this folder (current user only).
-if ($OnWindows) {
-    [void](Register-DroidProtocol)
-    if ([bool]$s.runAtLogin) { [void](Sync-RunAtLogin $true) }
-}
-if ($IfNotRunning) {
+if ($KeepRunning) {
+    # already running with this version? then leave it alone and just open the dashboard
     try {
-        $r0 = Invoke-WebRequest -UseBasicParsing -Uri ($url + 'api/ping') -TimeoutSec 2
-        if ($r0.StatusCode -eq 200) {
+        $pr = Invoke-WebRequest -UseBasicParsing -Uri ($url + 'api/ping') -TimeoutSec 2
+        if ($pr.StatusCode -eq 200 -and (($pr.Content | ConvertFrom-Json).version -eq $ToolkitVersion)) {
+            if ($s.trayIcon) { Start-Tray }
             if ($s.openBrowser -and -not $NoBrowser) { Start-Process $url }
             exit 0
         }
@@ -78,8 +88,14 @@ if (-not $ok) {
     $log = Join-Path $LogDir 'backend-error.log'
     if (Test-Path -LiteralPath $log) { Write-Host 'Last lines of Logs\backend-error.log:'; Get-Content -LiteralPath $log -Tail 6 }
     Write-Host ('Expected address: ' + $url + 'api/ping')
+    try {
+        $why = 'The service did not answer its health check at ' + $url + 'api/ping.'
+        if (Test-Path -LiteralPath $log) { $why += "`r`n" + ((Get-Content -LiteralPath $log -Tail 4) -join "`r`n") }
+        Set-Content -LiteralPath (Join-Path $LogDir 'launch-error.txt') -Value $why -Encoding ASCII
+    } catch {}
     exit 1
 }
 Write-Host ('[3/3] Backend is running at ' + $url)
+if ($s.trayIcon) { Start-Tray }
 if ($s.openBrowser -and -not $NoBrowser) { Start-Process $url }
 exit 0

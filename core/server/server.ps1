@@ -84,6 +84,7 @@ while (-not $Shared.stop) {
 $TickerLoop = @'
 
 $Shared.versions = Get-ServerVersions
+try { Sync-WindowsIntegration } catch {}
 $n = 0
 while (-not $Shared.stop) {
     try {

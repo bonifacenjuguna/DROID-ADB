@@ -1,35 +1,19 @@
 # Changelog
 
-## 4.10.1
-Enlarge fix for a turned phone.
-
-Fixed
-- With the phone turned to landscape, Enlarge read the rotation wrongly (it looked for a word the phone does not print), so the crop was wrong or missing and the picture went edge to edge with bars at the top and bottom. Rotation is now read the same way the dashboard does it, so the picture fills the window from top to bottom and only a little of the sides is cut.
-
-Not verified
-- Not run on a real phone. Press Mirror again after turning the phone. If it still looks wrong, tell me the phone model.
-
-After updating, run Launch.vbs so the background service restarts with the new version.
-
 ## 4.10.0
-Enlarged tablet view, a sharper stream, and a silent launcher: no terminal window at all.
+Starting DROID ADB: no terminal window, Start with Windows, a Start button in the web page, and a tray icon.
 
 New
-- Enlarge (new default for Fill). In Console, Window shape, with Tablet or PC chosen, the window now opens as tall as your screen allows and the picture is scaled up in proportion so it fills the window from top to bottom. Nothing is stretched. Any space left is only at the left and right. The old Off, Fill middle, Fill top or left and Fill bottom or right choices are still there. If the phone is turned and its picture is wider than the window, only a little of its sides is cut (the middle is kept) so the top and bottom stay whole.
-- Sharper when enlarged. With Enlarge, the stream is raised to at least 1920 px (longest side) and 16 Mbps, on the capture side only. Higher values you already set are kept. Nothing about the phone display or its settings is changed.
-- Silent launcher. New Launch.vbs starts the service with no window and opens the dashboard. Launch.bat now just hands over to it. The Desktop shortcut (Create-Desktop-Shortcut.bat) now uses Launch.vbs, so no window flashes. If something goes wrong you get a normal message box with the last lines of the log, instead of a terminal.
-- Start when I sign in. Settings, Dashboard and backend, Start DROID ADB when I sign in to Windows. It adds (or removes) a shortcut in your own Windows Startup folder; the service then runs hidden from sign-in. No admin rights.
-- Start button in the web. If the installed web app (or a browser tab) opens while the service is off, it shows a Start DROID ADB button. It opens a droidadb://start link that is registered for your Windows user only (HKCU, no admin) the first time you run Launch.vbs, Launch.bat or the service starts. Your browser asks once; tick Always allow. The page then reloads by itself when the service answers.
-
-Notes
-- Windows only. The very first start must be done once with Launch.vbs (or the Desktop shortcut) so the droidadb:// link is registered; after that the Start button works. If you move the folder, run Launch.vbs again so the link points at the new place.
-- If the browser blocks the link, double-click Launch.vbs once and try the button again.
-- Stop.bat still works and still shows briefly.
+- Silent launcher. `Launch.vbs` starts the background service without showing any window (Launch.bat and the desktop shortcut now use it; Stop.vbs / Stop.bat stop it the same way). If something goes wrong a normal message explains it and the Logs folder has the detail. Run Create-Desktop-Shortcut.bat again to get the silent shortcut.
+- Start with Windows (Settings, DROID ADB): starts the service in the background when you log in, with no window and no browser. Off by default. It is one shortcut in your own Windows Startup folder; turning the switch off removes it.
+- Start button in the web page (Settings, DROID ADB, on by default): when the service is not running, the red banner shows Start DROID ADB. It uses a `droidadb://` link that is registered in your own Windows user settings (HKEY_CURRENT_USER, no admin rights). The first time, your browser asks to open DROID ADB: choose Open and tick always allow. It works from the installed web app too, because the page itself is cached. Turn the switch off to remove the link.
+- Tray icon (Settings, DROID ADB, on by default): a small icon near the Windows clock while the service runs. Double-click opens the dashboard; right-click offers Open dashboard, Restart service, Start with Windows and Quit DROID ADB. It closes by itself when the service is gone.
+- Start from the link or at Windows start-up never restarts a service that is already running this version; it only opens the dashboard. Running Launch yourself still restarts it, so a new version is always picked up.
 
 Not verified
-- Not run on a Windows PC or phone. The PowerShell and the VBScript were checked by reading and bracket checks; the page code by a syntax check. Please test: Tablet with Enlarge (portrait and rotated), the Startup switch, the Desktop shortcut, and the Start button with the service stopped.
+- Not run on Windows. The page was tested against a simulated service (the offline banner and its Start link). The scripts (silent launcher, start-up shortcut, droidadb link, tray icon) were checked by reading, a bracket and quote check, and a check that every function they call exists. The checklist in docs/REGRESSION-CHECKLIST.md, section 4.10.0, covers what to try first.
 
-After updating, run Launch.vbs (or the Desktop shortcut) so the background service restarts with the new version. Press Mirror again to get the enlarged window.
+After updating, run Launch.bat once so the new launcher is in place.
 
 ## 4.9.0
 Fill: an optional switch that makes the picture fill the tablet or PC shaped window.

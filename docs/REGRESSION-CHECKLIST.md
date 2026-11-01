@@ -253,11 +253,11 @@ Full steps are in docs/AUDIO.md.
 - [ ] Record with Fill on: the saved file is 4:3 and plays fine in the Library preview.
 - [ ] Fill Off: back to the whole screen with bars.
 
-## 4.10.0 enlarge, sharpness, silent launcher (real PC and phone)
-- [ ] Tablet 1600x1200 or 1920x1200, Fill: Enlarge. Phone upright, press Mirror: the window is as tall as the screen allows, the picture touches top and bottom, bars only at the sides, nothing stretched, taps land in the right place.
-- [ ] Rotate the phone to landscape, press Mirror again: top and bottom stay whole; only a little of the sides may be cut.
-- [ ] The picture is sharper than before (check the command preview: --max-size=1920 or higher, --video-bit-rate=16M or higher). The phone screen size/density is not changed (adb shell wm size shows no Override).
-- [ ] Double-click Launch.vbs: no window flashes, the dashboard opens. Stop the service, break a file name on purpose: a message box appears instead of a terminal.
-- [ ] Desktop shortcut (Create-Desktop-Shortcut.bat again) opens with no window.
-- [ ] Settings, Start DROID ADB when I sign in: on creates DROID ADB in the Startup folder, off removes it. Sign out and in: the service runs hidden.
-- [ ] Stop.bat, then open the installed web app: it shows the Start DROID ADB button. Press it, allow the browser prompt (tick Always allow): the dashboard returns by itself.
+## 4.10.0 starting (real PC)
+- [ ] Double-click Launch.bat and Launch.vbs: the dashboard opens and no terminal window stays or flashes. Stop.bat stops it silently.
+- [ ] Run Create-Desktop-Shortcut.bat: the new desktop shortcut starts DROID ADB with no window.
+- [ ] Settings: switch on Start with Windows, sign out and in: the service is running (the tray icon shows), no browser opens. Switch it off: the Startup shortcut is gone.
+- [ ] Stop the service. Open the installed web app: the red banner shows Start DROID ADB. Press it: the browser asks to open DROID ADB; choose Open: the service starts and the page reconnects.
+- [ ] With the service already running, press Start (or sign in again): it does not restart; the dashboard just opens.
+- [ ] The tray icon: double-click opens the dashboard; Restart service works; Quit DROID ADB stops the service and removes the icon.
+- [ ] Switch off Start button in the web page: the droidadb link is removed (the banner button then does nothing).
