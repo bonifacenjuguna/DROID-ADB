@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.10.1
+Enlarge fix for a turned phone.
+
+Fixed
+- With the phone turned to landscape, Enlarge read the rotation wrongly (it looked for a word the phone does not print), so the crop was wrong or missing and the picture went edge to edge with bars at the top and bottom. Rotation is now read the same way the dashboard does it, so the picture fills the window from top to bottom and only a little of the sides is cut.
+
+Not verified
+- Not run on a real phone. Press Mirror again after turning the phone. If it still looks wrong, tell me the phone model.
+
+After updating, run Launch.vbs so the background service restarts with the new version.
+
 ## 4.10.0
 Enlarged tablet view, a sharper stream, and a silent launcher: no terminal window at all.
 

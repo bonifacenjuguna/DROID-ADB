@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '4.10.0'
+$ToolkitVersion = '4.10.1'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -1280,7 +1280,7 @@ function Invoke-ShapeRestore {
 function Get-FillCrop {
     param([string]$Serial, $Spec, [string]$Anchor)
     try {
-        $r = Invoke-DeviceShell $Serial 'wm size; dumpsys display | grep -m1 -oE "rotation [0-9]"' 15
+        $r = Invoke-DeviceShell $Serial 'wm size; echo @@R; dumpsys input 2>/dev/null | grep -m3 -E "SurfaceOrientation|orientation="; echo @@D; dumpsys window displays 2>/dev/null | grep -m2 -E "mCurrentRotation|rotation="' 15
         $txt = [string]$r.out
         $wn = 0
         $hn = 0
@@ -1288,7 +1288,12 @@ function Get-FillCrop {
         elseif ($txt -match '(?m)Physical size:\s*(\d+)x(\d+)') { $wn = [int]$Matches[1]; $hn = [int]$Matches[2] }
         if ($wn -le 0 -or $hn -le 0) { return '' }
         $rot = 0
-        if ($txt -match 'rotation\s+(\d)') { $rot = [int]$Matches[1] }
+        $rtxt = $txt
+        if ($txt.Contains('@@R')) { $rtxt = $txt.Substring($txt.IndexOf('@@R')) }
+        if ($rtxt -match 'SurfaceOrientation:\s*(\d)') { $rot = [int]$Matches[1] }
+        elseif ($rtxt -match 'orientation=(\d)') { $rot = [int]$Matches[1] }
+        elseif ($rtxt -match 'mCurrentRotation=ROTATION_(\d+)') { $rot = [int]([int]$Matches[1] / 90) }
+        elseif ($rtxt -match 'rotation=(\d)') { $rot = [int]$Matches[1] }
         $odd = (($rot % 2) -eq 1)
         if ($odd) { $fw = $hn; $fh = $wn } else { $fw = $wn; $fh = $hn }
         $aspect = [double]$Spec.w / [double]$Spec.h
@@ -1349,7 +1354,7 @@ function New-ScrcpyArgs {
         $qFps = [int]$S.recordMaxFps
         $qMbps = [int]$S.recordBitrateMbps
     }
-    # 4.10.0: an enlarged window shows the picture bigger, so the stream is made sharper (capture side only, the phone display is untouched).
+    # 4.10.1: an enlarged window shows the picture bigger, so the stream is made sharper (capture side only, the phone display is untouched).
     if (-not $headless -and [string]$S.shapeFill -eq 'height' -and (Get-ShapeSpec $S)) {
         if ($qSize -gt 0 -and $qSize -lt 1920) { $qSize = 1920 }
         if ($qMbps -lt 16) { $qMbps = 16 }
@@ -1789,7 +1794,7 @@ function Invoke-AdbBytes {
     return @{ code = [int]$p.ExitCode; bytes = $ms.ToArray(); err = $e }
 }
 
-# ---------- 4.10.0: silent launcher, run at login, droidadb:// link ----------
+# ---------- 4.10.1: silent launcher, run at login, droidadb:// link ----------
 # All of this lives in the current Windows user only (Startup folder and HKCU). No admin rights.
 function Get-LauncherPath { return (Join-Path $Root 'Launch.vbs') }
 function Get-StartupLinkPath {
