@@ -756,6 +756,8 @@ function Get-MediaInfo {
 }
 $Routes['GET /api/media'] = { param($Ctx)
     $serial = Get-Query $Ctx 'id'
+    # 4.12.0: dumpsys media_session is heavy and makes a running mirror or recording stutter. The page keeps its last answer.
+    if (Test-StreamBusy $serial) { Send-Json $Ctx @{ paused = $true }; return }
     $r = Invoke-DeviceShell $serial 'dumpsys media_session 2>/dev/null | head -n 700; echo @@UP; cat /proc/uptime' 15
     $parts = ($r.out -split '@@UP', 2)
     $up = [long]0
@@ -815,6 +817,7 @@ $Routes['GET /api/running'] = { param($Ctx)
 # Light state read for remote-control highlights (screen on or off, media volume).
 $Routes['GET /api/keystate'] = { param($Ctx)
     $serial = Get-Query $Ctx 'id'
+    if (Test-StreamBusy $serial) { Send-Json $Ctx @{ screenOn = $null; volume = $null; volumeMax = $null; paused = $true }; return }
     $r = Invoke-DeviceShell $serial 'echo screen=$(dumpsys power 2>/dev/null | grep -m1 -oE ''mWakefulness=[A-Za-z]+''); echo vol=$(cmd media_session volume --get --stream 3 2>/dev/null | tail -n 1)' 15
     $kv = ConvertFrom-KeyLines $r.out
     $out = @{ screenOn = $null; volume = $null; volumeMax = $null }

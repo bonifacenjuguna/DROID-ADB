@@ -89,7 +89,11 @@ $n = 0
 while (-not $Shared.stop) {
     try {
         Update-DeviceCache
-        [void](Get-LiveSessions)
+        $liveS = @(Get-LiveSessions)
+        $busyMap = @{}
+        foreach ($ls in $liveS) { $bk = [string]$ls.serial; if ($bk -eq '') { $bk = '*' }; $busyMap[$bk] = $true }
+        $Shared.streamBusy = $busyMap
+        if ($busyMap.Count -gt 0) { try { Set-StreamPriority } catch {} }
         try { Invoke-ShapeRestore } catch {}
         try { Invoke-AutoReconnect } catch {}
         $n++
@@ -103,6 +107,7 @@ while (-not $Shared.stop) {
 $LiveLoop = @'
 
 $cycle = 0
+$slowAt = @{}
 while (-not $Shared.stop) {
     $wait = 2000
     try {
@@ -112,7 +117,13 @@ while (-not $Shared.stop) {
         if (($nowMs - [long]$Shared.lastClientMs) -lt 15000) {
             $cycle++
             foreach ($d in @($Shared.devices | Where-Object { $null -ne $_ -and $_.state -eq 'device' })) {
-                try { Update-LiveTelemetry ([string]$d.id) (($cycle % 3) -eq 1) } catch { Write-BackendLog ('Live: ' + $_.Exception.Message) }
+                try {
+                    $did = [string]$d.id
+                    # 4.12.0: while a mirror or recording runs, only a light battery read once a minute (see Test-StreamBusy)
+                    if (Test-StreamBusy $did) {
+                        if (($nowMs - [long]$slowAt[$did]) -ge 60000) { $slowAt[$did] = $nowMs; Update-LiveTelemetry $did $false $true }
+                    } else { Update-LiveTelemetry $did (($cycle % 3) -eq 1) $false }
+                } catch { Write-BackendLog ('Live: ' + $_.Exception.Message) }
             }
         } else { $wait = 1000 }
     } catch { Write-BackendLog ('Live loop: ' + $_.Exception.Message) }

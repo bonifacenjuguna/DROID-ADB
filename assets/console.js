@@ -226,11 +226,13 @@ function renderKeys() {
   const sc = $('#keys [data-ktoggle="screen"] span'); if (sc) sc.textContent = K.screenOn === false ? 'Screen off' : 'Screen on';
   const mu = $('#keys [data-ktoggle="mute"] span'); if (mu) mu.textContent = K.vol === 0 ? 'Muted' : 'Mute';
 }
+/* 4.12.0: while a mirror or recording runs, the phone is left alone: no status requests (they make the picture and sound stutter) */
+function calmNow() { return (STK.sessionFor(STK.sel()).length > 0) && (state.settings || {}).calmDuringSession !== false; }
 async function pollKeystate(force) {
-  if (!STK.sel() || state.view !== 'console' || document.hidden || K.loading) return;
+  if (!STK.sel() || state.view !== 'console' || document.hidden || K.loading || calmNow()) return;
   if (!force && Date.now() - K.at < 6000) return;
   K.at = Date.now(); K.loading = true;
-  try { const r = await STK.api('/keystate?id=' + encodeURIComponent(STK.sel()), { timeout: 15000 }); K.screenOn = r.screenOn; K.vol = r.volume; K.volMax = r.volumeMax; renderKeys(); } catch (e) {} finally { K.loading = false; }
+  try { const r = await STK.api('/keystate?id=' + encodeURIComponent(STK.sel()), { timeout: 15000 }); if (r.paused) return; K.screenOn = r.screenOn; K.vol = r.volume; K.volMax = r.volumeMax; renderKeys(); } catch (e) {} finally { K.loading = false; }
 }
 function pulse(btn) { btn.classList.add('is-pressed'); setTimeout(() => btn.classList.remove('is-pressed'), 260); }
 async function keyToggle(btn, kind) {
@@ -365,10 +367,10 @@ function renderMedia() {
   $('#media-play').title = playing ? 'Pause' : 'Play';
 }
 async function pollMedia(force) {
-  if (!STK.sel() || state.view !== 'console' || document.hidden || M.loading) return;
+  if (!STK.sel() || state.view !== 'console' || document.hidden || M.loading || calmNow()) return;
   if (!force && Date.now() - M.at < 4000 && M.serial === STK.sel()) return;
   M.at = Date.now(); M.loading = true; const id = STK.sel();
-  try { const r = await STK.api('/media?id=' + encodeURIComponent(id), { timeout: 15000 }); if (id === STK.sel()) { M.data = r; M.serial = id; M.got = Date.now(); } } catch (e) { /* keep the last answer */ } finally { M.loading = false; }
+  try { const r = await STK.api('/media?id=' + encodeURIComponent(id), { timeout: 15000 }); if (r.paused) return; if (id === STK.sel()) { M.data = r; M.serial = id; M.got = Date.now(); } } catch (e) { /* keep the last answer */ } finally { M.loading = false; }
   renderMedia();
 }
 
@@ -518,7 +520,7 @@ function resetFrame() {
 }
 function pausedReason(manual) {
   if (manual) return '';
-  if (S().previewPauseOnSession && STK.sessionFor(STK.sel()).length) return 'Paused while a session runs.';
+  if (!S().previewDuringSession && STK.sessionFor(STK.sel()).length) return 'Paused while a session runs.';
   return '';
 }
 async function shoot(opts = {}) {

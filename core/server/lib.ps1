@@ -3,7 +3,7 @@
 # Keep this file ASCII only and compatible with Windows PowerShell 5.1 and PowerShell 7.
 
 $ErrorActionPreference = 'Stop'
-$ToolkitVersion = '4.11.0'
+$ToolkitVersion = '4.12.0'
 if (-not $global:StkRoot) { $global:StkRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 $Root = $global:StkRoot
 $OnWindows = ($env:OS -eq 'Windows_NT')
@@ -250,7 +250,9 @@ $Schema = @(
     (F 'previewSeconds' 'toolkit' 'int' 3 'Live preview interval' 'How often the Console preview takes a new picture.' -Min 1 -Max 60 -Picks @(2, 3, 5, 10) -Unit 'sec'),
     (F 'liveSeconds' 'toolkit' 'int' 2 'Phone status refresh' 'How often battery, rotation and screen state are read while the dashboard is open.' -Min 1 -Max 30 -Picks @(1, 2, 3, 5, 10) -Unit 'sec'),
     (F 'previewTouch' 'toolkit' 'bool' $true 'Tap and swipe on the preview' 'Click the phone picture to tap it, drag to swipe, hold to long-press.'),
-    (F 'previewPauseOnSession' 'toolkit' 'bool' $false 'Pause live preview during sessions' 'Stops automatic preview updates while a mirror or recording runs. Manual Update still works.'),
+    (F 'calmDuringSession' 'toolkit' 'bool' $true 'Keep the phone calm while mirroring or recording' 'While a mirror or recording runs, the dashboard stops asking the phone for status (screen state, volume, now playing, rotation, foreground app). Those requests make the phone hiccup, and the picture and sound stutter. Battery is read once a minute. Turn off only to troubleshoot.'),
+    (F 'previewDuringSession' 'toolkit' 'bool' $false 'Keep the live preview going during sessions' 'Not recommended. Taking pictures of the phone screen while it is mirrored or recorded makes the video and sound stutter. The Update button still works any time.'),
+    (F 'streamPriority' 'toolkit' 'bool' $true 'Give mirroring and recording priority on this PC' 'While a mirror or recording runs, scrcpy and adb get slightly higher priority than normal programs, so a busy PC does not make them stutter. Windows only. Needs no admin rights.'),
     (F 'previewOnRotate' 'toolkit' 'bool' $true 'Refresh preview after rotation' 'Takes one new picture when the phone rotates, even if live preview is off.'),
     (F 'layoutAnimation' 'toolkit' 'choice' 'auto' 'Layout animation' 'Auto follows your system reduced-motion setting.' -Choices @((C 'auto' 'Automatic'), (C 'on' 'Always animate'), (C 'off' 'Never animate'))),
     (F 'batteryAlertPct' 'toolkit' 'int' 15 'Low battery alert' 'Show an alert when the phone falls to this level and is not charging. 0 turns it off.' -Min 0 -Max 50 -Picks @(0, 10, 15, 20, 30) -Unit '%'),
@@ -1605,6 +1607,39 @@ function Get-LiveSessions {
         })
 }
 
+# 4.12.0: is a mirror or recording running for this phone? The ticker keeps $Shared.streamBusy up to date and Start-Session sets it at once.
+# While it is, nothing but explicit actions should ask the phone for status: dumpsys calls take locks inside the phone and make the picture
+# and sound stutter.
+function Test-StreamBusy {
+    param([string]$Serial)
+    try {
+        if (-not [bool](Get-Settings).calmDuringSession) { return $false }
+        $b = $Shared.streamBusy
+        if (-not $b -or $b.Count -eq 0) { return $false }
+        if ($b.ContainsKey('*')) { return $true }
+        if ($Serial -eq '') { return $true }
+        return $b.ContainsKey($Serial)
+    } catch { return $false }
+}
+function Set-StreamBusy {
+    param([string]$Serial)
+    $k = $(if ($Serial) { $Serial } else { '*' })
+    $copy = @{}
+    $cur = $Shared.streamBusy
+    if ($cur) { foreach ($x in @($cur.Keys)) { $copy[$x] = $true } }
+    $copy[$k] = $true
+    $Shared.streamBusy = $copy
+}
+# 4.12.0: scrcpy and the adb server carry the whole stream. On a busy PC (a game, OBS, a browser) normal priority can make them stutter,
+# so they run slightly above normal while a session runs. No admin rights needed. Windows only; failures are ignored.
+function Set-StreamPriority {
+    if (-not $OnWindows) { return }
+    if (-not [bool](Get-Settings).streamPriority) { return }
+    foreach ($p in @(Get-Process -Name 'scrcpy', 'adb' -ErrorAction SilentlyContinue)) {
+        try { if ([string]$p.PriorityClass -in @('Normal', 'BelowNormal', 'Idle')) { $p.PriorityClass = [Diagnostics.ProcessPriorityClass]::AboveNormal } } catch {}
+    }
+}
+
 function Get-SessionView {
     param($S)
     $size = [long]0
@@ -1713,6 +1748,7 @@ function Start-ToolkitScrcpy {
     try { $startTicks = $proc.StartTime.ToUniversalTime().Ticks } catch {}
     $session = @{ id = $id; pid = [int]$proc.Id; procStart = $startTicks; mode = $Mode; serial = $Serial; startedMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); path = $out; fileName = $fileName; headless = ($Mode -eq 'record' -and ([bool]$settings.recordWindowless -or $companion)); companion = $companion; log = $log; app = [string]$Once.startApp; audio = (ConvertTo-AudioView $plan) }
     Use-SessionFile { $list = @(Read-Sessions); $list += , $session; Write-Sessions $list }
+    try { Set-StreamBusy $Serial } catch {}
     # keep only the newest session logs
     try {
         $old = @(Get-ChildItem -LiteralPath $LogDir -Filter 'session-*.log' -File | Sort-Object LastWriteTime -Descending | Select-Object -Skip ([int]$settings.logRetention))
@@ -1771,9 +1807,11 @@ function Get-OldFiles {
 # Live phone readings (rotation, screen, battery, foreground app)
 # ---------------------------------------------------------------------------
 function Update-LiveTelemetry {
-    param([string]$Serial, [bool]$WithForeground)
+    param([string]$Serial, [bool]$WithForeground, [bool]$BatteryOnly = $false)
     $script = 'o=$(dumpsys input 2>/dev/null | grep -m3 -E ''SurfaceOrientation|orientation=''); echo @@R; echo $o; if [ -z "$o" ]; then echo @@D; dumpsys window displays 2>/dev/null | grep -m2 -oE ''mCurrentRotation=[A-Z_0-9]+|rotation=[0-9]''; fi; echo @@W; dumpsys power 2>/dev/null | grep -m1 -oE ''mWakefulness=[A-Za-z]+''; echo @@B; dumpsys battery 2>/dev/null'
     if ($WithForeground) { $script += '; echo @@F; dumpsys activity activities 2>/dev/null | grep -m2 -E ''ResumedActivity''' }
+    # 4.12.0: while a mirror or recording runs only the battery is read (one light call a minute). Rotation, screen state and the app in front are kept from the last full reading.
+    if ($BatteryOnly) { $script = 'echo @@B; dumpsys battery 2>/dev/null' }
     $r = Invoke-DeviceShell $Serial $script 12
     $sections = @{ R = ''; D = ''; W = ''; B = ''; F = '' }
     $cur = ''
@@ -1784,6 +1822,7 @@ function Update-LiveTelemetry {
     $prev = $Shared.live[$Serial]
     $d = @{ at = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); rotation = -1; screenOn = $null; battery = -1; charging = $false; full = $false; tempC = $null; voltage = $null; power = ''; fgPackage = ''; fgActivity = '' }
     if ($prev) { $d.fgPackage = [string]$prev.fgPackage; $d.fgActivity = [string]$prev.fgActivity; if ([int]$prev.rotation -ge 0) { $d.rotation = [int]$prev.rotation } }
+    if ($BatteryOnly -and $prev) { $d.screenOn = $prev.screenOn }
     if ($sections.R -match 'SurfaceOrientation:\s*(\d)') { $d.rotation = [int]$Matches[1] }
     elseif ($sections.R -match 'orientation=(\d)') { $d.rotation = [int]$Matches[1] }
     elseif ($sections.D -match 'mCurrentRotation=ROTATION_(\d+)') { $d.rotation = [int]([int]$Matches[1] / 90) }

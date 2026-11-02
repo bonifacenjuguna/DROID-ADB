@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/images/droid-adb-logo.jpg" alt="DROID ADB" width="320"></p>
 
-# DROID ADB 4.11.0
+# DROID ADB 4.12.0
 
 A portable Windows control center for your Android phone: mirror, record, screenshot, remote-control and manage it from a local dashboard.
 
@@ -12,6 +12,10 @@ DROID ADB is powered by [scrcpy](https://github.com/Genymobile/scrcpy) v5.0.1 (G
 3. `Stop.bat` shuts everything down. No Node.js, Python or internet needed; it uses Windows PowerShell 5.1 and .NET.
 
 Open the dashboard through the address above. Opening `index.html` directly from disk is not supported.
+
+## What changed in 4.12
+
+4.12 makes mirroring and recording smooth. The dashboard no longer asks the phone for status while a mirror or recording runs (those requests froze the picture and sound for about a second), live preview pauses during sessions, and scrcpy and adb run at a slightly higher priority while a session runs. See CHANGELOG.md.
 
 ## What changed in 4.11
 

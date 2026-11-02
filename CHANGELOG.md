@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.12.0
+Smooth: the mirror and the recording no longer stutter because of the dashboard. Picture and sound used to freeze for about a second now and then.
+
+Found
+- While the Console page was open and a mirror or recording was running, DROID ADB kept asking the phone for status. These are heavy Android calls that take locks inside the phone: `dumpsys media_session` (the Now playing box) every 4 seconds, `dumpsys power` and the volume every 6 seconds, `dumpsys input`, `dumpsys window` and `dumpsys battery` every 2 seconds (the live loop), and `dumpsys activity` every 6 seconds. Each one can freeze the phone's screen capture and audio capture for a moment, and the same adb link carries the video, so the video and the sound stalled together. 4.8 made only the Studio page calm; these were missed. If Live preview was on, the Console also took a full PNG screenshot every 3 seconds on top of that (the pause setting was off by default).
+
+Fixed
+- Calm while streaming (Settings, DROID ADB, on by default): while a mirror or recording runs for a phone, the dashboard and the service stop asking that phone for status. The live loop reads only the battery, once a minute; rotation, screen state and the app in front keep their last values. The Now playing and key-state requests are not sent at all (and the service answers them with "paused" if an old page still asks). Taps, keys, screenshots and every other action you start yourself work as before. When the session ends everything resumes by itself.
+- Live preview pauses during mirror and record by default. The old switch (Pause live preview during sessions, off by default) is replaced by Keep the live preview going during sessions (off by default, not recommended). The Update button still takes a picture any time. The Devices page live wall also skips a phone that is being mirrored or recorded.
+- Priority (Settings, DROID ADB, on by default): while a session runs, scrcpy and the adb server run slightly above normal priority on the PC, so a busy PC (a game, OBS, a browser) does not starve the stream. No admin rights are needed.
+
+Not changed
+- Video, audio and recording settings and their defaults, the recording format, and the way files are written are exactly as in 4.11. The recording file is now steadier because the stalls that reached it are gone.
+- If a recording made while you also mirror is still not smooth, the next suspect is the second encoder on the phone (Record while mirroring: Companion runs a second recorder at 60 fps and 40 Mbps in the full phone size). Try Settings, Recording: 30 or 45 fps, or a Recording longest side of 1920 px, and tell me the result.
+
+Not verified
+- Not run on a real phone or on Windows. The scripts were checked by reading, a bracket count against 4.11 and a check that every function they call exists (PowerShell was not available here), and the dashboard scripts were syntax checked. Please test with the checklist in docs/REGRESSION-CHECKLIST.md, section 4.12.0, and tell me what you see.
+
+After updating, run Launch.bat once so the background service restarts with the new version.
+
 ## 4.11.0
 Stretch viewer: a second window that shows the mirror enlarged or stretched to fill it, with no bars. Nothing on the phone changes and no virtual screen is used.
 

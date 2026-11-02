@@ -271,3 +271,13 @@ Full steps are in docs/AUDIO.md.
 6. Touch control on: a tap and a swipe in the viewer land on the right place on the phone, in portrait and in landscape, with Zoom 100% and with Zoom above 100%.
 7. Stop capture, close the mirror window, close the viewer: nothing stays running. Fullscreen (F) and hide bar (H) work.
 8. The mirror and record windows and the recording file behave exactly as in 4.10.
+
+## 4.12.0 Smooth
+1. Open the Console, press Mirror, play a video with sound on the phone and watch for 3 minutes. The picture and the sound should not freeze for a moment every few seconds, as they did before.
+2. While mirroring: the Now playing box and the volume and screen buttons stop refreshing by themselves (that is intended). Tap, swipe, Back, Home and Screenshot still work. After you close the mirror they refresh again within a few seconds.
+3. Live preview switch on, then Mirror: the preview stops updating ("Paused while a session runs"). The Update button still takes a picture. Settings, Keep the live preview going during sessions, on: the old behaviour.
+4. Record (and Record while mirroring with Companion): the recording plays back smoothly (VLC or the Library). Compare with 4.11 if you still have it.
+5. Settings, Keep the phone calm off: the old behaviour (status requests during sessions), only for comparing.
+6. Task Manager, Details: while a session runs, scrcpy.exe and adb.exe show priority Above normal. A new scrcpy or adb process started later is back at normal until a session is running.
+7. Devices page with two phones: the live wall does not take pictures of a phone that is being mirrored.
+8. Battery percentage on the Console still updates about once a minute during a session.

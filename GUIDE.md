@@ -36,6 +36,10 @@ Everything is configurable: quality presets, saved profiles, folders, file name 
 - scrcpy closes immediately: the toast shows the reason; full output is in `Logs/session-<id>.log`.
 - Port busy: change the port in Settings (restart needed) or close the other instance.
 
+## New in 4.12
+- Smooth mirror and recording: while a mirror or recording runs, the dashboard leaves the phone alone (no Now playing, volume, screen state or screenshot requests). Everything resumes when the session ends. Settings, DROID ADB: Keep the phone calm (on), Keep the live preview going during sessions (off), Give mirroring and recording priority on this PC (on).
+- If the picture still stutters while you record and mirror at the same time, lower Recording frame rate to 30 or 45, or set Recording longest side to 1920.
+
 ## New in 4.11
 - Stretch viewer (Console, next to Screenshot): opens a second window that shows the mirror enlarged to fill it. Open Mirror first and keep its window open. In the viewer press Start capture and choose the window called DROID ADB.
 - Stretch slider: 100% fills the window with no crop (the picture is stretched), 0% keeps the picture proportional and crops the sides. Zoom and Move choose the part you see.

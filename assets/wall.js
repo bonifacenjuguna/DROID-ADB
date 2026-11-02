@@ -19,7 +19,9 @@ function render() {
 async function refresh() {
   if (state.view !== 'device' || document.hidden) return;
   for (const d of STK.readyDevices()) {
-    if (W.busy[d.id]) continue; W.busy[d.id] = true;
+    if (W.busy[d.id]) continue;
+    if (STK.sessionFor(d.id).length && (state.settings || {}).calmDuringSession !== false) continue; /* 4.12.0: no screenshots of a phone that is being mirrored or recorded */
+    W.busy[d.id] = true;
     fetch('/api/preview-image?id=' + encodeURIComponent(d.id) + '&maxAge=2500&t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.blob() : null).then(b => {
       if (!b || !b.size) return; const old = W.urls[d.id]; W.urls[d.id] = URL.createObjectURL(b);
       const im = document.querySelector(`img[data-wimg="${CSS.escape(d.id)}"]`); if (im) im.src = W.urls[d.id]; if (old) setTimeout(() => URL.revokeObjectURL(old), 1500);
